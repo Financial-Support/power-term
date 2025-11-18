@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef } from 'react'
-import { quickCommandLabelsLsKey } from '../../common/constants'
+import { quickCommandLabelsLsKey, sidebarWidth } from '../../common/constants'
 import { sortBy } from 'lodash-es'
 import { Button, Input, Select, Space } from 'antd'
 import * as ls from '../../common/safe-local-storage'
@@ -16,7 +16,6 @@ import {
 import classNames from 'classnames'
 import onDropFunc from './on-drop'
 import './qm.styl'
-import { sidebarWidth } from '../../common/constants'
 
 const e = window.translate
 const addQuickCommands = 'addQuickCommands'
