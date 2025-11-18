@@ -15,6 +15,7 @@ import QuickCommandsFooterBox from '../quick-commands/quick-commands-box'
 import pixed from './pixed'
 import { pick } from 'lodash-es'
 import './layout.styl'
+import { sidebarWidth } from '../../common/constants'
 
 export default auto(function Layout (props) {
   const { store } = props
@@ -43,7 +44,7 @@ export default auto(function Layout (props) {
       inActiveTerminal
     } = props.store
     const h = height - footerHeight - (inActiveTerminal && pinnedQuickCommandBar ? quickCommandBoxHeight : 0) + resizeTrigger
-    const l = pinned ? 43 + leftSidebarWidth : 43
+  const l = pinned ? sidebarWidth + leftSidebarWidth : sidebarWidth
     const r = rightPanelVisible && rightPanelPinned ? rightPanelWidth : 0
     return {
       height: h,
@@ -67,7 +68,7 @@ export default auto(function Layout (props) {
     } = props.store
     const l = pinned ? leftSidebarWidth : 0
     const r = rightPanelPinned && rightPanelVisible ? rightPanelWidth : 0
-    const w = width - l - r - 42
+  const w = width - l - r - sidebarWidth
     const h = height - footerHeight - (pinnedQuickCommandBar ? quickCommandBoxHeight : 0)
     return layoutAlg(layout, w, h)
   }

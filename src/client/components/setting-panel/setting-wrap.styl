@@ -1,6 +1,7 @@
 
 body .ant-drawer .ant-drawer-content-wrapper
-  left 43px
+  /* drawer should start after sidebar */
+  left var(--sidebar-width, 180px)
 .close-setting-wrap-icon
   position absolute
   top 70px
@@ -50,7 +51,8 @@ body .ant-drawer .ant-drawer-content-wrapper
     position fixed
     top 128px
     bottom 0
-    left 43px
+    /* mobile layout align with sidebar variable */
+    left var(--sidebar-width, 180px)
     right 0
     overflow-y scroll
   .setting-row

@@ -34,7 +34,8 @@ export const contextMenuHeight = 28
 export const contextMenuWidth = 280
 export const contextMenuPaddingTop = 10
 export const sftpControlHeight = 42 + 30
-export const sidebarWidth = 43
+// Width of the left sidebar (icon area). Use 180px for expanded sidebar
+export const sidebarWidth = 180
 export const maxHistory = 50
 export const maxTransport = 5
 export const maxSftpHistory = 20

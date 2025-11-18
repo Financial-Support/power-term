@@ -16,6 +16,7 @@ import {
 import classNames from 'classnames'
 import onDropFunc from './on-drop'
 import './qm.styl'
+import { sidebarWidth } from '../../common/constants'
 
 const e = window.translate
 const addQuickCommands = 'addQuickCommands'
@@ -183,7 +184,7 @@ export default function QuickCommandsFooterBox (props) {
     { 'fil-keyword': !!keyword }
   )
   const type = qmSortByFrequency ? 'primary' : 'default'
-  const w = openedSideBar ? 43 + leftSidebarWidth : 43
+  const w = openedSideBar ? sidebarWidth + leftSidebarWidth : sidebarWidth
   const qmProps = {
     className: 'qm-wrap-tooltip',
     style: {
