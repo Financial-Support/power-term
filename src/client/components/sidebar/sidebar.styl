@@ -18,7 +18,8 @@
   position absolute
   left 0
   top 0
-  width 36px
+  /* Use CSS variable for sidebar width (falls back to 180px if not set) */
+  width var(--sidebar-width, 180px)
   z-index 100
   bottom 0
   background var(--main-dark)
@@ -43,7 +44,10 @@
     overflow-y hidden
 .not-system-ui.is-mac
   .sidebar-bar
-    margin-top 20px
+    margin-top 30px
+    display flex
+    flex-direction column
+    padding 0 10px
 .type-bookmarks
   .bookmarks-panel
     width 100%
@@ -52,22 +56,52 @@
     width 100%
 .control-icon-text
   color var(--text)
+  margin-left 12px
+  font-size 13px
+  line-height 1
+  white-space: nowrap
+  overflow: hidden
+  text-overflow: ellipsis
+  vertical-align: middle
+  opacity: .95
   &:hover
     color var(--success)
 .control-icon-wrap
-  padding 14px 0
-  text-align center
+  display: flex
+  align-items: center
+  row-gap 12px
+  /* padding left/right to create breathable space */
+  padding 8px 10px
+  /* add vertical separation between items */
+  margin 4px 0
+  position: relative
+  cursor: pointer
+  width: 100%
+  box-sizing: border-box
+  border-radius var(--sidebar-radius, 6px)
+  /* Only transition background-color for smooth hover/active */
+  transition: background-color .2s ease-out, color .2s ease-out
+  /* Hover: use provided background color (no border) */
+  &:hover
+    background var(--sidebar-hover-bg, #706f6f)
+    .control-icon
+      color var(--text-light)
   &.active
+    /* active uses the same requested color (or variant) */
+    background var(--sidebar-active-bg, #706f6f)
+    color var(--text-light)
     .control-icon
       color var(--text-light)
   .control-icon
     color var(--text-dark)
     cursor pointer
+    pointer-events: auto
     &:hover
       color var(--text-light)
 .sidebar-list
   position absolute
-  left 43px
+  /* place sidebar-list to the right of the expanded sidebar using CSS variable */
+  left var(--sidebar-width, 180px)
   top 0
   bottom 0
   z-index 200
