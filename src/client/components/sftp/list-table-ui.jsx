@@ -10,6 +10,9 @@ import FileListTableHeader from './file-table-header'
 import {
   CheckOutlined
 } from '@ant-design/icons'
+import {
+  sftpControlHeight
+} from '../../common/constants'
 import IconHolder from '../sys-menu/icon-holder'
 
 const e = window.translate
@@ -280,7 +283,8 @@ export default class FileListTable extends Component {
     const props = {
       className: 'sftp-table-content overscroll-y relative',
       style: {
-        height: height - 42 - 30 - 32 - 90
+        // use sftpControlHeight instead of hard-coded 42+30
+        height: height - sftpControlHeight - 32 - 90
       },
       draggable: false
     }

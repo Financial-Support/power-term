@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { sidebarWidth } from '../../common/constants'
 import DragHandle from '../common/drag-handle'
 
 export default function SidePanel (props) {
@@ -15,7 +16,8 @@ export default function SidePanel (props) {
     }
     const el1 = document.querySelector('.sessions')
     if (el1) {
-      el1.style.left = (nw + 43) + 'px'
+      // Keep layout in sync with sidebar width constant
+      el1.style.left = (nw + sidebarWidth) + 'px'
     }
   }, [props.leftSidebarWidth])
   const dragProps = {

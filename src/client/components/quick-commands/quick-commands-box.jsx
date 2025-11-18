@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef } from 'react'
-import { quickCommandLabelsLsKey } from '../../common/constants'
+import { quickCommandLabelsLsKey, sidebarWidth } from '../../common/constants'
 import { sortBy } from 'lodash-es'
 import { Button, Input, Select, Space } from 'antd'
 import * as ls from '../../common/safe-local-storage'
@@ -183,7 +183,7 @@ export default function QuickCommandsFooterBox (props) {
     { 'fil-keyword': !!keyword }
   )
   const type = qmSortByFrequency ? 'primary' : 'default'
-  const w = openedSideBar ? 43 + leftSidebarWidth : 43
+  const w = openedSideBar ? sidebarWidth + leftSidebarWidth : sidebarWidth
   const qmProps = {
     className: 'qm-wrap-tooltip',
     style: {

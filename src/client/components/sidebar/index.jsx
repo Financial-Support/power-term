@@ -130,18 +130,18 @@ export default function Sidebar (props) {
         </div>
         <SideIcon
           title={e('newBookmark')}
+          onClick={onNewSsh}
         >
           <PlusCircleOutlined
             className='font22 iblock control-icon'
-            onClick={onNewSsh}
           />
         </SideIcon>
         <SideIcon
           title={e(settingMap.bookmarks)}
           active={bookmarksActive}
+          onClick={handleClickBookmark}
         >
           <BookOutlined
-            onClick={handleClickBookmark}
             className='font20 iblock control-icon'
           />
         </SideIcon>
@@ -149,41 +149,43 @@ export default function Sidebar (props) {
         <SideIcon
           title={e(settingMap.terminalThemes)}
           active={themeActive}
+          onClick={openTerminalThemes}
         >
           <PictureOutlined
             className='font20 iblock pointer control-icon'
-            onClick={openTerminalThemes}
           />
         </SideIcon>
         <SideIcon
           title={e(settingMap.setting)}
           active={settingActive}
+          onClick={openSetting}
         >
-          <SettingOutlined className='iblock font20 control-icon' onClick={openSetting} />
+          <SettingOutlined className='iblock font20 control-icon' />
         </SideIcon>
         <SideIcon
           title={e('settingSync')}
           active={syncActive}
+          onClick={openSettingSync}
         >
           <CloudSyncOutlined
             className='iblock font20 control-icon'
-            onClick={openSettingSync}
             spin={isSyncingSetting}
           />
         </SideIcon>
         <SideIcon
           title={e('batchOp')}
           active={showBatchOp}
+          onClick={toggleBatchOp}
         >
-          <BarsOutlined className='iblock font20 control-icon' onClick={toggleBatchOp} />
+          <BarsOutlined className='iblock font20 control-icon' />
         </SideIcon>
         <SideIcon
           title={e('about')}
           active={showInfoModal}
+          onClick={openAbout}
         >
           <InfoCircleOutlined
             className='iblock font16 control-icon open-about-icon'
-            onClick={openAbout}
           />
         </SideIcon>
         {
