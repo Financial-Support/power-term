@@ -1,3 +1,30 @@
 :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
 html, body, #root { height: 100%; margin: 0; }
-body { background: var(--bg, #fff); color: var(--fg, #000); }
+
+.app { display: flex; flex-direction: column; height: 100%; }
+.app.theme-dark { --bg: #0f1115; --fg: #e6e6e6; --tab-bg: #1a1d24; --tab-active: #0f1115; --border: #2a2e36; }
+.app.theme-light { --bg: #ffffff; --fg: #1a1a1a; --tab-bg: #efefef; --tab-active: #ffffff; --border: #d6d6d6; }
+.app { background: var(--bg); color: var(--fg); }
+
+.titlebar {
+  display: flex; align-items: stretch; height: 36px;
+  border-bottom: 1px solid var(--border); user-select: none;
+}
+.titlebar-drag-left { width: 78px; }
+.titlebar-drag-right { flex: 0 0 12px; }
+
+.tabbar { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; }
+.tab {
+  display: flex; align-items: center; padding: 6px 8px 6px 12px;
+  background: var(--tab-bg); border: 1px solid transparent; border-bottom: none;
+  border-radius: 6px 6px 0 0; cursor: default; min-width: 80px; max-width: 200px;
+}
+.tab.active { background: var(--tab-active); border-color: var(--border); }
+.tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.tab input { font: inherit; font-size: 12px; background: transparent; border: 0; outline: 0; color: var(--fg); width: 100%; }
+.tab-close { background: transparent; border: 0; color: var(--fg); opacity: 0.6; cursor: pointer; padding: 0 4px; }
+.tab-close:hover { opacity: 1; }
+.tab-new { background: transparent; border: 0; color: var(--fg); cursor: pointer; padding: 4px 10px; font-size: 16px; }
+
+.terminals { flex: 1; min-height: 0; position: relative; padding: 4px; }
+.terminals > div { width: 100%; height: 100%; }
