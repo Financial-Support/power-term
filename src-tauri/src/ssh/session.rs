@@ -48,6 +48,13 @@ enum HostKeyVerdict {
         #[allow(dead_code)]
         key_type: String,
     },
+    /// Caller passed `accepted_fingerprint = X` but server presented Y. TOCTOU
+    /// defense per spec §10: never authenticate to a different key than what
+    /// the user clicked Accept on, even if the new key is ALSO unknown.
+    AcceptedMismatch {
+        accepted: String,
+        live: String,
+    },
 }
 
 struct ClientHandler {
@@ -69,13 +76,31 @@ impl Handler for ClientHandler {
         let fingerprint =
             fingerprint_sha256(&key_b64).map_err(|_| russh::Error::Inconsistent)?;
 
+        let kh = KnownHosts::at(self.known_hosts_path.clone());
+
         if let Some(accepted) = &self.accepted {
             if accepted == &fingerprint {
+                // User accepted THIS exact fingerprint via the renderer modal.
+                // Persist it so the next connect doesn't re-prompt; replace any
+                // prior entry for this host (covers both new-host and reset
+                // mismatch flows). Persistence failure is non-fatal: we still
+                // trust this connection for the user's current intent.
+                if let Err(e) = kh.replace_for_host(&self.host, self.port, &key_type, &key_b64) {
+                    tracing::warn!(error = %e, host = %self.host, "failed to persist accepted host key");
+                }
                 *self.verdict.lock() = Some(HostKeyVerdict::Trusted);
                 return Ok(true);
+            } else {
+                // accept_fingerprint set but server presented a different key.
+                // Refuse authentication — user must explicitly accept the new
+                // fingerprint.
+                *self.verdict.lock() = Some(HostKeyVerdict::AcceptedMismatch {
+                    accepted: accepted.clone(),
+                    live: fingerprint,
+                });
+                return Ok(false);
             }
         }
-        let kh = KnownHosts::at(self.known_hosts_path.clone());
         let v = kh
             .verify(&self.host, self.port, &key_type, &key_b64)
             .map_err(|_| russh::Error::Inconsistent)?;
@@ -190,10 +215,24 @@ impl SshSession {
                         host: target.host.clone(),
                     });
                 }
+                HostKeyVerdict::AcceptedMismatch { accepted, live } => {
+                    let _ = session
+                        .disconnect(Disconnect::ByApplication, "", "")
+                        .await;
+                    return Err(SshError::Any(format!(
+                        "fingerprint did not match server: accepted {accepted}, server presented {live}"
+                    )));
+                }
             }
         }
 
-        // Authenticate.
+        // Authenticate. Each russh authenticate_* method returns:
+        //   Ok(true)  -> server accepted the credentials
+        //   Ok(false) -> server cleanly rejected (wrong password, no matching key) — falls through
+        //                to the `if !authed` check below, which surfaces SshError::Auth →
+        //                the command surface translates that to NeedsAuth so the renderer can
+        //                offer another method.
+        //   Err(_)    -> protocol/transport error (rare); surfaced as SshError::Any to the toast.
         let user = target.user.clone();
         let authed = match auth {
             Auth::Password { password } => session

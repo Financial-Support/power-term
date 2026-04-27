@@ -71,7 +71,52 @@ impl KnownHosts {
         }
         Ok(HostVerdict::Unknown)
     }
+
+    /// Atomically rewrite the file so any prior line whose first hosts-field
+    /// matches `host` (or `[host]:port`) is dropped, then append the new entry.
+    /// Use for "Accept new host" and "Reset and accept" (mismatch override).
+    /// Serialized via a process-wide mutex so concurrent connects don't race.
+    pub fn replace_for_host(&self, host: &str, port: u16, key_type: &str, key_b64: &str) -> std::io::Result<()> {
+        use std::io::Write;
+        let _guard = WRITE_MUTEX.lock();
+
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let needle = canonical_host(host, port);
+        let existing = match std::fs::read_to_string(&self.path) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => return Err(e),
+        };
+
+        let tmp = self.path.with_extension("known_hosts.tmp");
+        let mut f = std::fs::File::create(&tmp)?;
+        for line in existing.lines() {
+            let trimmed = line.trim();
+            // Pass through comments, blanks, hashed entries unchanged.
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("|1|") {
+                writeln!(f, "{line}")?;
+                continue;
+            }
+            let mut parts = trimmed.splitn(3, ' ');
+            let hosts_field = match parts.next() { Some(s) => s, None => { writeln!(f, "{line}")?; continue; } };
+            let matches = hosts_field.split(',').any(|h| h == needle || h == host);
+            if matches {
+                // Drop this line — replaced below.
+                continue;
+            }
+            writeln!(f, "{line}")?;
+        }
+        writeln!(f, "{} {} {}", canonical_host(host, port), key_type, key_b64)?;
+        f.sync_all()?;
+        drop(f);
+        std::fs::rename(&tmp, &self.path)?;
+        Ok(())
+    }
 }
+
+static WRITE_MUTEX: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 pub fn canonical_host(host: &str, port: u16) -> String {
     if port == 22 { host.to_string() } else { format!("[{host}]:{port}") }
@@ -197,5 +242,50 @@ mod tests {
         kh.append("h.example.com", 2222, "ssh-ed25519", "AAAAk").unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("[h.example.com]:2222 ssh-ed25519 AAAAk"));
+    }
+
+    #[test]
+    fn replace_for_host_drops_old_entry_and_appends_new() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        let kh = KnownHosts::at(path.clone());
+        // Seed with two entries — one for the host we'll replace, one we should preserve.
+        kh.append("foo.example.com", 22, "ssh-ed25519", "AAAAold").unwrap();
+        kh.append("other.example.com", 22, "ssh-rsa", "AAAAother").unwrap();
+
+        kh.replace_for_host("foo.example.com", 22, "ssh-ed25519", "AAAAnew").unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("AAAAold"), "old key should be removed: {text}");
+        assert!(text.contains("foo.example.com ssh-ed25519 AAAAnew"));
+        assert!(text.contains("other.example.com ssh-rsa AAAAother"));
+
+        // Subsequent verify against the new key should match.
+        let verdict = kh.verify("foo.example.com", 22, "ssh-ed25519", "AAAAnew").unwrap();
+        assert_eq!(verdict, HostVerdict::Match);
+    }
+
+    #[test]
+    fn replace_for_host_works_when_file_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        let kh = KnownHosts::at(path.clone());
+        kh.replace_for_host("brand.new.example.com", 22, "ssh-ed25519", "AAAAk").unwrap();
+        let v = kh.verify("brand.new.example.com", 22, "ssh-ed25519", "AAAAk").unwrap();
+        assert_eq!(v, HostVerdict::Match);
+    }
+
+    #[test]
+    fn replace_for_host_preserves_comments_and_hashed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        std::fs::write(&path, "# my comment\n|1|abc=|def= ssh-ed25519 AAAAhashed\nold.example.com ssh-rsa AAAAold\n").unwrap();
+        let kh = KnownHosts::at(path.clone());
+        kh.replace_for_host("old.example.com", 22, "ssh-ed25519", "AAAAnew").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("# my comment"));
+        assert!(text.contains("|1|abc"));
+        assert!(text.contains("old.example.com ssh-ed25519 AAAAnew"));
+        assert!(!text.contains("AAAAold"));
     }
 }

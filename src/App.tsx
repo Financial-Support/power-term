@@ -32,6 +32,10 @@ export function App() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [sshFlow, setSshFlow] = useState<SshFlow>({ phase: 'idle' });
+  // Increments on every driveSshConnect entry; in-flight resolutions check
+  // they're still the latest before applying setSshFlow. Prevents a stale
+  // result from overwriting a newer connect attempt's modal state.
+  const flowToken = useRef(0);
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);
 
@@ -58,9 +62,11 @@ export function App() {
   }, [closeTab]);
 
   const driveSshConnect = useCallback(async (target: SshTarget, auth: AuthRequest, acceptFp: string | null) => {
+    const myToken = ++flowToken.current;
     setSshFlow({ phase: 'connecting', target, auth, acceptFp });
     try {
       const result = await sshConnect({ target, auth, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, acceptFingerprint: acceptFp });
+      if (myToken !== flowToken.current) return; // superseded by a newer connect
       if (result.status === 'connected') {
         addTab(result.id, `${target.user}@${target.host}`, 'ssh');
         setSshFlow({ phase: 'idle' });
@@ -72,6 +78,7 @@ export function App() {
         setSshFlow({ phase: 'auth', target, tried: result.tried, available: result.available });
       }
     } catch (e) {
+      if (myToken !== flowToken.current) return;
       console.error('ssh_connect failed', e);
       setSshFlow({ phase: 'auth', target, tried: [], available: ['agent', 'publickey', 'password'], error: String(e) });
     }
@@ -87,13 +94,15 @@ export function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === 'k') {
+        // Don't open palette over a fingerprint or auth modal.
+        if (sshFlow.phase !== 'idle') return;
         e.preventDefault();
         setPaletteOpen(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [sshFlow.phase]);
 
   const openedFirstTab = useRef(false);
   useEffect(() => {

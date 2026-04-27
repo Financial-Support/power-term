@@ -80,7 +80,9 @@ export function Terminal({ tab, visible }: Props) {
       unsubOutput = await onPtyOutput(tab.ptyId, (bytes) => term.write(bytes));
       unsubExit = await onPtyExit(tab.ptyId, (p) => {
         markExit(tab.ptyId, p.code);
-        term.write(`\r\n\x1b[33m[process exited (code ${p.code ?? 'null'})]\x1b[0m\r\n`);
+        const codeStr = p.code !== null ? p.code.toString() : 'null';
+        const sigStr = p.signal ? ` signal=${p.signal}` : '';
+        term.write(`\r\n\x1b[33m[process exited (code ${codeStr}${sigStr})]\x1b[0m\r\n`);
       });
     })();
 
