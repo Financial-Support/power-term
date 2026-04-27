@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -83,4 +83,36 @@ export async function sshKill(ptyId: string): Promise<void> {
 
 export async function knownHostsGet(host: string, port: number): Promise<{ fingerprint: string | null; key_type: string | null }> {
   return invoke('known_hosts_get', { host, port });
+}
+
+export async function hostsList(): Promise<Host[]> {
+  return invoke<Host[]>('hosts_list');
+}
+
+export async function hostsCreate(input: HostInput): Promise<Host> {
+  return invoke<Host>('hosts_create', { input });
+}
+
+export async function hostsUpdate(id: string, input: HostInput): Promise<Host> {
+  return invoke<Host>('hosts_update', { id, input });
+}
+
+export async function hostsDelete(id: string): Promise<void> {
+  await invoke('hosts_delete', { id });
+}
+
+export async function hostsTouch(id: string): Promise<void> {
+  await invoke('hosts_touch', { id });
+}
+
+export async function secretSet(hostId: string, secret: string): Promise<void> {
+  await invoke('secret_set', { hostId, secret });
+}
+
+export async function secretGet(hostId: string): Promise<string | null> {
+  return invoke<string | null>('secret_get', { hostId });
+}
+
+export async function secretDelete(hostId: string): Promise<void> {
+  await invoke('secret_delete', { hostId });
 }
