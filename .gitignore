@@ -8,6 +8,10 @@ dist/
 
 # Rust
 src-tauri/target/
+src-tauri/Cargo.lock
+
+# Node lockfile
+package-lock.json
 
 # Editors
 .idea/
