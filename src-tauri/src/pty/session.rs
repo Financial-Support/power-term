@@ -18,7 +18,7 @@ pub struct SpawnConfig {
 #[derive(Debug, Clone)]
 pub enum PtyEvent {
     Output(Vec<u8>),
-    Exit(Option<i32>),
+    Exit { code: Option<i32>, signal: Option<String> },
 }
 
 pub struct PtySession {
@@ -37,9 +37,12 @@ impl PtySession {
         let mut cmd = CommandBuilder::new(&cfg.shell);
         for a in &cfg.args { cmd.arg(a); }
         if let Some(cwd) = &cfg.cwd { cmd.cwd(cwd); }
-        if let Ok(home) = std::env::var("HOME") { cmd.env("HOME", home); }
-        if let Ok(term) = std::env::var("TERM") { cmd.env("TERM", term); } else { cmd.env("TERM", "xterm-256color"); }
-        if let Ok(lang) = std::env::var("LANG") { cmd.env("LANG", lang); }
+        // portable-pty's CommandBuilder::new inherits the parent env, so PATH/USER/HOME/LANG
+        // flow through automatically. We only force TERM when the parent has none (e.g.,
+        // launched from Finder/launchctl on macOS) so the shell gets a sane default.
+        if std::env::var_os("TERM").is_none() {
+            cmd.env("TERM", "xterm-256color");
+        }
 
         let mut child = pty.slave.spawn_command(cmd).map_err(|e| PtyError::Spawn(e.to_string()))?;
         drop(pty.slave);
@@ -64,8 +67,14 @@ impl PtySession {
                     }
                 }
             }
-            let exit = child.wait().ok().and_then(|s| s.exit_code().try_into().ok());
-            let _ = tx.send(PtyEvent::Exit(exit));
+            let (code, signal) = match child.wait() {
+                Ok(s) => (Some(s.exit_code() as i32), None),
+                Err(e) => {
+                    tracing::warn!(error = %e, "child wait failed");
+                    (None, None)
+                }
+            };
+            let _ = tx.send(PtyEvent::Exit { code, signal });
         });
 
         let session = Arc::new(Self {
@@ -100,6 +109,17 @@ impl PtySession {
     }
 }
 
+impl Drop for PtySession {
+    fn drop(&mut self) {
+        // Best-effort cleanup so the reader thread does not outlive the session
+        // when callers drop without calling kill() first (e.g., HashMap::remove).
+        let _ = self.killer.lock().kill();
+        if let Some(h) = self.reader_handle.lock().take() {
+            let _ = h.join();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,7 +132,7 @@ mod tests {
             if let Ok(ev) = rx.recv_timeout(Duration::from_millis(50)) {
                 match ev {
                     PtyEvent::Output(b) => out.extend_from_slice(&b),
-                    PtyEvent::Exit(_) => break,
+                    PtyEvent::Exit { .. } => break,
                 }
             }
         }
