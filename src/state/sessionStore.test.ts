@@ -15,16 +15,48 @@ describe('sessionStore', () => {
     expect(s.tabs[0].title).toBe('shell');
   });
 
-  it('closeTab removes and reassigns active to neighbour', () => {
+  it('closeTab on non-active tab keeps active unchanged', () => {
     const { addTab, closeTab } = useSessionStore.getState();
     addTab('pty-1', 'a');
     addTab('pty-2', 'b');
     addTab('pty-3', 'c');
+    // active is pty-3 (last addTab sets active)
     const tabs = useSessionStore.getState().tabs;
-    closeTab(tabs[1].id);
+    const activeBefore = useSessionStore.getState().activeTabId;
+    closeTab(tabs[1].id); // close pty-2 (not active)
     const after = useSessionStore.getState();
     expect(after.tabs.map(t => t.ptyId)).toEqual(['pty-1', 'pty-3']);
+    expect(after.activeTabId).toBe(activeBefore); // still pty-3
+  });
+
+  it('closeTab on active tab picks right neighbour, else left', () => {
+    const { addTab, closeTab, setActive } = useSessionStore.getState();
+    addTab('pty-1', 'a');
+    addTab('pty-2', 'b');
+    addTab('pty-3', 'c');
+    const tabs = useSessionStore.getState().tabs;
+    setActive(tabs[1].id); // active = pty-2 (middle)
+    closeTab(tabs[1].id);
+    // tabs=[pty-1, pty-3]; active should jump to pty-3 (right neighbour at same idx)
+    let after = useSessionStore.getState();
+    expect(after.tabs.map(t => t.ptyId)).toEqual(['pty-1', 'pty-3']);
+    expect(after.activeTabId).toBe(after.tabs[1].id);
+
+    // Close active pty-3 (last): falls back to left neighbour pty-1
+    closeTab(after.tabs[1].id);
+    after = useSessionStore.getState();
+    expect(after.tabs.map(t => t.ptyId)).toEqual(['pty-1']);
     expect(after.activeTabId).toBe(after.tabs[0].id);
+  });
+
+  it('closeTab on the only tab clears activeTabId', () => {
+    const { addTab, closeTab } = useSessionStore.getState();
+    addTab('pty-1', 'a');
+    const id = useSessionStore.getState().tabs[0].id;
+    closeTab(id);
+    const after = useSessionStore.getState();
+    expect(after.tabs).toHaveLength(0);
+    expect(after.activeTabId).toBeNull();
   });
 
   it('setActive switches active tab', () => {

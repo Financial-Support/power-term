@@ -23,12 +23,16 @@ export const useSessionStore = create<State>((set, get) => ({
     return tab.id;
   },
   closeTab: (id) => {
-    const { tabs } = get();
+    const { tabs, activeTabId } = get();
     const idx = tabs.findIndex((t) => t.id === id);
     if (idx < 0) return;
     const next = tabs.filter((t) => t.id !== id);
-    const neighbour = next[idx - 1] ?? next[idx] ?? null;
-    const nextActive = neighbour?.id ?? null;
+    let nextActive = activeTabId;
+    if (activeTabId === id) {
+      // Closed tab was active: pick right neighbour, else left, else none.
+      const neighbour = next[idx] ?? next[idx - 1] ?? null;
+      nextActive = neighbour?.id ?? null;
+    }
     set({ tabs: next, activeTabId: nextActive });
   },
   setActive: (id) => set({ activeTabId: id }),
