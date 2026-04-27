@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { onPtyExit, onPtyOutput, ptyResize, ptyWrite } from '../lib/ipc';
+import { onPtyExit, onPtyOutput, ptyResize, ptyWrite, sshResize, sshWrite } from '../lib/ipc';
 import type { Tab } from '../types';
 import { useSessionStore } from '../state/sessionStore';
 import { useSettingsStore } from '../state/settingsStore';
@@ -60,7 +60,8 @@ export function Terminal({ tab, visible }: Props) {
         return false;
       }
       // Let App-level useHotkeys handle Cmd+T/W/1-9/[/].
-      if (e.key === 't' || e.key === 'w' || e.key === '{' || e.key === '}') return false;
+      // Let App-level Cmd+K open the command palette.
+      if (e.key === 't' || e.key === 'w' || e.key === '{' || e.key === '}' || e.key.toLowerCase() === 'k') return false;
       const digit = Number(e.key);
       if (Number.isInteger(digit) && digit >= 1 && digit <= 9) return false;
       return true;
@@ -83,8 +84,14 @@ export function Terminal({ tab, visible }: Props) {
       });
     })();
 
-    const onData = term.onData((data) => { void ptyWrite(tab.ptyId, data); });
-    const onResize = term.onResize(({ cols, rows }) => { void ptyResize(tab.ptyId, cols, rows); });
+    const onData = term.onData((data) => {
+      if (tab.kind === 'ssh') void sshWrite(tab.ptyId, data);
+      else void ptyWrite(tab.ptyId, data);
+    });
+    const onResize = term.onResize(({ cols, rows }) => {
+      if (tab.kind === 'ssh') void sshResize(tab.ptyId, cols, rows);
+      else void ptyResize(tab.ptyId, cols, rows);
+    });
 
     const ro = new ResizeObserver(() => fit.fit());
     ro.observe(containerRef.current);
