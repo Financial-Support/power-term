@@ -17,5 +17,12 @@ package-lock.json
 .idea/
 .vscode/
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Emitted by `tsc -b` for vite.config.ts (Step 4 of Task 1)
+vite.config.js
+vite.config.d.ts
+
 # Local memory / scratch
 .remember/
