@@ -44,3 +44,4 @@ tempfile = "3"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+mock-keychain = []
