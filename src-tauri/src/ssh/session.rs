@@ -382,7 +382,7 @@ async fn reader_loop(
                     Some(ChannelMsg::ExitSignal {
                         signal_name: name, ..
                     }) => {
-                        signal_name = Some(format!("{name:?}"));
+                        signal_name = Some(format_sig(&name));
                     }
                     Some(ChannelMsg::Eof) => {}
                     Some(ChannelMsg::Close) => break,
@@ -392,6 +392,13 @@ async fn reader_loop(
             }
         }
     }
+    // If the loop ended without seeing ExitStatus/ExitSignal AND it wasn't
+    // user-initiated cancellation, treat it as a network drop. The signal
+    // string is the contract surfaced to the renderer per spec §10 / §13.
+    if exit_code.is_none() && signal_name.is_none() && !cancel.is_cancelled() {
+        signal_name = Some("network_error".to_string());
+    }
+
     // Best-effort EOF + Close so the server doesn't hang on its end.
     let _ = channel.eof().await;
     let _ = channel.close().await;
@@ -399,4 +406,25 @@ async fn reader_loop(
         code: exit_code,
         signal: signal_name,
     });
+}
+
+/// Format a russh `Sig` enum into a clean uppercase mnemonic string.
+/// Avoids the ugly `Custom("HUP")` debug rendering for end-user-visible exit banners.
+fn format_sig(sig: &russh::Sig) -> String {
+    use russh::Sig;
+    match sig {
+        Sig::ABRT => "ABRT".into(),
+        Sig::ALRM => "ALRM".into(),
+        Sig::FPE => "FPE".into(),
+        Sig::HUP => "HUP".into(),
+        Sig::ILL => "ILL".into(),
+        Sig::INT => "INT".into(),
+        Sig::KILL => "KILL".into(),
+        Sig::PIPE => "PIPE".into(),
+        Sig::QUIT => "QUIT".into(),
+        Sig::SEGV => "SEGV".into(),
+        Sig::TERM => "TERM".into(),
+        Sig::USR1 => "USR1".into(),
+        Sig::Custom(s) => s.clone(),
+    }
 }
