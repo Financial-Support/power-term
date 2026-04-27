@@ -44,3 +44,32 @@ export type SshConnectResult =
   | { status: 'needs_fingerprint'; fingerprint: string; host: string; key_type: string }
   | { status: 'fingerprint_mismatch'; fingerprint: string; expected: string; host: string }
   | { status: 'needs_auth'; tried: string[]; available: string[] };
+
+export type AuthMethodKind = 'agent' | 'key' | 'password';
+
+export interface Host {
+  id: string;
+  name: string;
+  hostname: string;
+  port: number;
+  username: string;
+  group_name: string | null;
+  tags: string[];
+  auth_method: AuthMethodKind;
+  key_path: string | null;
+  notes: string | null;
+  created_at: number;
+  last_used_at: number | null;
+}
+
+export interface HostInput {
+  name: string;
+  hostname: string;
+  port: number;
+  username: string;
+  group_name: string | null;
+  tags: string[];
+  auth_method: AuthMethodKind;
+  key_path: string | null;
+  notes: string | null;
+}
