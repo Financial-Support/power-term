@@ -76,26 +76,39 @@ impl SettingsStore {
         if let Some(v) = patch.theme { s.theme = v; }
         if let Some(v) = patch.cursor_blink { s.cursor_blink = v; }
         if let Some(v) = patch.scrollback_lines { s.scrollback_lines = v; }
-        atomic_write(&self.path, &*s)?;
+        atomic_write(&self.path, &s)?;
         Ok(s.clone())
     }
 }
 
+/// Loads settings from `path`, falling back to defaults if missing or corrupt.
+///
+/// Recovery contract: if `path` exists but cannot be parsed, the file is renamed
+/// to `path.with_extension("toml.bak")`. Only the most recent corrupt file is
+/// retained — a previous `.bak` will be silently overwritten. This is by design
+/// for a single-user desktop config: the latest bad state is the only one likely
+/// to be useful for debugging.
 fn read_or_default(path: &Path) -> Settings {
     match std::fs::read_to_string(path) {
         Ok(text) => match toml::from_str::<Settings>(&text) {
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(error = %e, "settings parse failed; backing up and resetting");
-                let _ = std::fs::rename(path, path.with_extension("toml.bak"));
+                if let Err(e) = std::fs::rename(path, path.with_extension("toml.bak")) {
+                    tracing::warn!(error = %e, "failed to back up corrupt settings file");
+                }
                 let s = Settings::default();
-                let _ = atomic_write(path, &s);
+                if let Err(e) = atomic_write(path, &s) {
+                    tracing::warn!(error = %e, "failed to write default settings after recovery");
+                }
                 s
             }
         },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             let s = Settings::default();
-            let _ = atomic_write(path, &s);
+            if let Err(e) = atomic_write(path, &s) {
+                tracing::warn!(error = %e, "failed to write initial default settings");
+            }
             s
         }
         Err(e) => {
