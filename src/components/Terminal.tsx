@@ -9,6 +9,7 @@ import { onPtyExit, onPtyOutput, ptyResize, ptyWrite } from '../lib/ipc';
 import type { Tab } from '../types';
 import { useSessionStore } from '../state/sessionStore';
 import { useSettingsStore } from '../state/settingsStore';
+import { useTheme } from '../hooks/useTheme';
 
 interface Props { tab: Tab; visible: boolean }
 
@@ -18,6 +19,7 @@ export function Terminal({ tab, visible }: Props) {
   const fitRef = useRef<FitAddon | null>(null);
   const settings = useSettingsStore((s) => s.settings);
   const markExit = useSessionStore((s) => s.markExit);
+  const resolvedTheme = useTheme();
 
   useEffect(() => {
     if (!containerRef.current || !settings) return;
@@ -28,7 +30,7 @@ export function Terminal({ tab, visible }: Props) {
       cursorBlink: settings.cursor_blink,
       scrollback: settings.scrollback_lines,
       allowProposedApi: true,
-      theme: themeFor(settings.theme),
+      theme: themeForResolved(resolvedTheme),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -103,6 +105,14 @@ export function Terminal({ tab, visible }: Props) {
     if (visible) requestAnimationFrame(() => fitRef.current?.fit());
   }, [visible]);
 
+  // React to runtime theme changes (auto-mode following macOS appearance, or
+  // settings.theme being toggled) without tearing down the whole xterm instance.
+  useEffect(() => {
+    const term = xtermRef.current;
+    if (!term) return;
+    term.options.theme = themeForResolved(resolvedTheme);
+  }, [resolvedTheme]);
+
   return (
     <div
       ref={containerRef}
@@ -111,8 +121,8 @@ export function Terminal({ tab, visible }: Props) {
   );
 }
 
-function themeFor(name: string): import('@xterm/xterm').ITheme {
-  if (name === 'light' || (name === 'auto' && !matchMedia('(prefers-color-scheme: dark)').matches)) {
+function themeForResolved(theme: 'light' | 'dark'): import('@xterm/xterm').ITheme {
+  if (theme === 'light') {
     return { background: '#ffffff', foreground: '#1a1a1a', cursor: '#1a1a1a' };
   }
   return { background: '#0f1115', foreground: '#e6e6e6', cursor: '#e6e6e6' };

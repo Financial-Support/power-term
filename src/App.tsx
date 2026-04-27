@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TitleBar } from './components/TitleBar';
 import { TabBar } from './components/TabBar';
@@ -43,9 +43,15 @@ export function App() {
 
   useHotkeys({ onNewTab: () => void newTab(), onCloseTab: (id) => void handleClose(id) });
 
-  // open the first tab once settings load
+  // Open the first tab once settings load.
+  // Guard against React 18 StrictMode double-mount in dev: without the ref,
+  // the effect would dispatch two ptySpawn calls before the first one settles.
+  const openedFirstTab = useRef(false);
   useEffect(() => {
-    if (settings && tabs.length === 0) void newTab();
+    if (settings && tabs.length === 0 && !openedFirstTab.current) {
+      openedFirstTab.current = true;
+      void newTab();
+    }
   }, [settings, tabs.length, newTab]);
 
   const theme = useTheme();
