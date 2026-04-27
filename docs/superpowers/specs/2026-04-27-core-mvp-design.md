@@ -127,7 +127,7 @@ The Tauri + Rust + React choice was made over Electron to get a small bundle, lo
 Events emitted by the backend:
 
 - `pty://output/<id>` — payload is a base64-encoded byte string. Base64 keeps the JSON wire format clean and safe for non-UTF8 byte sequences (escape codes, partial UTF-8 boundaries).
-- `pty://exit/<id>` — payload is `{ code: number | null }`.
+- `pty://exit/<id>` — payload is `{ code: number | null, signal: string | null }`. `signal` is reserved (always `null` today; `portable-pty 0.8` does not surface signal info from `child.wait()` on macOS).
 
 `pty_id` is a UUID v4 string generated in Rust on `spawn`.
 
@@ -167,9 +167,9 @@ scrollback_lines = 10000
 | Failure | Behaviour |
 | --- | --- |
 | Shell does not exist on `pty_spawn` | Command returns `Err`. Frontend shows a toast and does not add the tab. |
-| PTY exits unexpectedly | Tab shows a banner "Process exited (code N)" with a "Restart" button that re-spawns with the same shell + cwd. |
+| PTY exits unexpectedly | Terminal shows an inline "[process exited (code N)]" message in yellow ANSI. **Deferred to a follow-up:** banner UI with a "Restart" button that re-spawns with the same shell + cwd. |
 | Settings file corrupt | Backed up to `.bak`, defaults applied, warning logged via `tracing`. |
-| IPC output queue saturated | Reader thread coalesces reads into ≤ 64 KB chunks. If a per-session in-memory queue exceeds 1000 pending chunks, the oldest are dropped and a one-time warning is logged. (This is a coarse backpressure for MVP; no UI signal needed.) |
+| IPC output queue saturated | Reader thread coalesces reads into ≤ 64 KB chunks; emit failures break the forwarder cleanly so a torn-down webview cannot back up the queue. **Deferred to sub-project #2 prep:** the bounded "drop oldest after 1000 pending chunks" policy noted in the original draft is not yet implemented. Tauri's emit currently provides the natural backpressure for MVP local-PTY traffic. |
 | `pty_write` / `pty_resize` for unknown id | Command returns `Err("unknown pty id")`. Frontend logs and ignores. |
 
 ## 11. Testing
