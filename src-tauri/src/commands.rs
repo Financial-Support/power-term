@@ -209,3 +209,62 @@ pub fn known_hosts_get(host: String, port: u16) -> Result<KnownHostsLookup, Stri
     }
     Ok(KnownHostsLookup { fingerprint: None, key_type: None })
 }
+
+use crate::store::{self, Host, HostInput, HostStore};
+
+#[tauri::command]
+pub fn hosts_list(store: tauri::State<'_, HostStore>) -> Result<Vec<Host>, String> {
+    store.list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn hosts_create(
+    store: tauri::State<'_, HostStore>,
+    input: HostInput,
+) -> Result<Host, String> {
+    store.create(&input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn hosts_update(
+    store: tauri::State<'_, HostStore>,
+    id: String,
+    input: HostInput,
+) -> Result<Host, String> {
+    store.update(&id, &input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn hosts_delete(
+    store: tauri::State<'_, HostStore>,
+    id: String,
+) -> Result<(), String> {
+    store.delete(&id).map_err(|e| e.to_string())?;
+    if let Err(e) = store::secrets::delete(&id) {
+        tracing::warn!(host_id = %id, error = ?e, "failed to delete secret on host delete");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn hosts_touch(
+    store: tauri::State<'_, HostStore>,
+    id: String,
+) -> Result<(), String> {
+    store.touch(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn secret_set(host_id: String, secret: String) -> Result<(), String> {
+    store::secrets::set(&host_id, &secret).map_err(|e| format!("{e:?}"))
+}
+
+#[tauri::command]
+pub fn secret_get(host_id: String) -> Result<Option<String>, String> {
+    store::secrets::get(&host_id).map_err(|e| format!("{e:?}"))
+}
+
+#[tauri::command]
+pub fn secret_delete(host_id: String) -> Result<(), String> {
+    store::secrets::delete(&host_id).map_err(|e| format!("{e:?}"))
+}

@@ -3,17 +3,21 @@
 use power_term::pty::PtyManager;
 use power_term::settings::SettingsStore;
 use power_term::ssh::SshManager;
+use power_term::store::HostStore;
 
 fn main() {
     tracing_subscriber::fmt::init();
 
     let settings = SettingsStore::load_default_path()
         .expect("failed to initialize settings store");
+    let host_store = HostStore::open_default_path()
+        .expect("failed to initialize host store");
 
     tauri::Builder::default()
         .manage(PtyManager::new())
         .manage(SshManager::new())
         .manage(settings)
+        .manage(host_store)
         .invoke_handler(tauri::generate_handler![
             power_term::commands::pty_spawn,
             power_term::commands::pty_write,
@@ -26,6 +30,14 @@ fn main() {
             power_term::commands::ssh_resize,
             power_term::commands::ssh_kill,
             power_term::commands::known_hosts_get,
+            power_term::commands::hosts_list,
+            power_term::commands::hosts_create,
+            power_term::commands::hosts_update,
+            power_term::commands::hosts_delete,
+            power_term::commands::hosts_touch,
+            power_term::commands::secret_set,
+            power_term::commands::secret_get,
+            power_term::commands::secret_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
