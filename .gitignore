@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Rust
+src-tauri/target/
+
+# Editors
+.idea/
+.vscode/
+
+# Local memory / scratch
+.remember/
