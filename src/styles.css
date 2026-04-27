@@ -63,3 +63,56 @@ html, body, #root { height: 100%; margin: 0; }
 .modal fieldset.auth-method label { font-size: 13px; cursor: pointer; }
 .auth-fields { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px 0; }
 .auth-fields input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--tab-bg); color: var(--fg); font: inherit; font-size: 13px; }
+
+.body { flex: 1; display: flex; min-height: 0; }
+.sidebar {
+  width: 240px; flex: 0 0 240px;
+  display: flex; flex-direction: column;
+  background: var(--tab-bg); border-right: 1px solid var(--border);
+  user-select: none;
+}
+.sidebar-actions { padding: 8px; }
+.sidebar-actions button.primary {
+  width: 100%; padding: 6px 10px; border: 0; border-radius: 6px;
+  background: #2563eb; color: white; cursor: pointer; font: inherit; font-size: 13px;
+}
+.sidebar-error { color: #dc2626; padding: 0 10px; font-size: 12px; }
+.sidebar-list { flex: 1; overflow: auto; padding: 0 4px; }
+.sidebar-empty { padding: 12px; font-size: 12px; opacity: 0.7; }
+.sidebar-group-header {
+  width: 100%; text-align: left; padding: 4px 8px; font-size: 12px; font-weight: 600;
+  background: transparent; border: 0; color: var(--fg); cursor: pointer;
+}
+.sidebar-caret { display: inline-block; width: 12px; opacity: 0.6; }
+.sidebar-hosts { list-style: none; margin: 0; padding: 0; }
+.sidebar-host {
+  display: flex; align-items: center; padding: 0 8px; border-radius: 4px;
+}
+.sidebar-host:hover { background: var(--tab-active); }
+.sidebar-host-name {
+  flex: 1; text-align: left; padding: 4px 8px; background: transparent; border: 0;
+  color: var(--fg); cursor: pointer; font: inherit; font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sidebar-host-actions { display: none; gap: 2px; }
+.sidebar-host:hover .sidebar-host-actions { display: flex; }
+.sidebar-host-actions button {
+  background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
+  color: var(--fg); opacity: 0.6;
+}
+.sidebar-host-actions button:hover { opacity: 1; }
+.sidebar-hint { padding: 8px; font-size: 11px; opacity: 0.5; border-top: 1px solid var(--border); }
+
+.modal.modal-form { width: 520px; }
+.modal .form-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 0 0 12px 0;
+}
+.modal .form-grid label, .modal-form label, .modal-form fieldset.auth-method {
+  display: flex; flex-direction: column; gap: 2px; font-size: 12px;
+}
+.modal-form label.checkbox { flex-direction: row; align-items: center; gap: 6px; font-size: 12px; }
+.modal .form-grid input, .modal-form textarea, .modal-form input, .modal-form .auth-fields input {
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font: inherit; font-size: 13px;
+}
+.modal-actions button.danger { background: #dc2626; color: white; border-color: #dc2626; }
