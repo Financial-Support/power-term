@@ -35,6 +35,8 @@ sha2 = "0.10"
 async-trait = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "sync", "time", "fs"] }
 tokio-util = "0.7"
+rusqlite = { version = "0.31", features = ["bundled"] }
+keyring = "3"
 
 [dev-dependencies]
 tempfile = "3"
