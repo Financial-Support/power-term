@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -51,4 +51,36 @@ export async function onPtyExit(
   cb: (payload: PtyExitPayload) => void,
 ): Promise<UnlistenFn> {
   return listen<PtyExitPayload>(`pty://exit/${ptyId}`, (event) => cb(event.payload));
+}
+
+export async function sshConnect(args: {
+  target: SshTarget;
+  auth: AuthRequest;
+  cols: number;
+  rows: number;
+  acceptFingerprint?: string | null;
+}): Promise<SshConnectResult> {
+  return invoke<SshConnectResult>('ssh_connect', {
+    target: args.target,
+    auth: args.auth,
+    cols: args.cols,
+    rows: args.rows,
+    acceptFingerprint: args.acceptFingerprint ?? null,
+  });
+}
+
+export async function sshWrite(ptyId: string, data: string | Uint8Array): Promise<void> {
+  await invoke('ssh_write', { ptyId, data: encodeBase64(data) });
+}
+
+export async function sshResize(ptyId: string, cols: number, rows: number): Promise<void> {
+  await invoke('ssh_resize', { ptyId, cols, rows });
+}
+
+export async function sshKill(ptyId: string): Promise<void> {
+  await invoke('ssh_kill', { ptyId });
+}
+
+export async function knownHostsGet(host: string, port: number): Promise<{ fingerprint: string | null; key_type: string | null }> {
+  return invoke('known_hosts_get', { host, port });
 }

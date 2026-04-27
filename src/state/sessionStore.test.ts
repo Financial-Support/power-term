@@ -82,4 +82,13 @@ describe('sessionStore', () => {
     markExit('pty-1', 137);
     expect(useSessionStore.getState().tabs[0].exitCode).toBe(137);
   });
+
+  it('addTab defaults kind to local; ssh kind is preserved', () => {
+    const { addTab } = useSessionStore.getState();
+    const localId = addTab('pty-loc', 'a');
+    const sshId = addTab('pty-ssh', 'b', 'ssh');
+    const tabs = useSessionStore.getState().tabs;
+    expect(tabs.find((t) => t.id === localId)!.kind).toBe('local');
+    expect(tabs.find((t) => t.id === sshId)!.kind).toBe('ssh');
+  });
 });
