@@ -28,6 +28,20 @@ impl KnownHosts {
         dirs::home_dir().map(|h| h.join(".ssh").join("known_hosts"))
     }
 
+    pub fn append(&self, host: &str, port: u16, key_type: &str, key_b64: &str) -> std::io::Result<()> {
+        use std::io::Write;
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let line = format!("{} {} {}\n", canonical_host(host, port), key_type, key_b64);
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
+        f.write_all(line.as_bytes())?;
+        Ok(())
+    }
+
     pub fn verify(&self, host: &str, port: u16, offered_type: &str, offered_b64: &str) -> std::io::Result<HostVerdict> {
         let needle = canonical_host(host, port);
         let text = match std::fs::read_to_string(&self.path) {
@@ -153,5 +167,35 @@ mod tests {
         ).unwrap();
         assert!(fp.starts_with("SHA256:"));
         assert_eq!(fp.len(), "SHA256:".len() + 43);
+    }
+
+    #[test]
+    fn append_writes_plain_entry_and_verifies() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        let kh = KnownHosts::at(path.clone());
+        kh.append("freshhost.example.com", 22, "ssh-ed25519", "AAAAfreshkey").unwrap();
+
+        let verdict = kh.verify("freshhost.example.com", 22, "ssh-ed25519", "AAAAfreshkey").unwrap();
+        assert_eq!(verdict, HostVerdict::Match);
+    }
+
+    #[test]
+    fn append_creates_dirs_if_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/sub/known_hosts");
+        let kh = KnownHosts::at(path.clone());
+        kh.append("a.example.com", 22, "ssh-ed25519", "AAAAk").unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn append_uses_bracket_format_for_non_default_port() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        let kh = KnownHosts::at(path.clone());
+        kh.append("h.example.com", 2222, "ssh-ed25519", "AAAAk").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("[h.example.com]:2222 ssh-ed25519 AAAAk"));
     }
 }
