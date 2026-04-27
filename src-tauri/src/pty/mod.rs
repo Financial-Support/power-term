@@ -1,5 +1,8 @@
+mod manager;
 mod session;
-pub use session::{PtySession, PtyEvent, SpawnConfig};
+
+pub use manager::PtyManager;
+pub use session::{PtyEvent, PtySession, SpawnConfig};
 
 pub type PtyId = String;
 
