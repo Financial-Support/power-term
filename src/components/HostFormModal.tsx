@@ -27,9 +27,14 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
   const [secret, setSecret] = useState('');
   const [secretDirty, setSecretDirty] = useState(false);
   const [saveSecret, setSaveSecret] = useState(true);
+  const [saveSecretDirty, setSaveSecretDirty] = useState(false);
   const [notes, setNotes] = useState(host?.notes ?? '');
 
-  useEffect(() => { setSecret(''); setSecretDirty(false); }, [authMethod]);
+  useEffect(() => {
+    setSecret('');
+    setSecretDirty(false);
+    setSaveSecretDirty(false);
+  }, [authMethod]);
 
   const validatePort = (p: number) => Number.isInteger(p) && p >= 1 && p <= 65535;
 
@@ -58,11 +63,14 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
     const wantsSecret =
       (authMethod === 'password' && secret !== '') ||
       (authMethod === 'key' && secret !== '');
+    // forgetSecret fires when the user explicitly turned off "Save to Keychain"
+    // (saveSecretDirty) and isn't writing a new secret. The Keychain wrapper's
+    // delete is idempotent, so this safely no-ops if no secret was stored.
     onSave({
       input,
       secret: wantsSecret ? secret : null,
       saveSecret: wantsSecret && saveSecret,
-      forgetSecret: !saveSecret && !wantsSecret && secretDirty,
+      forgetSecret: !saveSecret && !wantsSecret && (saveSecretDirty || secretDirty),
     });
   };
 
@@ -113,7 +121,7 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
             <input id="hfm-passphrase" type="password" value={secret} onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
 
             <label className="checkbox">
-              <input type="checkbox" checked={saveSecret} onChange={(e) => setSaveSecret(e.target.checked)} /> Save passphrase to Keychain
+              <input type="checkbox" checked={saveSecret} onChange={(e) => { setSaveSecret(e.target.checked); setSaveSecretDirty(true); }} /> Save passphrase to Keychain
             </label>
           </div>
         )}
@@ -124,7 +132,7 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
             <input id="hfm-password" type="password" value={secret} onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
 
             <label className="checkbox">
-              <input type="checkbox" checked={saveSecret} onChange={(e) => setSaveSecret(e.target.checked)} /> Save password to Keychain
+              <input type="checkbox" checked={saveSecret} onChange={(e) => { setSaveSecret(e.target.checked); setSaveSecretDirty(true); }} /> Save password to Keychain
             </label>
           </div>
         )}

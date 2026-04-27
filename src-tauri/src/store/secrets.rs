@@ -110,4 +110,34 @@ mod tests {
         let id = format!("test-{}", uuid::Uuid::new_v4());
         delete(&id).unwrap();
     }
+
+    /// Models the `hosts_delete` cascade in `commands.rs`: HostStore.delete + secrets::delete.
+    /// We don't have a Tauri State here so we compose them directly.
+    #[test]
+    fn host_delete_cascade_clears_keychain_entry() {
+        use crate::store::host::{HostInput, HostStore};
+
+        let store = HostStore::open_in_memory().unwrap();
+        let input = HostInput {
+            name: "casc".into(),
+            hostname: "h".into(),
+            port: 22,
+            username: "u".into(),
+            group_name: None,
+            tags: vec![],
+            auth_method: "password".into(),
+            key_path: None,
+            notes: None,
+        };
+        let host = store.create(&input).unwrap();
+        set(&host.id, "stored-pw").unwrap();
+        assert_eq!(get(&host.id).unwrap(), Some("stored-pw".to_string()));
+
+        // Cascade: delete the host row, then the secret.
+        store.delete(&host.id).unwrap();
+        delete(&host.id).unwrap();
+
+        assert_eq!(get(&host.id).unwrap(), None);
+        assert!(store.list().unwrap().is_empty());
+    }
 }

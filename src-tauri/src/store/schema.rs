@@ -5,6 +5,18 @@ pub const CURRENT_VERSION: u32 = 1;
 pub fn migrate(conn: &Connection) -> Result<()> {
     let mut version: u32 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if version > CURRENT_VERSION {
+        // DB was written by a newer build. Refuse to run rather than silently
+        // operating on a schema we don't understand — spec §11 says the app
+        // should refuse to start so the user can recover manually.
+        return Err(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
+            Some(format!(
+                "database schema version {version} is newer than this build's {CURRENT_VERSION}; \
+                 install a newer power-term or restore an older hosts.db"
+            )),
+        ));
+    }
     while version < CURRENT_VERSION {
         match version {
             0 => migration_v1(conn)?,
@@ -89,7 +101,9 @@ mod tests {
     fn migrate_rejects_future_version() {
         let conn = open_in_memory();
         conn.pragma_update(None, "user_version", CURRENT_VERSION + 1).unwrap();
-        migrate(&conn).unwrap();
+        let err = migrate(&conn).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("newer than this build"), "expected version-too-new error, got: {msg}");
     }
 
     #[test]
