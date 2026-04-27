@@ -1,0 +1,5 @@
+# A comment line should be skipped
+example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE7Z3o8gJ3+R6cZ5Q3JmMu1FglDfzVKv7n4yY8gqQEAa
+[bracketed.example.com]:2222 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDLuDlS5/F9pYnFnFqIaRdF8nQjFQ7DtbFW8VsvTyrL
+host1,host2,host3 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBKaPHCJ7p5d2
+|1|f8XQXn9ZL4eCx5+t1+0YEm0kiRA=|h0XJEx8/k/CJZcz5w7vBYP6gKys= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH8z
