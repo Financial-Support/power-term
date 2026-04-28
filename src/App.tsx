@@ -70,7 +70,6 @@ export function App() {
   const activePaneIndex = useSessionStore((s) => s.activePaneIndex);
   const setLayout = useSessionStore((s) => s.setLayout);
   const setActivePane = useSessionStore((s) => s.setActivePane);
-  const assignSlot = useSessionStore((s) => s.assignSlot);
 
   const loadHosts = useHostStore((s) => s.load);
   const createHost = useHostStore((s) => s.create);
@@ -345,7 +344,7 @@ export function App() {
 
   return (
     <div className={`app theme-${theme}`}>
-      <TitleBar sidebarOpen={sidebar.open}>
+      <TitleBar sidebarOpen={sidebar.open} onLayoutChange={(kind) => void fillNullSlots(kind)}>
         <TabBar onNew={() => void newLocalTab()} onClose={(id) => void handleClose(id)} />
       </TitleBar>
       <div className="body">

@@ -12,9 +12,13 @@ interface Props {
    *  the open sidebar. Otherwise the spacer is the minimum reserved area for
    *  the macOS traffic lights. */
   sidebarOpen?: boolean;
+  onLayoutChange?: (kind: import('../types').LayoutKind) => void;
 }
 
-export function TitleBar({ children, sidebarOpen }: Props) {
+export function TitleBar({ children, sidebarOpen, onLayoutChange }: Props) {
+  // onLayoutChange will be wired to layout selection UI in a future task
+  void onLayoutChange;
+
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // Only react to primary mouse button; skip if it was a synthetic re-fire.
     if (e.button !== 0) return;
