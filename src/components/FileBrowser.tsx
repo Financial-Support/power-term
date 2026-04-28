@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileRow } from './FileRow';
 import { useSftpStore } from '../state/sftpStore';
-import { sftpMkdir, sftpRemoveDir, sftpRemoveFile, sftpRename } from '../lib/ipc';
+import { sftpDownload, sftpMkdir, sftpRemoveDir, sftpRemoveFile, sftpRename, sftpUpload } from '../lib/ipc';
+import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
 import type { SftpEntry } from '../types';
 
 interface Props {
@@ -93,9 +94,22 @@ export function FileBrowser({ tabId }: Props) {
     void reload(tabId);
   };
 
-  const onDownload = (_entry: SftpEntry) => {
-    // Wired in Task 11 (dialog plugin).
-    void _entry;
+  const onDownload = async (entry: SftpEntry) => {
+    const local = await pickLocalSavePath(entry.name);
+    if (!local) return;
+    try {
+      await sftpDownload(tab.sftpId, joinPath(tab.cwd, entry.name), local);
+    } catch (err) { console.warn('download failed', err); }
+  };
+
+  const onUpload = async () => {
+    const local = await pickLocalFile();
+    if (!local) return;
+    const base = local.split('/').pop() ?? 'upload';
+    try {
+      await sftpUpload(tab.sftpId, local, joinPath(tab.cwd, base));
+    } catch (err) { console.warn('upload failed', err); }
+    void reload(tabId);
   };
 
   return (
@@ -109,6 +123,7 @@ export function FileBrowser({ tabId }: Props) {
           onKeyDown={onPathKey}
         />
         <button type="button" aria-label="reload" onClick={() => void reload(tabId)}>⟳</button>
+        <button type="button" aria-label="upload" onClick={() => void onUpload()}>⬆</button>
         <button type="button" aria-label="new folder" onClick={() => setMkdirOpen(true)}>📁+</button>
         <label className="fb-toggle">
           <input type="checkbox" aria-label="show hidden files" checked={tab.showHidden} onChange={() => toggleHidden(tabId)} />
@@ -149,7 +164,7 @@ export function FileBrowser({ tabId }: Props) {
             key={entry.name}
             entry={entry}
             onCd={(name) => cdInto(name)}
-            onDownload={(e) => onDownload(e)}
+            onDownload={(e) => void onDownload(e)}
             onRename={(e) => void onRename(e)}
             onDelete={(e) => void onDelete(e)}
           />

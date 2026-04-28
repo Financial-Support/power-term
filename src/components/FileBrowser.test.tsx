@@ -13,6 +13,11 @@ vi.mock('../lib/ipc', () => ({
   sftpUpload: vi.fn(),
 }));
 
+vi.mock('../lib/dialog', () => ({
+  pickLocalFile: vi.fn(),
+  pickLocalSavePath: vi.fn(),
+}));
+
 import { sftpList, sftpMkdir } from '../lib/ipc';
 import { FileBrowser } from './FileBrowser';
 import { useSftpStore } from '../state/sftpStore';

@@ -14,12 +14,13 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
-    "@xterm/xterm": "^5.5.0",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "@xterm/addon-fit": "^0.10.0",
-    "@xterm/addon-web-links": "^0.11.0",
     "@xterm/addon-search": "^0.15.0",
     "@xterm/addon-unicode11": "^0.8.0",
+    "@xterm/addon-web-links": "^0.11.0",
     "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^4.5.0"
