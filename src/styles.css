@@ -103,16 +103,73 @@ html, body, #root { height: 100%; margin: 0; }
 .sidebar-host-actions button:hover { opacity: 1; }
 .sidebar-hint { padding: 8px; font-size: 11px; opacity: 0.5; border-top: 1px solid var(--border); }
 
-.modal.modal-form { width: 520px; }
+.modal.modal-form { width: 520px; max-height: 80vh; overflow-y: auto; }
+
+/* Two-column field grid: label left, input right, vertically aligned. */
 .modal .form-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 0 0 12px 0;
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px 14px;
+  align-items: center;
+  margin: 0 0 14px 0;
 }
-.modal .form-grid label, .modal-form label, .modal-form fieldset.auth-method {
-  display: flex; flex-direction: column; gap: 2px; font-size: 12px;
+.modal .form-grid > label {
+  font-size: 12px; opacity: 0.85; text-align: left;
 }
-.modal-form label.checkbox { flex-direction: row; align-items: center; gap: 6px; font-size: 12px; }
-.modal .form-grid input, .modal-form textarea, .modal-form input, .modal-form .auth-fields input {
-  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--bg); color: var(--fg); font: inherit; font-size: 13px;
+.modal .form-grid > input,
+.modal-form .auth-fields input,
+.modal-form > textarea {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit; font-size: 13px;
+  outline: none;
 }
+.modal .form-grid > input:focus,
+.modal-form .auth-fields input:focus,
+.modal-form > textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+/* Top-level "Notes" label + textarea sit outside the grid; stack vertically. */
+.modal-form > label:not(.checkbox) {
+  display: block; font-size: 12px; opacity: 0.85; margin: 0 0 4px 0;
+}
+.modal-form > textarea {
+  display: block; width: 100%; box-sizing: border-box; resize: vertical; margin: 0 0 14px 0;
+}
+
+/* Auth method block — group label sits on top, radios are an inline row each. */
+.modal fieldset.auth-method {
+  display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 12px 10px 12px; margin: 0 0 14px 0;
+}
+.modal fieldset.auth-method legend {
+  padding: 0 6px; font-size: 11px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.4px;
+}
+.modal fieldset.auth-method label {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  font-size: 13px; cursor: pointer;
+}
+.modal fieldset.auth-method label input[type="radio"] { margin: 0; }
+
+/* "Save to Keychain" checkbox row */
+.modal-form label.checkbox {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  font-size: 12px; opacity: 0.9; margin: 4px 0 0 0;
+}
+
+/* Inline auth-fields container (key path + passphrase OR password). */
+.modal-form .auth-fields {
+  display: flex; flex-direction: column; gap: 8px;
+  margin: 0 0 14px 0;
+}
+.modal-form .auth-fields > label {
+  display: block; font-size: 12px; opacity: 0.85; margin: 0 0 4px 0;
+}
+
 .modal-actions button.danger { background: #dc2626; color: white; border-color: #dc2626; }

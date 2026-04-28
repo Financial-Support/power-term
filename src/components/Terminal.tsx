@@ -25,7 +25,7 @@ export function Terminal({ tab, visible }: Props) {
     if (!containerRef.current || !settings) return;
 
     const term = new XTerm({
-      fontFamily: settings.font_family,
+      fontFamily: withMonospaceFallback(settings.font_family),
       fontSize: settings.font_size,
       cursorBlink: settings.cursor_blink,
       scrollback: settings.scrollback_lines,
@@ -135,4 +135,15 @@ function themeForResolved(theme: 'light' | 'dark'): import('@xterm/xterm').IThem
     return { background: '#ffffff', foreground: '#1a1a1a', cursor: '#1a1a1a' };
   }
   return { background: '#0f1115', foreground: '#e6e6e6', cursor: '#e6e6e6' };
+}
+
+// xterm.js takes the fontFamily string verbatim — if the requested font is not
+// installed it falls back to whatever the WebView decides (often a wide serif
+// monospace on macOS, which is unreadable). Append a fallback chain that always
+// resolves to something installed on macOS.
+function withMonospaceFallback(family: string): string {
+  const fallbacks = '"SF Mono", "Menlo", "Monaco", ui-monospace, "Courier New", monospace';
+  // If the user's setting already includes commas (its own fallback chain), trust it.
+  if (family.includes(',')) return family;
+  return `"${family}", ${fallbacks}`;
 }
