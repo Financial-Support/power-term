@@ -210,7 +210,7 @@ pub fn known_hosts_get(host: String, port: u16) -> Result<KnownHostsLookup, Stri
     Ok(KnownHostsLookup { fingerprint: None, key_type: None })
 }
 
-use crate::store::{self, Host, HostInput, HostStore};
+use crate::store::{self, Host, HostInput, HostStore, Snippet, SnippetInput, SnippetStore};
 
 #[tauri::command]
 pub fn hosts_list(store: tauri::State<'_, HostStore>) -> Result<Vec<Host>, String> {
@@ -405,4 +405,42 @@ pub async fn sftp_upload(
 ) -> Result<u64, String> {
     let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
     s.upload(std::path::Path::new(&local), &remote).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snippets_list(store: tauri::State<'_, SnippetStore>) -> Result<Vec<Snippet>, String> {
+    store.list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snippets_create(
+    store: tauri::State<'_, SnippetStore>,
+    input: SnippetInput,
+) -> Result<Snippet, String> {
+    store.create(&input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snippets_update(
+    store: tauri::State<'_, SnippetStore>,
+    id: String,
+    input: SnippetInput,
+) -> Result<Snippet, String> {
+    store.update(&id, &input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snippets_delete(
+    store: tauri::State<'_, SnippetStore>,
+    id: String,
+) -> Result<(), String> {
+    store.delete(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snippets_touch(
+    store: tauri::State<'_, SnippetStore>,
+    id: String,
+) -> Result<(), String> {
+    store.touch(&id).map_err(|e| e.to_string())
 }

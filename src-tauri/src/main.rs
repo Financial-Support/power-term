@@ -4,7 +4,7 @@ use power_term::pty::PtyManager;
 use power_term::settings::SettingsStore;
 use power_term::sftp::SftpManager;
 use power_term::ssh::SshManager;
-use power_term::store::{Db, HostStore};
+use power_term::store::{Db, HostStore, SnippetStore};
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -14,6 +14,7 @@ fn main() {
     let db = Db::open_default_path()
         .expect("failed to initialize sqlite store");
     let host_store = HostStore::new(db.clone());
+    let snippet_store = SnippetStore::new(db.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -22,6 +23,7 @@ fn main() {
         .manage(SftpManager::new())
         .manage(settings)
         .manage(host_store)
+        .manage(snippet_store)
         .manage(db)
         .invoke_handler(tauri::generate_handler![
             power_term::commands::pty_spawn,
@@ -43,6 +45,11 @@ fn main() {
             power_term::commands::secret_set,
             power_term::commands::secret_get,
             power_term::commands::secret_delete,
+            power_term::commands::snippets_list,
+            power_term::commands::snippets_create,
+            power_term::commands::snippets_update,
+            power_term::commands::snippets_delete,
+            power_term::commands::snippets_touch,
             power_term::commands::sftp_open,
             power_term::commands::sftp_close,
             power_term::commands::sftp_list,
