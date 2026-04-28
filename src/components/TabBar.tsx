@@ -25,7 +25,6 @@ export function TabBar({ onNew, onClose }: Props) {
             role="tab"
             aria-selected={isActive}
             className={`tab ${isActive ? 'active' : ''}`}
-            data-tauri-drag-region="false"
             onClick={() => !isEditing && setActive(tab.id)}
           >
             {isEditing ? (
@@ -58,7 +57,7 @@ export function TabBar({ onNew, onClose }: Props) {
           </div>
         );
       })}
-      <button type="button" className="tab-new" aria-label="New tab" data-tauri-drag-region="false" onClick={onNew}>+</button>
+      <button type="button" className="tab-new" aria-label="New tab" onClick={onNew}>+</button>
     </div>
   );
 }
