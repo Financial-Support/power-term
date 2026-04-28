@@ -12,7 +12,6 @@ type Tab = 'appearance' | 'terminal';
 export function SettingsModal({ onClose }: Props) {
   const settings = useSettingsStore((s) => s.settings);
   const updateSettings = useSettingsStore((s) => s.update);
-  const storeError = useSettingsStore((s) => s.error);
 
   const [activeTab, setActiveTab] = useState<Tab>('appearance');
   const [terminalTheme, setTerminalTheme] = useState(settings?.terminal_theme ?? 'default');
@@ -49,8 +48,9 @@ export function SettingsModal({ onClose }: Props) {
     setLocalError(null);
     await updateSettings(patch);
     setSaving(false);
-    if (!storeError) onClose();
-    else setLocalError(storeError);
+    const currentError = useSettingsStore.getState().error;
+    if (!currentError) onClose();
+    else setLocalError(currentError);
   };
 
   return (
@@ -99,7 +99,7 @@ export function SettingsModal({ onClose }: Props) {
               max={72}
               step={1}
               value={fontSize}
-              onChange={(e) => setFontSize(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) => { const n = parseInt(e.target.value, 10); setFontSize(isNaN(n) ? 0 : n); }}
             />
 
             <label htmlFor="sm-cursor-blink">Cursor blink</label>
@@ -122,7 +122,7 @@ export function SettingsModal({ onClose }: Props) {
               max={1000000}
               step={100}
               value={scrollback}
-              onChange={(e) => setScrollback(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) => { const n = parseInt(e.target.value, 10); setScrollback(isNaN(n) ? 0 : n); }}
             />
           </div>
         )}
