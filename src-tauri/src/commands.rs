@@ -1,5 +1,7 @@
 use crate::pty::{PtyManager, SpawnConfig};
 use crate::settings::{Settings, SettingsPatch, SettingsStore};
+use crate::sync::SyncManager;
+use crate::sync::push::PendingOp;
 use base64::Engine;
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -66,9 +68,28 @@ pub fn settings_get(settings: State<'_, SettingsStore>) -> Result<Settings, Stri
 #[tauri::command]
 pub fn settings_update(
     settings: State<'_, SettingsStore>,
+    sync: State<'_, SyncManager>,
     patch: SettingsPatch,
 ) -> Result<Settings, String> {
-    settings.apply(patch).map_err(|e| e.to_string())
+    let updated = settings.apply(patch).map_err(|e| e.to_string())?;
+    {
+        let settings_clone = updated.clone();
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token.clone()) {
+                    if let Some(user) = crate::sync::auth::user_from_jwt(&token) {
+                        let row = crate::sync::push::settings_to_row(&settings_clone, &user.id);
+                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSettings(row.clone())).await {
+                            tracing::warn!(error = %e, "sync push failed — queuing");
+                            queue.enqueue(PendingOp::UpsertSettings(row));
+                        }
+                    }
+                }
+            }
+        });
+    }
+    Ok(updated)
 }
 
 use crate::ssh::auth::Auth;
@@ -220,28 +241,80 @@ pub fn hosts_list(store: tauri::State<'_, HostStore>) -> Result<Vec<Host>, Strin
 #[tauri::command]
 pub fn hosts_create(
     store: tauri::State<'_, HostStore>,
+    sync: tauri::State<'_, SyncManager>,
     input: HostInput,
 ) -> Result<Host, String> {
-    store.create(&input).map_err(|e| e.to_string())
+    let host = store.create(&input).map_err(|e| e.to_string())?;
+    {
+        let row = crate::sync::push::host_to_row(&host);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertHost(row.clone())).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::UpsertHost(row));
+                    }
+                }
+            }
+        });
+    }
+    Ok(host)
 }
 
 #[tauri::command]
 pub fn hosts_update(
     store: tauri::State<'_, HostStore>,
+    sync: tauri::State<'_, SyncManager>,
     id: String,
     input: HostInput,
 ) -> Result<Host, String> {
-    store.update(&id, &input).map_err(|e| e.to_string())
+    let host = store.update(&id, &input).map_err(|e| e.to_string())?;
+    {
+        let row = crate::sync::push::host_to_row(&host);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertHost(row.clone())).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::UpsertHost(row));
+                    }
+                }
+            }
+        });
+    }
+    Ok(host)
 }
 
 #[tauri::command]
 pub fn hosts_delete(
     store: tauri::State<'_, HostStore>,
+    sync: tauri::State<'_, SyncManager>,
     id: String,
 ) -> Result<(), String> {
     store.delete(&id).map_err(|e| e.to_string())?;
     if let Err(e) = store::secrets::delete(&id) {
         tracing::warn!(host_id = %id, error = ?e, "failed to delete secret on host delete");
+    }
+    {
+        let delete_id = id.clone();
+        let updated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    let op = PendingOp::DeleteHost { id: delete_id.clone(), updated_at };
+                    if let Err(e) = crate::sync::push::push_op(&client, &op).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::DeleteHost { id: delete_id, updated_at });
+                    }
+                }
+            }
+        });
     }
     Ok(())
 }
@@ -415,26 +488,79 @@ pub fn snippets_list(store: tauri::State<'_, SnippetStore>) -> Result<Vec<Snippe
 #[tauri::command]
 pub fn snippets_create(
     store: tauri::State<'_, SnippetStore>,
+    sync: tauri::State<'_, SyncManager>,
     input: SnippetInput,
 ) -> Result<Snippet, String> {
-    store.create(&input).map_err(|e| e.to_string())
+    let snippet = store.create(&input).map_err(|e| e.to_string())?;
+    {
+        let row = crate::sync::push::snippet_to_row(&snippet);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::UpsertSnippet(row));
+                    }
+                }
+            }
+        });
+    }
+    Ok(snippet)
 }
 
 #[tauri::command]
 pub fn snippets_update(
     store: tauri::State<'_, SnippetStore>,
+    sync: tauri::State<'_, SyncManager>,
     id: String,
     input: SnippetInput,
 ) -> Result<Snippet, String> {
-    store.update(&id, &input).map_err(|e| e.to_string())
+    let snippet = store.update(&id, &input).map_err(|e| e.to_string())?;
+    {
+        let row = crate::sync::push::snippet_to_row(&snippet);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::UpsertSnippet(row));
+                    }
+                }
+            }
+        });
+    }
+    Ok(snippet)
 }
 
 #[tauri::command]
 pub fn snippets_delete(
     store: tauri::State<'_, SnippetStore>,
+    sync: tauri::State<'_, SyncManager>,
     id: String,
 ) -> Result<(), String> {
-    store.delete(&id).map_err(|e| e.to_string())
+    store.delete(&id).map_err(|e| e.to_string())?;
+    {
+        let delete_id = id.clone();
+        let updated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    let op = PendingOp::DeleteSnippet { id: delete_id.clone(), updated_at };
+                    if let Err(e) = crate::sync::push::push_op(&client, &op).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::DeleteSnippet { id: delete_id, updated_at });
+                    }
+                }
+            }
+        });
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -458,21 +584,82 @@ pub fn forwards_list(store: tauri::State<'_, ForwardStore>) -> Result<Vec<Forwar
 
 #[tauri::command]
 pub fn forwards_create(
-    store: tauri::State<'_, ForwardStore>, input: ForwardInput,
-) -> Result<Forward, String> { store.create(&input).map_err(|e| e.to_string()) }
+    store: tauri::State<'_, ForwardStore>,
+    sync: tauri::State<'_, SyncManager>,
+    input: ForwardInput,
+) -> Result<Forward, String> {
+    let forward = store.create(&input).map_err(|e| e.to_string())?;
+    {
+        let row = crate::sync::push::forward_to_row(&forward);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertForward(row.clone())).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::UpsertForward(row));
+                    }
+                }
+            }
+        });
+    }
+    Ok(forward)
+}
 
 #[tauri::command]
 pub fn forwards_update(
-    store: tauri::State<'_, ForwardStore>, id: String, input: ForwardInput,
-) -> Result<Forward, String> { store.update(&id, &input).map_err(|e| e.to_string()) }
+    store: tauri::State<'_, ForwardStore>,
+    sync: tauri::State<'_, SyncManager>,
+    id: String,
+    input: ForwardInput,
+) -> Result<Forward, String> {
+    let forward = store.update(&id, &input).map_err(|e| e.to_string())?;
+    {
+        let row = crate::sync::push::forward_to_row(&forward);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertForward(row.clone())).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::UpsertForward(row));
+                    }
+                }
+            }
+        });
+    }
+    Ok(forward)
+}
 
 #[tauri::command]
 pub fn forwards_delete(
-    store: tauri::State<'_, ForwardStore>, manager: tauri::State<'_, ForwardManager>,
-    app: tauri::AppHandle, id: String,
+    store: tauri::State<'_, ForwardStore>,
+    manager: tauri::State<'_, ForwardManager>,
+    sync: tauri::State<'_, SyncManager>,
+    app: tauri::AppHandle,
+    id: String,
 ) -> Result<(), String> {
     store.delete(&id).map_err(|e| e.to_string())?;
     let _ = manager.stop(app, &id);
+    {
+        let delete_id = id.clone();
+        let updated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let queue = sync.queue();
+        tauri::async_runtime::spawn(async move {
+            if let Ok(token) = crate::sync::client::get_valid_token().await {
+                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                    let op = PendingOp::DeleteForward { id: delete_id.clone(), updated_at };
+                    if let Err(e) = crate::sync::push::push_op(&client, &op).await {
+                        tracing::warn!(error = %e, "sync push failed — queuing");
+                        queue.enqueue(PendingOp::DeleteForward { id: delete_id, updated_at });
+                    }
+                }
+            }
+        });
+    }
     Ok(())
 }
 

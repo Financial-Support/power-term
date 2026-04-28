@@ -152,8 +152,9 @@ pub async fn sync_sign_out(
 pub async fn sync_pull(
     app: AppHandle,
     sync: State<'_, SyncManager>,
+    db: State<'_, Arc<Db>>,
 ) -> Result<SyncState, String> {
-    // db will be wired in Task 10
+    sync.pull(&app, &db).await;
     Ok(sync.get_state())
 }
 
