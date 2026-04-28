@@ -14,6 +14,7 @@ pub struct Settings {
     pub ssh_connect_timeout_secs: u32,
     pub ssh_keepalive_interval_secs: u32,
     pub terminal_theme: String,
+    pub updated_at: u64,
 }
 
 impl Default for Settings {
@@ -28,6 +29,7 @@ impl Default for Settings {
             ssh_connect_timeout_secs: 10,
             ssh_keepalive_interval_secs: 30,
             terminal_theme: "default".to_string(),
+            updated_at: 0,
         }
     }
 }
@@ -88,6 +90,10 @@ impl SettingsStore {
         if let Some(v) = patch.ssh_connect_timeout_secs { s.ssh_connect_timeout_secs = v; }
         if let Some(v) = patch.ssh_keepalive_interval_secs { s.ssh_keepalive_interval_secs = v; }
         if let Some(v) = patch.terminal_theme { s.terminal_theme = v; }
+        s.updated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
         atomic_write(&self.path, &s)?;
         Ok(s.clone())
     }
@@ -201,5 +207,14 @@ mod tests {
         store.apply(SettingsPatch { font_size: Some(16), ..Default::default() }).unwrap();
         assert_eq!(store.get().terminal_theme, "nord");
         assert_eq!(store.get().font_size, 16);
+    }
+
+    #[test]
+    fn apply_sets_updated_at_nonzero() {
+        let dir = tmp();
+        let path = dir.path().join("config.toml");
+        let store = SettingsStore::load_from(path).unwrap();
+        let s = store.apply(SettingsPatch { font_size: Some(16), ..Default::default() }).unwrap();
+        assert!(s.updated_at > 0, "updated_at should be set to current timestamp");
     }
 }
