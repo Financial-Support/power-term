@@ -517,3 +517,16 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .layout-option:hover { background: var(--bg-hover, #334155); color: var(--text, #e2e8f0); }
 .layout-option.active { color: var(--accent, #4ade80); }
+
+.sync-status {
+  background: none;
+  border: none;
+  cursor: default;
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1;
+}
+.sync-status--error { color: #f87171; cursor: pointer; }
+.sync-spinner { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
