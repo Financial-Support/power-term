@@ -24,7 +24,9 @@ export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete }: Prop
   const error = useHostStore((s) => s.error);
   const updateHost = useHostStore((s) => s.update);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
+  // Track the group being renamed by reference to a Group object — we compare
+  // by `rawKey` so synthetic Ungrouped (rawKey === null) is identifiable too.
+  const [renamingGroup, setRenamingGroup] = useState<Group | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const [draggingHostId, setDraggingHostId] = useState<string | null>(null);
@@ -54,23 +56,35 @@ export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete }: Prop
   };
 
   // ----- Group rename -----
+  // Renaming the synthetic Ungrouped group ASSIGNS a group_name to all
+  // currently-null hosts (i.e., promotes them into a real group). Renaming a
+  // named group rewrites every host whose group_name === old name.
   const startRenameGroup = (g: Group) => {
-    if (g.rawKey === null) return; // can't rename the synthetic Ungrouped
-    setRenamingGroup(g.name);
-    setRenameDraft(g.name);
+    setRenamingGroup(g);
+    setRenameDraft(g.rawKey ?? '');
   };
 
-  const commitRenameGroup = async (oldName: string) => {
+  const commitRenameGroup = async () => {
+    const target = renamingGroup;
     const next = renameDraft.trim();
     setRenamingGroup(null);
-    if (!next || next === oldName) return;
-    // Rename every host whose group_name matches the old name. Each call is
-    // its own SQLite + Keychain round-trip; sequential to keep error
-    // reporting simple. Real-world group sizes are tiny so this is fine.
-    const targets = hosts.filter((h) => h.group_name === oldName);
+    if (!target) return;
+    if (!next) return;
+    // Same name as before → no-op.
+    if (target.rawKey !== null && next === target.rawKey) return;
+    // Typing the synthetic placeholder name doesn't promote anything; ignore.
+    if (target.rawKey === null && next === UNGROUPED) return;
+    // Each host gets its own SQLite + Keychain round-trip; sequential keeps
+    // error reporting simple. Real-world group sizes are tiny.
+    const targets = hosts.filter((h) => h.group_name === target.rawKey);
     for (const h of targets) {
       await updateHost(h.id, hostToInput(h, { group_name: next }));
     }
+  };
+
+  const isRenamingGroup = (g: Group): boolean => {
+    if (!renamingGroup) return false;
+    return renamingGroup.rawKey === g.rawKey;
   };
 
   // ----- Drag & drop -----
@@ -122,7 +136,7 @@ export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete }: Prop
         {groups.map((g) => {
           const isCollapsed = collapsed.has(g.name);
           const isDropActive = dragOverGroup === g.name;
-          const isRenaming = renamingGroup === g.name;
+          const isRenaming = isRenamingGroup(g);
           return (
             <div
               key={g.name}
@@ -146,9 +160,10 @@ export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete }: Prop
                       value={renameDraft}
                       onChange={(e) => setRenameDraft(e.target.value)}
                       onClick={(e) => e.stopPropagation()}
-                      onBlur={() => void commitRenameGroup(g.name)}
+                      placeholder={g.rawKey === null ? 'Group name' : ''}
+                      onBlur={() => void commitRenameGroup()}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') { e.preventDefault(); void commitRenameGroup(g.name); }
+                        if (e.key === 'Enter') { e.preventDefault(); void commitRenameGroup(); }
                         if (e.key === 'Escape') { e.preventDefault(); setRenamingGroup(null); }
                       }}
                     />
@@ -156,7 +171,7 @@ export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete }: Prop
                     <span className="sidebar-group-name">{g.name}</span>
                   )}
                 </button>
-                {!isRenaming && g.rawKey !== null && (
+                {!isRenaming && (
                   <button
                     type="button"
                     className="sidebar-group-rename"
