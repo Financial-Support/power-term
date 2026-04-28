@@ -17,7 +17,7 @@ import type { Forward, ForwardInput, ForwardStatus } from '../types';
 const sample = (overrides: Partial<Forward> = {}): Forward => ({
   id: 'f1', host_id: 'h1', name: 'tunnel', kind: 'local',
   bind_addr: '127.0.0.1', bind_port: 5432, remote_host: 'db.local', remote_port: 5432,
-  auto_start: false, created_at: 1000, ...overrides,
+  auto_start: false, created_at: 1000, updated_at: 0, ...overrides,
 });
 const sampleInput = (): ForwardInput => ({
   host_id: 'h1', name: 'tunnel', kind: 'local',

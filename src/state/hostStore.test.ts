@@ -15,7 +15,7 @@ import type { Host, HostInput } from '../types';
 const sample = (overrides: Partial<Host> = {}): Host => ({
   id: 'h1', name: 'mac', hostname: 'example.com', port: 22, username: 'alice',
   group_name: 'Personal', tags: ['prod'], auth_method: 'agent',
-  key_path: null, notes: null, created_at: 1000, last_used_at: null,
+  key_path: null, notes: null, created_at: 1000, updated_at: 0, last_used_at: null,
   ...overrides,
 });
 

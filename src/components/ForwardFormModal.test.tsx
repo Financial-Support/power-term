@@ -8,14 +8,14 @@ import type { Forward, Host } from '../types';
 const host = (over: Partial<Host>): Host => ({
   id: 'h1', name: 'mac', hostname: 'example.com', port: 22, username: 'a',
   group_name: null, tags: [], auth_method: 'agent', key_path: null, notes: null,
-  created_at: 1, last_used_at: null, ...over,
+  created_at: 1, updated_at: 0, last_used_at: null, ...over,
 });
 
 const sample = (): Forward => ({
   id: 'f1', host_id: 'h1', name: 'tunnel', kind: 'local',
   bind_addr: '127.0.0.1', bind_port: 5432,
   remote_host: 'db.local', remote_port: 5432,
-  auto_start: false, created_at: 1,
+  auto_start: false, created_at: 1, updated_at: 0,
 });
 
 beforeEach(() => {

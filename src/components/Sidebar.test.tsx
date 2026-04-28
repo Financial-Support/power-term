@@ -8,7 +8,7 @@ import type { Host } from '../types';
 const h = (over: Partial<Host>): Host => ({
   id: 'a', name: 'aname', hostname: 'h', port: 22, username: 'u',
   group_name: null, tags: [], auth_method: 'agent', key_path: null,
-  notes: null, created_at: 1, last_used_at: null, ...over,
+  notes: null, created_at: 1, updated_at: 0, last_used_at: null, ...over,
 });
 
 beforeEach(() => {

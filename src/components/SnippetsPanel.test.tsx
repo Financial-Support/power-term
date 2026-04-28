@@ -7,7 +7,7 @@ import type { Snippet } from '../types';
 
 const s = (over: Partial<Snippet>): Snippet => ({
   id: 'a', name: 'ls', content: 'ls -la\n', tags: [],
-  created_at: 1, last_used_at: null, ...over,
+  created_at: 1, updated_at: 0, last_used_at: null, ...over,
 });
 
 beforeEach(() => {

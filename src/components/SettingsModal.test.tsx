@@ -9,7 +9,7 @@ const defaults: Settings = {
   shell: null, font_family: 'SF Mono', font_size: 14, theme: 'auto',
   cursor_blink: true, scrollback_lines: 10000,
   ssh_connect_timeout_secs: 10, ssh_keepalive_interval_secs: 30,
-  terminal_theme: 'default',
+  terminal_theme: 'default', updated_at: 0,
 };
 
 beforeEach(() => {

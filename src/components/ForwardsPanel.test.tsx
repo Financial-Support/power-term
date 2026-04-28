@@ -9,7 +9,7 @@ const f = (over: Partial<Forward>): Forward => ({
   id: 'a', host_id: 'h1', name: 'tunnel', kind: 'local',
   bind_addr: '127.0.0.1', bind_port: 5432,
   remote_host: 'db.local', remote_port: 5432,
-  auto_start: false, created_at: 1, ...over,
+  auto_start: false, created_at: 1, updated_at: 0, ...over,
 });
 const status = (id: string, state: ForwardStatus['state']): ForwardStatus =>
   ({ id, state, error: null });

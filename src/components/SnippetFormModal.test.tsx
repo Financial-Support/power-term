@@ -6,7 +6,7 @@ import type { Snippet } from '../types';
 
 const sample = (): Snippet => ({
   id: 's1', name: 'ls', content: 'ls -la\n', tags: ['fs'],
-  created_at: 1000, last_used_at: null,
+  created_at: 1000, updated_at: 0, last_used_at: null,
 });
 
 describe('SnippetFormModal', () => {

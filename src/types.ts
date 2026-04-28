@@ -10,6 +10,7 @@ export interface Settings {
   ssh_connect_timeout_secs: number;
   ssh_keepalive_interval_secs: number;
   terminal_theme: string;
+  updated_at: number;
 }
 
 export type SettingsPatch = Partial<Omit<Settings, 'shell'>> & { shell?: string | null };
@@ -70,6 +71,7 @@ export interface Host {
   key_path: string | null;
   notes: string | null;
   created_at: number;
+  updated_at: number;
   last_used_at: number | null;
 }
 
@@ -110,6 +112,7 @@ export interface Snippet {
   content: string;
   tags: string[];
   created_at: number;
+  updated_at: number;
   last_used_at: number | null;
 }
 
@@ -132,6 +135,7 @@ export interface Forward {
   remote_port: number;
   auto_start: boolean;
   created_at: number;
+  updated_at: number;
 }
 
 export interface ForwardInput {
@@ -150,5 +154,20 @@ export type ForwardState = 'stopped' | 'starting' | 'running' | 'error';
 export interface ForwardStatus {
   id: string;
   state: ForwardState;
+  error: string | null;
+}
+
+export interface SyncUser {
+  id: string;
+  email: string | null;
+}
+
+export type SyncStatusKind = 'idle' | 'syncing' | 'synced' | 'error';
+
+export interface SyncState {
+  user: SyncUser | null;
+  status: SyncStatusKind;
+  last_synced: number | null;
+  pending_count: number;
   error: string | null;
 }

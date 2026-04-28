@@ -14,7 +14,7 @@ import type { Snippet, SnippetInput } from '../types';
 
 const sample = (overrides: Partial<Snippet> = {}): Snippet => ({
   id: 's1', name: 'list files', content: 'ls -la\n',
-  tags: ['fs'], created_at: 1000, last_used_at: null, ...overrides,
+  tags: ['fs'], created_at: 1000, updated_at: 0, last_used_at: null, ...overrides,
 });
 
 const sampleInput = (): SnippetInput => ({ name: 'list files', content: 'ls -la\n', tags: ['fs'] });
