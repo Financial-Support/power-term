@@ -369,3 +369,45 @@ html, body, #root { height: 100%; margin: 0; }
   padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--bg); color: var(--fg); font: inherit; font-size: 13px;
 }
+.forwards-panel { border-top: 1px solid var(--border); }
+.forwards-header { display: flex; align-items: center; padding: 0 4px; }
+.forwards-toggle {
+  flex: 1; text-align: left; padding: 6px 8px; font-size: 12px; font-weight: 600;
+  background: transparent; border: 0; color: var(--fg); cursor: pointer;
+  display: flex; align-items: center; gap: 2px;
+}
+.forwards-add {
+  background: transparent; border: 0; cursor: pointer; color: var(--fg);
+  padding: 4px 8px; opacity: 0.7; font-size: 14px;
+}
+.forwards-add:hover { opacity: 1; }
+.forwards-empty { padding: 0 12px 12px 12px; font-size: 12px; opacity: 0.7; }
+.forwards-list { list-style: none; margin: 0; padding: 0 4px 8px 4px; }
+.forward-row {
+  display: flex; align-items: center; padding: 0 8px; border-radius: 4px; gap: 6px;
+}
+.forward-row:hover { background: var(--tab-active); }
+.forward-name { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.forward-kind {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; opacity: 0.7;
+}
+.forward-toggle {
+  background: transparent; border: 0; cursor: pointer; color: var(--fg);
+  padding: 2px 6px; opacity: 0.8; font-size: 14px;
+}
+.forward-toggle:hover { opacity: 1; }
+.forward-actions { display: none; gap: 2px; }
+.forward-row:hover .forward-actions { display: flex; }
+.forward-actions button {
+  background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
+  color: var(--fg); opacity: 0.6;
+}
+.forward-actions button:hover { opacity: 1; }
+.fw-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #888;
+}
+.fw-dot-running { background: #16a34a; box-shadow: 0 0 6px rgba(22,163,74,0.6); }
+.fw-dot-starting { background: #f59e0b; }
+.fw-dot-error { background: #dc2626; }
+.fw-dot-stopped { background: #888; opacity: 0.6; }
