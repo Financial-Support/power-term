@@ -80,6 +80,9 @@ export function Terminal({ tab, visible }: Props) {
     const initialFitFrame = requestAnimationFrame(() => {
       fitRef.current?.fit();
       xtermRef.current?.refresh(0, (xtermRef.current.rows ?? 1) - 1);
+      // Focus on initial mount when the tab is already visible (e.g., a fresh
+      // SSH/SFTP connect lands here as the active tab).
+      if (visible) xtermRef.current?.focus();
     });
 
     let unsubOutput: (() => void) | null = null;
@@ -121,7 +124,16 @@ export function Terminal({ tab, visible }: Props) {
   }, [tab.ptyId, settings, markExit]);
 
   useEffect(() => {
-    if (visible) requestAnimationFrame(() => fitRef.current?.fit());
+    if (visible) {
+      requestAnimationFrame(() => {
+        fitRef.current?.fit();
+        // Auto-focus the xterm so the user can type immediately on tab switch.
+        // Without this, switching tabs leaves focus on the previously-focused
+        // element (typically the TabBar button) and the user has to click
+        // inside the terminal area before typing reaches the shell.
+        xtermRef.current?.focus();
+      });
+    }
   }, [visible]);
 
   // React to runtime theme changes (auto-mode following macOS appearance, or
