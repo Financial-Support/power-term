@@ -50,11 +50,15 @@ describe('forwardStore', () => {
     expect(useForwardStore.getState().forwards[0].name).toBe('changed');
   });
 
-  it('delete removes', async () => {
+  it('delete removes forward and clears its status', async () => {
     (forwardsDelete as any).mockResolvedValue(undefined);
-    useForwardStore.setState({ forwards: [sample({ id: 'a' }), sample({ id: 'b' })] });
+    useForwardStore.setState({
+      forwards: [sample({ id: 'a' }), sample({ id: 'b' })],
+      statuses: { a: { id: 'a', state: 'running', error: null } },
+    });
     await useForwardStore.getState().delete('a');
     expect(useForwardStore.getState().forwards.map(f => f.id)).toEqual(['b']);
+    expect(useForwardStore.getState().statuses['a']).toBeUndefined();
   });
 
   it('start updates statuses on success', async () => {
@@ -81,5 +85,12 @@ describe('forwardStore', () => {
     await useForwardStore.getState().start('a');
     expect(useForwardStore.getState().statuses['a'].state).toBe('error');
     expect(useForwardStore.getState().statuses['a'].error).toMatch(/in use/);
+  });
+
+  it('stop captures error in store on rejection', async () => {
+    (forwardStop as any).mockRejectedValue(new Error('connection lost'));
+    await useForwardStore.getState().stop('a');
+    expect(useForwardStore.getState().statuses['a'].state).toBe('error');
+    expect(useForwardStore.getState().statuses['a'].error).toMatch(/connection lost/);
   });
 });
