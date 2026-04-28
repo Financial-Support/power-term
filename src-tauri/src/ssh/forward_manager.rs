@@ -1,6 +1,5 @@
 use crate::ssh::auth::Auth;
-#[allow(unused_imports)]
-use crate::ssh::forwards::{start_forward, ForwardError, ForwardKind, ForwardSpec, RunningForward};
+use crate::ssh::forwards::{start_forward, ForwardError, ForwardSpec, RunningForward};
 use crate::ssh::handshake::SshTarget;
 use crate::ssh::known_hosts::KnownHosts;
 use parking_lot::Mutex;
@@ -45,6 +44,9 @@ impl ForwardManager {
         inner.statuses.values().cloned().collect()
     }
 
+    /// Start (or restart) the forward identified by `id`.
+    /// Callers must not invoke this concurrently for the same `id`;
+    /// Tauri's JS event loop guarantees this in practice.
     #[allow(clippy::too_many_arguments)]
     pub async fn start(
         &self,
@@ -57,11 +59,18 @@ impl ForwardManager {
         keepalive: Duration,
     ) -> Result<ForwardStatus, ForwardError> {
         // Abort any previous run with the same id.
-        {
+        let had_prior = {
             let mut inner = self.inner.lock();
             if let Some(prev) = inner.running.remove(&id) {
                 prev.cancel();
+                inner.statuses.insert(id.clone(), ForwardStatus { id: id.clone(), state: "stopped".into(), error: None });
+                true
+            } else {
+                false
             }
+        };
+        if had_prior {
+            emit_status(&app, &ForwardStatus { id: id.clone(), state: "stopped".into(), error: None });
         }
         self.set_status(&app, ForwardStatus { id: id.clone(), state: "starting".into(), error: None });
 
