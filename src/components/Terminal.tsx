@@ -73,6 +73,15 @@ export function Terminal({ tab, visible }: Props) {
     xtermRef.current = term;
     fitRef.current = fit;
 
+    // Initial fit can race the WebView's first layout pass for a freshly
+    // mounted tab — without this rAF re-fit, opening an SSH/SFTP tab via
+    // addTab() can leave the xterm canvas sized 0×0 until the user toggles
+    // tab visibility. Re-fit on the next frame once layout has settled.
+    const initialFitFrame = requestAnimationFrame(() => {
+      fitRef.current?.fit();
+      xtermRef.current?.refresh(0, (xtermRef.current.rows ?? 1) - 1);
+    });
+
     let unsubOutput: (() => void) | null = null;
     let unsubExit: (() => void) | null = null;
 
@@ -99,6 +108,7 @@ export function Terminal({ tab, visible }: Props) {
     ro.observe(containerRef.current);
 
     return () => {
+      cancelAnimationFrame(initialFitFrame);
       onData.dispose();
       onResize.dispose();
       ro.disconnect();
