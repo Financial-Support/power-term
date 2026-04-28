@@ -4,6 +4,7 @@ import type { Host } from '../types';
 
 interface Props {
   onConnect: (host: Host) => void;
+  onOpenSftp: (host: Host) => void;
   onAdd: () => void;
   onEdit: (host: Host) => void;
   onDelete: (host: Host) => void;
@@ -17,7 +18,7 @@ interface Group {
 
 const UNGROUPED = 'Ungrouped';
 
-export function Sidebar({ onConnect, onAdd, onEdit, onDelete }: Props) {
+export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const error = useHostStore((s) => s.error);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -72,6 +73,7 @@ export function Sidebar({ onConnect, onAdd, onEdit, onDelete }: Props) {
                         {host.name}
                       </button>
                       <span className="sidebar-host-actions">
+                        <button type="button" aria-label={`open sftp ${host.name}`} onClick={() => onOpenSftp(host)}>📂</button>
                         <button type="button" aria-label={`edit host ${host.name}`} onClick={() => onEdit(host)}>✎</button>
                         <button type="button" aria-label={`delete host ${host.name}`} onClick={() => onDelete(host)}>×</button>
                       </span>

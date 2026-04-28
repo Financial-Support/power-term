@@ -17,7 +17,7 @@ beforeEach(() => {
 
 describe('Sidebar', () => {
   it('renders "+ New Host" button and Cmd+K hint', () => {
-    render(<Sidebar onConnect={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    render(<Sidebar onConnect={vi.fn()} onOpenSftp={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByRole('button', { name: /new host/i })).toBeInTheDocument();
     expect(screen.getByText(/cmd\+k/i)).toBeInTheDocument();
   });
@@ -31,7 +31,7 @@ describe('Sidebar', () => {
         h({ id: 'u1', name: 'temp', group_name: null }),
       ],
     });
-    render(<Sidebar onConnect={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    render(<Sidebar onConnect={vi.fn()} onOpenSftp={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText('Personal')).toBeInTheDocument();
     expect(screen.getByText('Work')).toBeInTheDocument();
     expect(screen.getByText('Ungrouped')).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe('Sidebar', () => {
   it('clicking a host row calls onConnect', async () => {
     useHostStore.setState({ hosts: [h({ id: 'a', name: 'mac' })] });
     const onConnect = vi.fn();
-    render(<Sidebar onConnect={onConnect} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    render(<Sidebar onConnect={onConnect} onOpenSftp={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
     await userEvent.click(screen.getByText('mac'));
     expect(onConnect).toHaveBeenCalledTimes(1);
     expect(onConnect.mock.calls[0][0].id).toBe('a');
@@ -52,7 +52,7 @@ describe('Sidebar', () => {
 
   it('clicking "+ New Host" calls onAdd', async () => {
     const onAdd = vi.fn();
-    render(<Sidebar onConnect={vi.fn()} onAdd={onAdd} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    render(<Sidebar onConnect={vi.fn()} onOpenSftp={vi.fn()} onAdd={onAdd} onEdit={vi.fn()} onDelete={vi.fn()} />);
     await userEvent.click(screen.getByRole('button', { name: /new host/i }));
     expect(onAdd).toHaveBeenCalled();
   });
@@ -60,7 +60,7 @@ describe('Sidebar', () => {
   it('clicking row × calls onDelete', async () => {
     useHostStore.setState({ hosts: [h({ id: 'a', name: 'mac' })] });
     const onDelete = vi.fn();
-    render(<Sidebar onConnect={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={onDelete} />);
+    render(<Sidebar onConnect={vi.fn()} onOpenSftp={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={onDelete} />);
     await userEvent.click(screen.getByLabelText(/delete host mac/i));
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onDelete.mock.calls[0][0].id).toBe('a');
@@ -68,7 +68,7 @@ describe('Sidebar', () => {
 
   it('group header click toggles expansion', async () => {
     useHostStore.setState({ hosts: [h({ id: 'a', name: 'mac', group_name: 'Personal' })] });
-    render(<Sidebar onConnect={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    render(<Sidebar onConnect={vi.fn()} onOpenSftp={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText('mac')).toBeInTheDocument();
     await userEvent.click(screen.getByText('Personal'));
     expect(screen.queryByText('mac')).not.toBeInTheDocument();
@@ -77,7 +77,16 @@ describe('Sidebar', () => {
   });
 
   it('shows empty-state hint when hosts empty', () => {
-    render(<Sidebar onConnect={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    render(<Sidebar onConnect={vi.fn()} onOpenSftp={vi.fn()} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText(/no saved hosts/i)).toBeInTheDocument();
+  });
+
+  it('clicking 📂 calls onOpenSftp', async () => {
+    useHostStore.setState({ hosts: [h({ id: 'a', name: 'mac' })] });
+    const onOpenSftp = vi.fn();
+    render(<Sidebar onConnect={vi.fn()} onOpenSftp={onOpenSftp} onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText(/open sftp mac/i));
+    expect(onOpenSftp).toHaveBeenCalledTimes(1);
+    expect(onOpenSftp.mock.calls[0][0].id).toBe('a');
   });
 });

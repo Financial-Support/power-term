@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TitleBar } from './components/TitleBar';
 import { TabBar } from './components/TabBar';
 import { Terminal } from './components/Terminal';
+import { FileBrowser } from './components/FileBrowser';
 import { CommandPalette } from './components/CommandPalette';
 import { HostFingerprintPrompt } from './components/HostFingerprintPrompt';
 import { AuthPrompt } from './components/AuthPrompt';
@@ -12,20 +13,26 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { useSessionStore } from './state/sessionStore';
 import { useSettingsStore } from './state/settingsStore';
 import { useHostStore } from './state/hostStore';
+import { useSftpStore } from './state/sftpStore';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useTheme } from './hooks/useTheme';
 import { useSidebarToggle } from './hooks/useSidebarToggle';
-import { ptyKill, ptySpawn, secretDelete, secretGet, secretSet, sshConnect, sshKill } from './lib/ipc';
+import {
+  ptyKill, ptySpawn, secretDelete, secretGet, secretSet,
+  sftpClose, sftpOpen, sshConnect, sshKill,
+} from './lib/ipc';
 import type { AuthRequest, Host, SshTarget } from './types';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 
-type SshFlow =
+type TargetKind = 'shell' | 'sftp';
+
+type RemoteFlow =
   | { phase: 'idle' }
-  | { phase: 'connecting'; target: SshTarget; auth: AuthRequest; acceptFp: string | null; titleOverride?: string; touchHostId?: string }
-  | { phase: 'fingerprint'; target: SshTarget; auth: AuthRequest; fingerprint: string; keyType: string; mismatch?: { expected: string }; titleOverride?: string; touchHostId?: string }
-  | { phase: 'auth'; target: SshTarget; tried: string[]; available: string[]; error?: string; titleOverride?: string; touchHostId?: string };
+  | { phase: 'connecting'; targetKind: TargetKind; target: SshTarget; auth: AuthRequest; acceptFp: string | null; titleOverride?: string; touchHostId?: string }
+  | { phase: 'fingerprint'; targetKind: TargetKind; target: SshTarget; auth: AuthRequest; fingerprint: string; keyType: string; mismatch?: { expected: string }; titleOverride?: string; touchHostId?: string }
+  | { phase: 'auth'; targetKind: TargetKind; target: SshTarget; tried: string[]; available: string[]; error?: string; titleOverride?: string; touchHostId?: string };
 
 type FormMode =
   | { kind: 'closed' }
@@ -46,10 +53,13 @@ export function App() {
   const deleteHost = useHostStore((s) => s.delete);
   const touchHost = useHostStore((s) => s.touch);
 
+  const initSftpTab = useSftpStore((s) => s.init);
+  const closeSftpTabState = useSftpStore((s) => s.closeTab);
+
   const sidebar = useSidebarToggle();
 
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [sshFlow, setSshFlow] = useState<SshFlow>({ phase: 'idle' });
+  const [flow, setFlow] = useState<RemoteFlow>({ phase: 'idle' });
   const [form, setForm] = useState<FormMode>({ kind: 'closed' });
   const [confirmDelete, setConfirmDelete] = useState<Host | null>(null);
   const flowToken = useRef(0);
@@ -61,25 +71,26 @@ export function App() {
     try {
       const ptyId = await ptySpawn({ cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
       addTab(ptyId, defaultLocalTitle(settings?.shell ?? null), 'local');
-    } catch (e) {
-      console.error('pty_spawn failed', e);
-    }
+    } catch (e) { console.error('pty_spawn failed', e); }
   }, [addTab, settings?.shell]);
 
   const handleClose = useCallback(async (id: string) => {
     const tab = useSessionStore.getState().tabs.find((t) => t.id === id);
     if (!tab) return;
     try {
-      if (tab.kind === 'ssh') await sshKill(tab.ptyId);
+      if (tab.kind === 'sftp') await sftpClose(tab.ptyId);
+      else if (tab.kind === 'ssh') await sshKill(tab.ptyId);
       else await ptyKill(tab.ptyId);
     } catch (e) { console.warn('kill failed', e); }
+    if (tab.kind === 'sftp') closeSftpTabState(tab.id);
     closeTab(id);
     if (useSessionStore.getState().tabs.length === 0) {
       void getCurrentWindow().close();
     }
-  }, [closeTab]);
+  }, [closeTab, closeSftpTabState]);
 
-  const driveSshConnect = useCallback(async (
+  const driveConnect = useCallback(async (
+    targetKind: TargetKind,
     target: SshTarget,
     auth: AuthRequest,
     acceptFp: string | null,
@@ -87,64 +98,70 @@ export function App() {
     touchHostId?: string,
   ) => {
     const myToken = ++flowToken.current;
-    setSshFlow({ phase: 'connecting', target, auth, acceptFp, titleOverride, touchHostId });
+    setFlow({ phase: 'connecting', targetKind, target, auth, acceptFp, titleOverride, touchHostId });
     try {
-      const result = await sshConnect({ target, auth, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, acceptFingerprint: acceptFp });
+      const result = targetKind === 'shell'
+        ? await sshConnect({ target, auth, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, acceptFingerprint: acceptFp })
+        : await sftpOpen({ host: target.host, port: target.port, user: target.user, auth, acceptFingerprint: acceptFp });
       if (myToken !== flowToken.current) return;
       if (result.status === 'connected') {
-        addTab(result.id, titleOverride ?? `${target.user}@${target.host}`, 'ssh');
+        const tabId = addTab(result.id, titleOverride ?? `${target.user}@${target.host}`, targetKind === 'shell' ? 'ssh' : 'sftp');
+        if (targetKind === 'sftp') void initSftpTab(tabId, result.id);
         if (touchHostId) void touchHost(touchHostId);
-        setSshFlow({ phase: 'idle' });
+        setFlow({ phase: 'idle' });
       } else if (result.status === 'needs_fingerprint') {
-        setSshFlow({ phase: 'fingerprint', target, auth, fingerprint: result.fingerprint, keyType: result.key_type, titleOverride, touchHostId });
+        setFlow({ phase: 'fingerprint', targetKind, target, auth, fingerprint: result.fingerprint, keyType: result.key_type, titleOverride, touchHostId });
       } else if (result.status === 'fingerprint_mismatch') {
-        setSshFlow({ phase: 'fingerprint', target, auth, fingerprint: result.fingerprint, keyType: 'unknown', mismatch: { expected: result.expected }, titleOverride, touchHostId });
+        setFlow({ phase: 'fingerprint', targetKind, target, auth, fingerprint: result.fingerprint, keyType: 'unknown', mismatch: { expected: result.expected }, titleOverride, touchHostId });
       } else if (result.status === 'needs_auth') {
-        setSshFlow({ phase: 'auth', target, tried: result.tried, available: result.available, titleOverride, touchHostId });
+        setFlow({ phase: 'auth', targetKind, target, tried: result.tried, available: result.available, titleOverride, touchHostId });
       }
     } catch (e) {
       if (myToken !== flowToken.current) return;
-      console.error('ssh_connect failed', e);
-      setSshFlow({ phase: 'auth', target, tried: [], available: ['agent', 'publickey', 'password'], error: String(e), titleOverride, touchHostId });
+      console.error(`${targetKind === 'shell' ? 'ssh_connect' : 'sftp_open'} failed`, e);
+      setFlow({ phase: 'auth', targetKind, target, tried: [], available: ['agent', 'publickey', 'password'], error: String(e), titleOverride, touchHostId });
     }
-  }, [addTab, touchHost]);
+  }, [addTab, touchHost, initSftpTab]);
 
   const onPaletteSshConnect = useCallback((target: SshTarget) => {
     setPaletteOpen(false);
-    void driveSshConnect(target, { kind: 'agent' }, null);
-  }, [driveSshConnect]);
+    void driveConnect('shell', target, { kind: 'agent' }, null);
+  }, [driveConnect]);
+
+  const buildAuthFromHost = async (host: Host): Promise<AuthRequest | { phase: 'needs_auth' }> => {
+    if (host.auth_method === 'agent') return { kind: 'agent' };
+    if (host.auth_method === 'key') {
+      const passphrase = (await secretGet(host.id).catch(() => null)) ?? undefined;
+      return { kind: 'key', path: host.key_path ?? '', passphrase };
+    }
+    const password = await secretGet(host.id).catch(() => null);
+    if (password === null) return { phase: 'needs_auth' };
+    return { kind: 'password', password };
+  };
 
   const connectFromHost = useCallback(async (host: Host) => {
     const target: SshTarget = { user: host.username, host: host.hostname, port: host.port };
-    let auth: AuthRequest;
-    if (host.auth_method === 'agent') {
-      auth = { kind: 'agent' };
-    } else if (host.auth_method === 'key') {
-      const passphrase = (await secretGet(host.id).catch(() => null)) ?? undefined;
-      auth = { kind: 'key', path: host.key_path ?? '', passphrase };
-    } else {
-      const password = await secretGet(host.id).catch(() => null);
-      if (password === null) {
-        setSshFlow({
-          phase: 'auth',
-          target,
-          tried: [],
-          available: ['password'],
-          titleOverride: host.name,
-          touchHostId: host.id,
-        });
-        return;
-      }
-      auth = { kind: 'password', password };
+    const auth = await buildAuthFromHost(host);
+    if ('phase' in auth) {
+      setFlow({ phase: 'auth', targetKind: 'shell', target, tried: [], available: ['password'], titleOverride: host.name, touchHostId: host.id });
+      return;
     }
-    await driveSshConnect(target, auth, null, host.name, host.id);
-  }, [driveSshConnect]);
+    await driveConnect('shell', target, auth, null, host.name, host.id);
+  }, [driveConnect]);
+
+  const openSftpFromHost = useCallback(async (host: Host) => {
+    const target: SshTarget = { user: host.username, host: host.hostname, port: host.port };
+    const auth = await buildAuthFromHost(host);
+    if ('phase' in auth) {
+      setFlow({ phase: 'auth', targetKind: 'sftp', target, tried: [], available: ['password'], titleOverride: host.name, touchHostId: host.id });
+      return;
+    }
+    await driveConnect('sftp', target, auth, null, host.name, host.id);
+  }, [driveConnect]);
 
   const handleFormSave = useCallback(async (args: HostFormSaveArgs) => {
     const targetId = form.kind === 'edit' ? form.host.id : null;
-    const saved = targetId
-      ? await updateHost(targetId, args.input)
-      : await createHost(args.input);
+    const saved = targetId ? await updateHost(targetId, args.input) : await createHost(args.input);
     if (!saved) return;
     if (args.saveSecret && args.secret) {
       try { await secretSet(saved.id, args.secret); }
@@ -166,14 +183,14 @@ export function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === 'k') {
-        if (sshFlow.phase !== 'idle' || form.kind !== 'closed' || confirmDelete) return;
+        if (flow.phase !== 'idle' || form.kind !== 'closed' || confirmDelete) return;
         e.preventDefault();
         setPaletteOpen(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [sshFlow.phase, form.kind, confirmDelete]);
+  }, [flow.phase, form.kind, confirmDelete]);
 
   const openedFirstTab = useRef(false);
   useEffect(() => {
@@ -197,37 +214,44 @@ export function App() {
         {sidebar.open && (
           <Sidebar
             onConnect={(h) => void connectFromHost(h)}
+            onOpenSftp={(h) => void openSftpFromHost(h)}
             onAdd={() => setForm({ kind: 'create' })}
             onEdit={(h) => setForm({ kind: 'edit', host: h })}
             onDelete={(h) => setConfirmDelete(h)}
           />
         )}
         <main className="terminals">
-          {tabs.map((t) => (
-            <Terminal key={t.id} tab={t} visible={t.id === visibleId} />
-          ))}
+          {tabs.map((t) =>
+            t.kind === 'sftp' ? (
+              <div key={t.id} className="sftp-mount" style={{ display: t.id === visibleId ? 'flex' : 'none' }}>
+                <FileBrowser tabId={t.id} onClose={() => void handleClose(t.id)} />
+              </div>
+            ) : (
+              <Terminal key={t.id} tab={t} visible={t.id === visibleId} />
+            ),
+          )}
         </main>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onSshConnect={onPaletteSshConnect} />
-      {sshFlow.phase === 'fingerprint' && (
+      {flow.phase === 'fingerprint' && (
         <HostFingerprintPrompt
-          host={sshFlow.target.host}
-          fingerprint={sshFlow.fingerprint}
-          keyType={sshFlow.keyType}
-          isMismatch={!!sshFlow.mismatch}
-          expected={sshFlow.mismatch?.expected}
-          onAccept={() => driveSshConnect(sshFlow.target, sshFlow.auth, sshFlow.fingerprint, sshFlow.titleOverride, sshFlow.touchHostId)}
-          onCancel={() => setSshFlow({ phase: 'idle' })}
+          host={flow.target.host}
+          fingerprint={flow.fingerprint}
+          keyType={flow.keyType}
+          isMismatch={!!flow.mismatch}
+          expected={flow.mismatch?.expected}
+          onAccept={() => driveConnect(flow.targetKind, flow.target, flow.auth, flow.fingerprint, flow.titleOverride, flow.touchHostId)}
+          onCancel={() => setFlow({ phase: 'idle' })}
         />
       )}
-      {sshFlow.phase === 'auth' && (
+      {flow.phase === 'auth' && (
         <AuthPrompt
-          user={sshFlow.target.user}
-          host={sshFlow.target.host}
-          triedAgent={sshFlow.tried.includes('agent')}
-          errorMessage={sshFlow.error}
-          onSubmit={(auth) => driveSshConnect(sshFlow.target, auth, null, sshFlow.titleOverride, sshFlow.touchHostId)}
-          onCancel={() => setSshFlow({ phase: 'idle' })}
+          user={flow.target.user}
+          host={flow.target.host}
+          triedAgent={flow.tried.includes('agent')}
+          errorMessage={flow.error}
+          onSubmit={(auth) => driveConnect(flow.targetKind, flow.target, auth, null, flow.titleOverride, flow.touchHostId)}
+          onCancel={() => setFlow({ phase: 'idle' })}
         />
       )}
       {form.kind !== 'closed' && (
