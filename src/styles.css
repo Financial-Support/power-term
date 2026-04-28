@@ -79,15 +79,37 @@ html, body, #root { height: 100%; margin: 0; }
 .sidebar-error { color: #dc2626; padding: 0 10px; font-size: 12px; }
 .sidebar-list { flex: 1; overflow: auto; padding: 0 4px; }
 .sidebar-empty { padding: 12px; font-size: 12px; opacity: 0.7; }
-.sidebar-group-header {
-  width: 100%; text-align: left; padding: 4px 8px; font-size: 12px; font-weight: 600;
-  background: transparent; border: 0; color: var(--fg); cursor: pointer;
-}
 .sidebar-caret { display: inline-block; width: 12px; opacity: 0.6; }
+.sidebar-group-header { display: flex; align-items: center; }
+.sidebar-group-toggle {
+  flex: 1; text-align: left; padding: 4px 8px; font-size: 12px; font-weight: 600;
+  background: transparent; border: 0; color: var(--fg); cursor: pointer;
+  display: flex; align-items: center; gap: 2px;
+}
+.sidebar-group-rename {
+  display: none; background: transparent; border: 0; cursor: pointer; color: var(--fg);
+  opacity: 0.6; padding: 2px 6px; font-size: 12px;
+}
+.sidebar-group:hover .sidebar-group-rename { display: inline-block; }
+.sidebar-group-rename:hover { opacity: 1; }
+.sidebar-group-rename-input {
+  flex: 1; padding: 1px 4px; font: inherit; font-size: 12px; font-weight: 600;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid #2563eb; border-radius: 4px; outline: 0;
+}
+.sidebar-group.drop-active {
+  background: rgba(37, 99, 235, 0.15);
+  border-radius: 6px;
+  outline: 1px dashed #2563eb;
+  outline-offset: -2px;
+}
 .sidebar-hosts { list-style: none; margin: 0; padding: 0; }
 .sidebar-host {
   display: flex; align-items: center; padding: 0 8px; border-radius: 4px;
+  cursor: grab;
 }
+.sidebar-host:active { cursor: grabbing; }
+.sidebar-host.dragging { opacity: 0.4; }
 .sidebar-host:hover { background: var(--tab-active); }
 .sidebar-host-name {
   flex: 1; text-align: left; padding: 4px 8px; background: transparent; border: 0;
