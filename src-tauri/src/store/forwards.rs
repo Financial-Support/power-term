@@ -229,7 +229,10 @@ mod tests {
         let store = ForwardStore::new(db);
         let f = store.create(&input(&host_id, "tunnel")).unwrap();
         assert_eq!(f.name, "tunnel");
-        assert_eq!(store.list().unwrap().len(), 1);
+        assert!(f.created_at > 0);
+        let all = store.list().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0], f);
     }
 
     #[test]
@@ -297,6 +300,7 @@ mod tests {
         store.create(&input(&h1, "c")).unwrap();
         let only_h1 = store.list_by_host(&h1).unwrap();
         assert_eq!(only_h1.len(), 2);
+        assert!(only_h1.iter().all(|f| f.host_id == h1));
     }
 
     #[test]
