@@ -20,6 +20,18 @@ pub fn delete(host_id: &str) -> Result<(), SecretError> {
     backend::delete(SERVICE, &account)
 }
 
+pub fn backend_set(service: &str, account: &str, secret: &str) -> Result<(), SecretError> {
+    backend::set(service, account, secret)
+}
+
+pub fn backend_get(service: &str, account: &str) -> Result<Option<String>, SecretError> {
+    backend::get(service, account)
+}
+
+pub fn backend_delete(service: &str, account: &str) -> Result<(), SecretError> {
+    backend::delete(service, account)
+}
+
 #[cfg(not(feature = "mock-keychain"))]
 mod backend {
     use super::SecretError;
