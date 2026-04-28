@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -115,4 +115,52 @@ export async function secretGet(hostId: string): Promise<string | null> {
 
 export async function secretDelete(hostId: string): Promise<void> {
   await invoke('secret_delete', { hostId });
+}
+
+export async function sftpOpen(args: {
+  host: string; port: number; user: string;
+  auth: AuthRequest;
+  acceptFingerprint?: string | null;
+}): Promise<SftpOpenResult> {
+  return invoke<SftpOpenResult>('sftp_open', {
+    host: args.host, port: args.port, user: args.user,
+    auth: args.auth,
+    acceptFingerprint: args.acceptFingerprint ?? null,
+  });
+}
+
+export async function sftpClose(sftpId: string): Promise<void> {
+  await invoke('sftp_close', { sftpId });
+}
+
+export async function sftpList(sftpId: string, path: string): Promise<SftpEntry[]> {
+  return invoke<SftpEntry[]>('sftp_list', { sftpId, path });
+}
+
+export async function sftpCanonicalize(sftpId: string, path: string): Promise<string> {
+  return invoke<string>('sftp_canonicalize', { sftpId, path });
+}
+
+export async function sftpMkdir(sftpId: string, path: string): Promise<void> {
+  await invoke('sftp_mkdir', { sftpId, path });
+}
+
+export async function sftpRemoveFile(sftpId: string, path: string): Promise<void> {
+  await invoke('sftp_remove_file', { sftpId, path });
+}
+
+export async function sftpRemoveDir(sftpId: string, path: string): Promise<void> {
+  await invoke('sftp_remove_dir', { sftpId, path });
+}
+
+export async function sftpRename(sftpId: string, from: string, to: string): Promise<void> {
+  await invoke('sftp_rename', { sftpId, from, to });
+}
+
+export async function sftpDownload(sftpId: string, remote: string, local: string): Promise<number> {
+  return invoke<number>('sftp_download', { sftpId, remote, local });
+}
+
+export async function sftpUpload(sftpId: string, local: string, remote: string): Promise<number> {
+  return invoke<number>('sftp_upload', { sftpId, local, remote });
 }
