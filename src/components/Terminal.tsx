@@ -12,9 +12,9 @@ import { useSettingsStore } from '../state/settingsStore';
 import { useTheme } from '../hooks/useTheme';
 import { PRESET_THEMES } from '../themes';
 
-interface Props { tab: Tab; visible: boolean }
+interface Props { tab: Tab; visible: boolean; active?: boolean }
 
-export function Terminal({ tab, visible }: Props) {
+export function Terminal({ tab, visible, active }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -157,6 +157,17 @@ export function Terminal({ tab, visible }: Props) {
       xtermRef.current?.focus();
     });
   }, [visible]);
+
+  useEffect(() => {
+    if (!active) return;
+    requestAnimationFrame(() => {
+      const container = containerRef.current;
+      if (container && container.clientWidth > 0 && container.clientHeight > 0) {
+        fitRef.current?.fit();
+      }
+      xtermRef.current?.focus();
+    });
+  }, [active]);
 
   // React to runtime theme changes (auto-mode following macOS appearance, or
   // settings.theme being toggled) without tearing down the whole xterm instance.

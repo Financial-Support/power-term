@@ -331,6 +331,41 @@ export function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [flow.phase, form.kind, confirmDelete, snippetForm.kind, confirmDeleteSnippet, forwardForm.kind, confirmDeleteForward, settingsOpen]);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.metaKey || !e.altKey) return;
+      const { layoutKind, activePaneIndex } = useSessionStore.getState();
+      const count = COUNTS[layoutKind];
+      if (count <= 1) return;
+
+      let next = activePaneIndex;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        next = e.key === 'ArrowRight'
+          ? (activePaneIndex + 1) % count
+          : (activePaneIndex - 1 + count) % count;
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (layoutKind === '2row') {
+          next = e.key === 'ArrowDown'
+            ? (activePaneIndex + 1) % count
+            : (activePaneIndex - 1 + count) % count;
+        } else if (layoutKind === '2x2') {
+          // 2x2 grid: slot 0=TL, 1=TR, 2=BL, 3=BR
+          const cols = 2;
+          if (e.key === 'ArrowDown') next = (activePaneIndex + cols) % count;
+          else next = (activePaneIndex - cols + count) % count;
+        }
+      } else {
+        return;
+      }
+
+      useSessionStore.getState().setActivePane(next);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   const openedFirstTab = useRef(false);
   useEffect(() => {
     if (settings && tabs.length === 0 && !openedFirstTab.current) {
@@ -387,7 +422,7 @@ export function App() {
                       <FileBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
                     </div>
                   ) : (
-                    <Terminal key={tab.id} tab={tab} visible={true} />
+                    <Terminal key={tab.id} tab={tab} visible={true} active={i === activePaneIndex} />
                   )
                 ) : (
                   <div className="pane-empty">
