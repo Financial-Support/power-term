@@ -13,7 +13,7 @@ export interface Settings {
 
 export type SettingsPatch = Partial<Omit<Settings, 'shell'>> & { shell?: string | null };
 
-export type TabKind = 'local' | 'ssh';
+export type TabKind = 'local' | 'ssh' | 'sftp';
 
 export interface Tab {
   id: string;
@@ -73,3 +73,22 @@ export interface HostInput {
   key_path: string | null;
   notes: string | null;
 }
+
+export type SftpEntryKind = 'file' | 'dir' | 'symlink' | 'other';
+
+export interface SftpEntry {
+  name: string;
+  kind: SftpEntryKind;
+  size: number;
+  modified_ms: number | null;
+  permissions: number;
+  symlink_target: string | null;
+}
+
+export type SftpOpenResult =
+  | { status: 'connected'; id: string }
+  | { status: 'needs_fingerprint'; fingerprint: string; host: string; key_type: string }
+  | { status: 'fingerprint_mismatch'; fingerprint: string; expected: string; host: string }
+  | { status: 'needs_auth'; tried: string[]; available: string[] };
+
+export type SortKey = 'name' | 'size' | 'modified';
