@@ -471,8 +471,9 @@ pub fn forwards_delete(
     store: tauri::State<'_, ForwardStore>, manager: tauri::State<'_, ForwardManager>,
     app: tauri::AppHandle, id: String,
 ) -> Result<(), String> {
+    store.delete(&id).map_err(|e| e.to_string())?;
     let _ = manager.stop(app, &id);
-    store.delete(&id).map_err(|e| e.to_string())
+    Ok(())
 }
 
 #[tauri::command]
@@ -495,17 +496,18 @@ pub async fn forward_start(
     id: String,
 ) -> Result<ForwardStatus, String> {
     let forward = forward_store.get(&id).map_err(|e| e.to_string())?;
-    let host = host_store.list().map_err(|e| e.to_string())?
-        .into_iter().find(|h| h.id == forward.host_id)
-        .ok_or_else(|| "host not found for this forward".to_string())?;
+    let host = host_store.get(&forward.host_id).map_err(|e| e.to_string())?;
 
     let target = SshTarget { host: host.hostname.clone(), port: host.port, user: host.username.clone() };
     let auth = match host.auth_method.as_str() {
         "agent" => crate::ssh::auth::Auth::Agent,
         "key" => {
+            let path = host.key_path
+                .filter(|p| !p.trim().is_empty())
+                .ok_or_else(|| "key auth requires a key_path".to_string())?;
             let passphrase = crate::store::secrets::get(&host.id).ok().flatten();
             crate::ssh::auth::Auth::KeyFile {
-                path: std::path::PathBuf::from(host.key_path.unwrap_or_default()),
+                path: std::path::PathBuf::from(path),
                 passphrase,
             }
         }

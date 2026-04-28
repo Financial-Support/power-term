@@ -53,6 +53,19 @@ impl HostStore {
         list_with(&conn)
     }
 
+    pub fn get(&self, id: &str) -> Result<Host, StoreError> {
+        let conn = self.db.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, hostname, port, username, group_name, tags_json, \
+                    auth_method, key_path, notes, created_at, last_used_at \
+             FROM hosts WHERE id=?1",
+        )?;
+        stmt.query_row(params![id], row_to_host).map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => StoreError::NotFound(id.to_string()),
+            other => StoreError::from(other),
+        })
+    }
+
     pub fn create(&self, input: &HostInput) -> Result<Host, StoreError> {
         validate(input)?;
         let conn = self.db.lock();
