@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PRESET_THEMES, THEME_NAMES } from './themes';
+import { PRESET_THEMES, THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from './themes';
 
 const REQUIRED_KEYS = [
   'background', 'foreground', 'cursor',
@@ -32,5 +32,21 @@ describe('PRESET_THEMES', () => {
   it('THEME_NAMES includes "Default" and all 8 presets', () => {
     expect(THEME_NAMES).toHaveLength(9);
     expect(THEME_NAMES[0]).toBe('Default');
+  });
+
+  it('THEME_KEY_FOR_NAME maps every THEME_NAMES entry to a PRESET_THEMES key', () => {
+    for (const name of THEME_NAMES) {
+      const key = THEME_KEY_FOR_NAME[name];
+      expect(key, `no key for display name "${name}"`).toBeDefined();
+      expect(PRESET_THEMES[key], `PRESET_THEMES missing key "${key}"`).toBeDefined();
+    }
+  });
+
+  it('THEME_DISPLAY_NAME round-trips every PRESET_THEMES key', () => {
+    for (const key of Object.keys(PRESET_THEMES)) {
+      const name = THEME_DISPLAY_NAME[key];
+      expect(name, `no display name for key "${key}"`).toBeDefined();
+      expect(THEME_KEY_FOR_NAME[name]).toBe(key);
+    }
   });
 });
