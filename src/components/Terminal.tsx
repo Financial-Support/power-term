@@ -10,6 +10,7 @@ import type { Tab } from '../types';
 import { useSessionStore } from '../state/sessionStore';
 import { useSettingsStore } from '../state/settingsStore';
 import { useTheme } from '../hooks/useTheme';
+import { PRESET_THEMES } from '../themes';
 
 interface Props { tab: Tab; visible: boolean }
 
@@ -30,7 +31,7 @@ export function Terminal({ tab, visible }: Props) {
       cursorBlink: settings.cursor_blink,
       scrollback: settings.scrollback_lines,
       allowProposedApi: true,
-      theme: themeForResolved(resolvedTheme),
+      theme: resolveXtermTheme(settings.terminal_theme, resolvedTheme),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -162,8 +163,8 @@ export function Terminal({ tab, visible }: Props) {
   useEffect(() => {
     const term = xtermRef.current;
     if (!term) return;
-    term.options.theme = themeForResolved(resolvedTheme);
-  }, [resolvedTheme]);
+    term.options.theme = resolveXtermTheme(settings?.terminal_theme ?? 'default', resolvedTheme);
+  }, [resolvedTheme, settings?.terminal_theme]);
 
   return (
     <div
@@ -171,6 +172,15 @@ export function Terminal({ tab, visible }: Props) {
       style={{ width: '100%', height: '100%', display: visible ? 'block' : 'none' }}
     />
   );
+}
+
+function resolveXtermTheme(
+  terminalTheme: string,
+  resolvedLightDark: 'light' | 'dark',
+): import('@xterm/xterm').ITheme {
+  const preset = PRESET_THEMES[terminalTheme];
+  if (preset && Object.keys(preset).length > 0) return preset;
+  return themeForResolved(resolvedLightDark);
 }
 
 function themeForResolved(theme: 'light' | 'dark'): import('@xterm/xterm').ITheme {
