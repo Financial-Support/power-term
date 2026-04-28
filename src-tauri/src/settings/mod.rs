@@ -13,6 +13,7 @@ pub struct Settings {
     pub scrollback_lines: u32,
     pub ssh_connect_timeout_secs: u32,
     pub ssh_keepalive_interval_secs: u32,
+    pub terminal_theme: String,
 }
 
 impl Default for Settings {
@@ -26,6 +27,7 @@ impl Default for Settings {
             scrollback_lines: 10_000,
             ssh_connect_timeout_secs: 10,
             ssh_keepalive_interval_secs: 30,
+            terminal_theme: "default".to_string(),
         }
     }
 }
@@ -41,6 +43,7 @@ pub struct SettingsPatch {
     pub scrollback_lines: Option<u32>,
     pub ssh_connect_timeout_secs: Option<u32>,
     pub ssh_keepalive_interval_secs: Option<u32>,
+    pub terminal_theme: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -84,6 +87,7 @@ impl SettingsStore {
         if let Some(v) = patch.scrollback_lines { s.scrollback_lines = v; }
         if let Some(v) = patch.ssh_connect_timeout_secs { s.ssh_connect_timeout_secs = v; }
         if let Some(v) = patch.ssh_keepalive_interval_secs { s.ssh_keepalive_interval_secs = v; }
+        if let Some(v) = patch.terminal_theme { s.terminal_theme = v; }
         atomic_write(&self.path, &s)?;
         Ok(s.clone())
     }
@@ -176,5 +180,26 @@ mod tests {
         let store = SettingsStore::load_from(path.clone()).unwrap();
         assert_eq!(store.get(), Settings::default());
         assert!(path.with_extension("toml.bak").exists());
+    }
+
+    #[test]
+    fn terminal_theme_round_trips() {
+        let dir = tmp();
+        let path = dir.path().join("config.toml");
+        let store = SettingsStore::load_from(path.clone()).unwrap();
+        store.apply(SettingsPatch { terminal_theme: Some("dracula".to_string()), ..Default::default() }).unwrap();
+        let store2 = SettingsStore::load_from(path).unwrap();
+        assert_eq!(store2.get().terminal_theme, "dracula");
+    }
+
+    #[test]
+    fn terminal_theme_patch_none_leaves_existing() {
+        let dir = tmp();
+        let path = dir.path().join("config.toml");
+        let store = SettingsStore::load_from(path).unwrap();
+        store.apply(SettingsPatch { terminal_theme: Some("nord".to_string()), ..Default::default() }).unwrap();
+        store.apply(SettingsPatch { font_size: Some(16), ..Default::default() }).unwrap();
+        assert_eq!(store.get().terminal_theme, "nord");
+        assert_eq!(store.get().font_size, 16);
     }
 }
