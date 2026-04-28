@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -186,8 +186,6 @@ export async function snippetsTouch(id: string): Promise<void> {
 }
 
 // ─── Port Forwarding ────────────────────────────────────────────────────────
-
-import type { Forward, ForwardInput, ForwardStatus } from '../types';
 
 export async function forwardsList(): Promise<Forward[]> {
   return invoke<Forward[]>('forwards_list');
