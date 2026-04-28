@@ -108,13 +108,19 @@ export function App() {
     void loadForwardStatuses();
   }, [loadForwards, loadForwardStatuses]);
 
+  const forwardIdKey = useMemo(
+    () => forwardsList.map((f) => f.id).join(','),
+    [forwardsList],
+  );
+
   useEffect(() => {
+    const ids = forwardIdKey ? forwardIdKey.split(',') : [];
     const unsubs: Array<() => void> = [];
     let cancelled = false;
     (async () => {
-      for (const f of forwardsList) {
+      for (const id of ids) {
         if (cancelled) return;
-        const un = await onForwardStatusForId(f.id, (s) => setForwardStatus(s));
+        const un = await onForwardStatusForId(id, (s) => setForwardStatus(s));
         unsubs.push(un);
       }
     })();
@@ -122,7 +128,7 @@ export function App() {
       cancelled = true;
       for (const u of unsubs) u();
     };
-  }, [forwardsList, setForwardStatus]);
+  }, [forwardIdKey, setForwardStatus]);
 
   const newLocalTab = useCallback(async () => {
     try {
@@ -186,7 +192,7 @@ export function App() {
       console.error(`${targetKind === 'shell' ? 'ssh_connect' : 'sftp_open'} failed`, e);
       setFlow({ phase: 'auth', targetKind, target, tried: [], available: ['agent', 'publickey', 'password'], error: String(e), titleOverride, touchHostId });
     }
-  }, [addTab, touchHost, initSftpTab]);
+  }, [addTab, touchHost, initSftpTab, startForwardLocal]);
 
   const onPaletteSshConnect = useCallback((target: SshTarget) => {
     setPaletteOpen(false);
