@@ -2,9 +2,11 @@ pub mod db;
 pub mod host;
 pub mod schema;
 pub mod secrets;
+pub mod snippets;
 
 pub use db::Db;
 pub use host::{Host, HostInput, HostStore};
+pub use snippets::{Snippet, SnippetInput, SnippetStore};
 
 #[derive(thiserror::Error, Debug)]
 pub enum StoreError {
