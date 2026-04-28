@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -163,4 +163,24 @@ export async function sftpDownload(sftpId: string, remote: string, local: string
 
 export async function sftpUpload(sftpId: string, local: string, remote: string): Promise<number> {
   return invoke<number>('sftp_upload', { sftpId, local, remote });
+}
+
+export async function snippetsList(): Promise<Snippet[]> {
+  return invoke<Snippet[]>('snippets_list');
+}
+
+export async function snippetsCreate(input: SnippetInput): Promise<Snippet> {
+  return invoke<Snippet>('snippets_create', { input });
+}
+
+export async function snippetsUpdate(id: string, input: SnippetInput): Promise<Snippet> {
+  return invoke<Snippet>('snippets_update', { id, input });
+}
+
+export async function snippetsDelete(id: string): Promise<void> {
+  await invoke('snippets_delete', { id });
+}
+
+export async function snippetsTouch(id: string): Promise<void> {
+  await invoke('snippets_touch', { id });
 }
