@@ -1,8 +1,8 @@
 use crate::ssh::auth::Auth;
-use crate::ssh::handshake::{handshake_and_auth, HandshakeError, SshTarget};
-use crate::ssh::known_hosts::{HostVerdict, KnownHosts};
+use crate::ssh::handshake::{handshake_and_auth, HandshakeError, KeyCapture, SshTarget};
 use async_trait::async_trait;
 use base64::Engine;
+use parking_lot::Mutex as PLMutex;
 use russh::client::{self, Handle, Msg};
 use russh::keys::PublicKeyBase64;
 use russh::Disconnect;
@@ -118,6 +118,7 @@ async fn start_local(
         keepalive,
         known_hosts_path,
         None,
+        None,
     )
     .await?;
     let session = Arc::new(session);
@@ -175,9 +176,11 @@ async fn start_local(
 struct ForwardingHandler {
     forward_target: (String, u16),
     cancel: CancellationToken,
-    host: String,
-    port: u16,
-    known_hosts_path: PathBuf,
+    /// Key bytes pinned from the trampoline connection. `check_server_key`
+    /// compares byte-for-byte against these — no re-read of known_hosts, so
+    /// the TOCTOU window between trampoline and this reconnect is closed.
+    pinned_key_type: String,
+    pinned_key_b64: String,
 }
 
 #[async_trait]
@@ -220,11 +223,7 @@ impl client::Handler for ForwardingHandler {
         let key_type = key.name().to_string();
         let raw = key.public_key_bytes();
         let key_b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
-        let kh = KnownHosts::at(self.known_hosts_path.clone());
-        match kh.verify(&self.host, self.port, &key_type, &key_b64) {
-            Ok(HostVerdict::Match) => Ok(true),
-            _ => Ok(false),
-        }
+        Ok(key_type == self.pinned_key_type && key_b64 == self.pinned_key_b64)
     }
 }
 
@@ -242,28 +241,33 @@ async fn start_remote(
     // any TOFU acceptance into ~/.ssh/known_hosts, then we discard the handle
     // because remote forwards need a session whose Handler implements
     // server_channel_open_forwarded_tcpip.
+    let key_capture: KeyCapture = Some(Arc::new(PLMutex::new(None)));
     {
         let h = handshake_and_auth(
             target.clone(),
             auth.clone(),
             connect_timeout,
             keepalive,
-            known_hosts_path.clone(),
+            known_hosts_path,
             None,
+            key_capture.clone(),
         )
         .await?;
         drop(h);
     }
+    let (pinned_key_type, pinned_key_b64) = key_capture
+        .as_ref()
+        .and_then(|c| c.lock().take())
+        .ok_or_else(|| ForwardError::Any("trampoline did not capture server key".into()))?;
 
     // Real connection wired to the forwarding handler. ForwardingHandler
-    // verifies the server key against known_hosts — the trampoline above
-    // already pinned it, so this should always match.
+    // compares the key bytes against what the trampoline pinned — no re-read
+    // of known_hosts, so the TOCTOU window is closed.
     let handler = ForwardingHandler {
         forward_target: (spec.remote_host.clone(), spec.remote_port),
         cancel: cancel.clone(),
-        host: target.host.clone(),
-        port: target.port,
-        known_hosts_path,
+        pinned_key_type,
+        pinned_key_b64,
     };
     let config = client::Config {
         inactivity_timeout: Some(keepalive * 4),

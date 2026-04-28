@@ -89,6 +89,7 @@ impl SftpSession {
             keepalive,
             known_hosts_path,
             accepted_fingerprint,
+            None,
         )
         .await
         .map_err(handshake_to_sftp_err)?;

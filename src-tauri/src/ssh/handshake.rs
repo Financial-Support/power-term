@@ -69,12 +69,20 @@ enum HostKeyVerdict {
     },
 }
 
+/// Shared cell for callers that need the accepted `(key_type, key_b64)` bytes
+/// after `handshake_and_auth` returns (TOCTOU defense for re-connects).
+pub type KeyCapture = Option<Arc<PLMutex<Option<(String, String)>>>>;
+
 pub struct ClientHandler {
     host: String,
     port: u16,
     known_hosts_path: PathBuf,
     accepted: Option<String>,
     verdict: Arc<PLMutex<Option<HostKeyVerdict>>>,
+    /// If set, the accepted (key_type, key_b64) bytes are written here when
+    /// check_server_key returns Ok(true), so callers can pin them for later
+    /// byte-for-byte comparison (TOCTOU defense for re-connects).
+    key_capture: KeyCapture,
 }
 
 #[async_trait]
@@ -100,6 +108,9 @@ impl Handler for ClientHandler {
                     tracing::warn!(error = %e, host = %self.host, "failed to persist accepted host key");
                 }
                 *self.verdict.lock() = Some(HostKeyVerdict::Trusted);
+                if let Some(cap) = &self.key_capture {
+                    *cap.lock() = Some((key_type, key_b64));
+                }
                 return Ok(true);
             }
             // accept_fingerprint set but server presented a different key.
@@ -118,6 +129,9 @@ impl Handler for ClientHandler {
         match v {
             HostVerdict::Match => {
                 *self.verdict.lock() = Some(HostKeyVerdict::Trusted);
+                if let Some(cap) = &self.key_capture {
+                    *cap.lock() = Some((key_type, key_b64));
+                }
                 Ok(true)
             }
             HostVerdict::Unknown => {
@@ -142,6 +156,8 @@ impl Handler for ClientHandler {
 /// Connect, verify host key, authenticate. Returns the russh `Handle` ready for
 /// channel-open or subsystem requests. `accepted_fingerprint` short-circuits
 /// the known_hosts check when the user has just clicked Accept on a TOFU prompt.
+/// If `key_capture` is `Some`, the accepted `(key_type, key_b64)` bytes are
+/// written into the cell so callers can pin them for TOCTOU-safe re-connects.
 pub async fn handshake_and_auth(
     target: SshTarget,
     auth: Auth,
@@ -149,6 +165,7 @@ pub async fn handshake_and_auth(
     keepalive: Duration,
     known_hosts_path: PathBuf,
     accepted_fingerprint: Option<String>,
+    key_capture: KeyCapture,
 ) -> Result<Handle<ClientHandler>, HandshakeError> {
     let config = client::Config {
         inactivity_timeout: Some(keepalive * 4),
@@ -164,6 +181,7 @@ pub async fn handshake_and_auth(
         known_hosts_path,
         accepted: accepted_fingerprint,
         verdict: verdict.clone(),
+        key_capture,
     };
 
     let connect_future = client::connect(config, (target.host.as_str(), target.port), handler);
