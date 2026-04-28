@@ -13,6 +13,10 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { SnippetsPanel } from './components/SnippetsPanel';
 import { SnippetFormModal } from './components/SnippetFormModal';
 import { useSnippetStore } from './state/snippetStore';
+import { ForwardsPanel } from './components/ForwardsPanel';
+import { ForwardFormModal } from './components/ForwardFormModal';
+import { useForwardStore } from './state/forwardStore';
+import { onForwardStatusForId } from './lib/forwardEvents';
 import { useSessionStore } from './state/sessionStore';
 import { useSettingsStore } from './state/settingsStore';
 import { useHostStore } from './state/hostStore';
@@ -24,7 +28,7 @@ import {
   ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
   sftpClose, sftpOpen, sshConnect, sshKill, sshWrite, snippetsTouch,
 } from './lib/ipc';
-import type { AuthRequest, Host, Snippet, SnippetInput, SshTarget } from './types';
+import type { AuthRequest, Forward, ForwardInput, Host, Snippet, SnippetInput, SshTarget } from './types';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -47,6 +51,11 @@ type SnippetFormMode =
   | { kind: 'create' }
   | { kind: 'edit'; snippet: Snippet };
 
+type ForwardFormMode =
+  | { kind: 'closed' }
+  | { kind: 'create' }
+  | { kind: 'edit'; forward: Forward };
+
 export function App() {
   const settings = useSettingsStore((s) => s.settings);
   const loadSettings = useSettingsStore((s) => s.load);
@@ -67,6 +76,15 @@ export function App() {
   const deleteSnippet = useSnippetStore((s) => s.delete);
   const touchSnippetLocal = useSnippetStore((s) => s.touch);
 
+  const loadForwards = useForwardStore((s) => s.load);
+  const loadForwardStatuses = useForwardStore((s) => s.loadStatuses);
+  const createForward = useForwardStore((s) => s.create);
+  const updateForward = useForwardStore((s) => s.update);
+  const deleteForward = useForwardStore((s) => s.delete);
+  const setForwardStatus = useForwardStore((s) => s.setStatus);
+  const startForwardLocal = useForwardStore((s) => s.start);
+  const forwardsList = useForwardStore((s) => s.forwards);
+
   const initSftpTab = useSftpStore((s) => s.init);
   const closeSftpTabState = useSftpStore((s) => s.closeTab);
 
@@ -78,11 +96,33 @@ export function App() {
   const [confirmDelete, setConfirmDelete] = useState<Host | null>(null);
   const [snippetForm, setSnippetForm] = useState<SnippetFormMode>({ kind: 'closed' });
   const [confirmDeleteSnippet, setConfirmDeleteSnippet] = useState<Snippet | null>(null);
+  const [forwardForm, setForwardForm] = useState<ForwardFormMode>({ kind: 'closed' });
+  const [confirmDeleteForward, setConfirmDeleteForward] = useState<Forward | null>(null);
   const flowToken = useRef(0);
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);
   useEffect(() => { void loadHosts(); }, [loadHosts]);
   useEffect(() => { void loadSnippets(); }, [loadSnippets]);
+  useEffect(() => {
+    void loadForwards();
+    void loadForwardStatuses();
+  }, [loadForwards, loadForwardStatuses]);
+
+  useEffect(() => {
+    const unsubs: Array<() => void> = [];
+    let cancelled = false;
+    (async () => {
+      for (const f of forwardsList) {
+        if (cancelled) return;
+        const un = await onForwardStatusForId(f.id, (s) => setForwardStatus(s));
+        unsubs.push(un);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      for (const u of unsubs) u();
+    };
+  }, [forwardsList, setForwardStatus]);
 
   const newLocalTab = useCallback(async () => {
     try {
@@ -125,6 +165,14 @@ export function App() {
         const tabId = addTab(result.id, titleOverride ?? `${target.user}@${target.host}`, targetKind === 'shell' ? 'ssh' : 'sftp');
         if (targetKind === 'sftp') void initSftpTab(tabId, result.id);
         if (touchHostId) void touchHost(touchHostId);
+        if (touchHostId) {
+          const autos = useForwardStore.getState().forwards.filter(
+            (f) => f.host_id === touchHostId && f.auto_start,
+          );
+          for (const f of autos) {
+            void startForwardLocal(f.id);
+          }
+        }
         setFlow({ phase: 'idle' });
       } else if (result.status === 'needs_fingerprint') {
         setFlow({ phase: 'fingerprint', targetKind, target, auth, fingerprint: result.fingerprint, keyType: result.key_type, titleOverride, touchHostId });
@@ -220,6 +268,18 @@ export function App() {
     setConfirmDeleteSnippet(null);
   }, [deleteSnippet]);
 
+  const handleForwardSave = useCallback(async (input: ForwardInput) => {
+    const targetId = forwardForm.kind === 'edit' ? forwardForm.forward.id : null;
+    if (targetId) await updateForward(targetId, input);
+    else await createForward(input);
+    setForwardForm({ kind: 'closed' });
+  }, [forwardForm, updateForward, createForward]);
+
+  const handleForwardDelete = useCallback(async (f: Forward) => {
+    await deleteForward(f.id);
+    setConfirmDeleteForward(null);
+  }, [deleteForward]);
+
   useHotkeys({ onNewTab: () => void newLocalTab(), onCloseTab: (id) => void handleClose(id) });
 
   useEffect(() => {
@@ -227,13 +287,14 @@ export function App() {
       if (e.metaKey && e.key.toLowerCase() === 'k') {
         if (flow.phase !== 'idle' || form.kind !== 'closed' || confirmDelete) return;
         if (snippetForm.kind !== 'closed' || confirmDeleteSnippet) return;
+        if (forwardForm.kind !== 'closed' || confirmDeleteForward) return;
         e.preventDefault();
         setPaletteOpen(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [flow.phase, form.kind, confirmDelete, snippetForm.kind, confirmDeleteSnippet]);
+  }, [flow.phase, form.kind, confirmDelete, snippetForm.kind, confirmDeleteSnippet, forwardForm.kind, confirmDeleteForward]);
 
   const openedFirstTab = useRef(false);
   useEffect(() => {
@@ -267,6 +328,13 @@ export function App() {
                 onEdit={(snip) => setSnippetForm({ kind: 'edit', snippet: snip })}
                 onDelete={(snip) => setConfirmDeleteSnippet(snip)}
                 onInsert={onInsertSnippet}
+              />
+            }
+            forwardsSlot={
+              <ForwardsPanel
+                onAdd={() => setForwardForm({ kind: 'create' })}
+                onEdit={(f) => setForwardForm({ kind: 'edit', forward: f })}
+                onDelete={(f) => setConfirmDeleteForward(f)}
               />
             }
           />
@@ -348,6 +416,24 @@ export function App() {
           destructive
           onConfirm={() => void handleSnippetDelete(confirmDeleteSnippet)}
           onCancel={() => setConfirmDeleteSnippet(null)}
+        />
+      )}
+      {forwardForm.kind !== 'closed' && (
+        <ForwardFormModal
+          mode={forwardForm.kind === 'edit' ? 'edit' : 'create'}
+          forward={forwardForm.kind === 'edit' ? forwardForm.forward : undefined}
+          onSave={(input) => void handleForwardSave(input)}
+          onCancel={() => setForwardForm({ kind: 'closed' })}
+        />
+      )}
+      {confirmDeleteForward && (
+        <ConfirmModal
+          title="Delete forward?"
+          message={`Remove "${confirmDeleteForward.name}" from saved forwards?`}
+          confirmLabel="Delete"
+          destructive
+          onConfirm={() => void handleForwardDelete(confirmDeleteForward)}
+          onCancel={() => setConfirmDeleteForward(null)}
         />
       )}
     </div>

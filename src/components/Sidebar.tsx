@@ -10,6 +10,7 @@ interface Props {
   onEdit: (host: Host) => void;
   onDelete: (host: Host) => void;
   snippetsSlot?: ReactNode;
+  forwardsSlot?: ReactNode;
 }
 
 interface Group {
@@ -21,7 +22,7 @@ interface Group {
 const UNGROUPED = 'Ungrouped';
 const HOST_DRAG_MIME = 'application/x-power-term-host-id';
 
-export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete, snippetsSlot }: Props) {
+export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete, snippetsSlot, forwardsSlot }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const error = useHostStore((s) => s.error);
   const updateHost = useHostStore((s) => s.update);
@@ -210,6 +211,7 @@ export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete, snippe
           );
         })}
         {snippetsSlot}
+        {forwardsSlot}
       </div>
       <p className="sidebar-hint">Tip: Cmd+K opens the command palette.</p>
     </aside>
