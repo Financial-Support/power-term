@@ -1,9 +1,53 @@
-//! Filled in Task 4.
+use crate::sftp::session::{SftpSession, SftpTarget};
+use crate::sftp::{SftpError, SftpId};
+use crate::ssh::auth::Auth;
+use crate::ssh::known_hosts::KnownHosts;
+use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
-pub struct SftpManager;
+pub struct SftpManager {
+    sessions: Mutex<HashMap<SftpId, Arc<SftpSession>>>,
+}
 
 impl SftpManager {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self { Self { sessions: Mutex::new(HashMap::new()) } }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn open(
+        &self,
+        target: SftpTarget,
+        auth: Auth,
+        connect_timeout: Duration,
+        keepalive: Duration,
+        accepted_fingerprint: Option<String>,
+    ) -> Result<SftpId, SftpError> {
+        let host = target.host.clone();
+        let known_hosts_path = KnownHosts::default_user_path()
+            .ok_or_else(|| SftpError::Any("no home dir".into()))?;
+        let session = SftpSession::open(
+            target, auth, connect_timeout, keepalive, known_hosts_path, accepted_fingerprint,
+        ).await?;
+        let id = uuid::Uuid::new_v4().to_string();
+        self.sessions.lock().insert(id.clone(), session);
+        tracing::info!(sftp_id = %id, host = %host, "sftp opened");
+        Ok(id)
+    }
+
+    pub fn get(&self, id: &SftpId) -> Result<Arc<SftpSession>, SftpError> {
+        self.sessions.lock().get(id).cloned()
+            .ok_or_else(|| SftpError::Unknown(id.clone()))
+    }
+
+    pub async fn close(&self, id: &SftpId) -> Result<(), SftpError> {
+        let s = {
+            let mut sessions = self.sessions.lock();
+            sessions.remove(id).ok_or_else(|| SftpError::Unknown(id.clone()))?
+        };
+        tracing::info!(sftp_id = %id, "sftp closed");
+        s.close().await
+    }
 }
 
 impl Default for SftpManager {
