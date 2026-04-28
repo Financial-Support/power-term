@@ -444,3 +444,103 @@ pub fn snippets_touch(
 ) -> Result<(), String> {
     store.touch(&id).map_err(|e| e.to_string())
 }
+
+// ─── Port Forwarding ────────────────────────────────────────────────────────
+
+use crate::ssh::forward_manager::{ForwardManager, ForwardStatus};
+use crate::ssh::forwards::{ForwardKind, ForwardSpec};
+use crate::store::{Forward, ForwardInput, ForwardStore};
+
+#[tauri::command]
+pub fn forwards_list(store: tauri::State<'_, ForwardStore>) -> Result<Vec<Forward>, String> {
+    store.list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn forwards_create(
+    store: tauri::State<'_, ForwardStore>, input: ForwardInput,
+) -> Result<Forward, String> { store.create(&input).map_err(|e| e.to_string()) }
+
+#[tauri::command]
+pub fn forwards_update(
+    store: tauri::State<'_, ForwardStore>, id: String, input: ForwardInput,
+) -> Result<Forward, String> { store.update(&id, &input).map_err(|e| e.to_string()) }
+
+#[tauri::command]
+pub fn forwards_delete(
+    store: tauri::State<'_, ForwardStore>, manager: tauri::State<'_, ForwardManager>,
+    app: tauri::AppHandle, id: String,
+) -> Result<(), String> {
+    let _ = manager.stop(app, &id);
+    store.delete(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn forward_status(
+    manager: tauri::State<'_, ForwardManager>, id: String,
+) -> Result<ForwardStatus, String> { Ok(manager.status(&id)) }
+
+#[tauri::command]
+pub fn forwards_status_all(
+    manager: tauri::State<'_, ForwardManager>,
+) -> Result<Vec<ForwardStatus>, String> { Ok(manager.statuses()) }
+
+#[tauri::command]
+pub async fn forward_start(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, ForwardManager>,
+    forward_store: tauri::State<'_, ForwardStore>,
+    host_store: tauri::State<'_, HostStore>,
+    settings: tauri::State<'_, crate::settings::SettingsStore>,
+    id: String,
+) -> Result<ForwardStatus, String> {
+    let forward = forward_store.get(&id).map_err(|e| e.to_string())?;
+    let host = host_store.list().map_err(|e| e.to_string())?
+        .into_iter().find(|h| h.id == forward.host_id)
+        .ok_or_else(|| "host not found for this forward".to_string())?;
+
+    let target = SshTarget { host: host.hostname.clone(), port: host.port, user: host.username.clone() };
+    let auth = match host.auth_method.as_str() {
+        "agent" => crate::ssh::auth::Auth::Agent,
+        "key" => {
+            let passphrase = crate::store::secrets::get(&host.id).ok().flatten();
+            crate::ssh::auth::Auth::KeyFile {
+                path: std::path::PathBuf::from(host.key_path.unwrap_or_default()),
+                passphrase,
+            }
+        }
+        _ => {
+            let password = crate::store::secrets::get(&host.id).ok().flatten()
+                .ok_or_else(|| "password auth requires a saved password in the keychain (forward MVP)".to_string())?;
+            crate::ssh::auth::Auth::Password { password }
+        }
+    };
+
+    let kind = match forward.kind.as_str() {
+        "local" => ForwardKind::Local,
+        "remote" => ForwardKind::Remote,
+        other => return Err(format!("unknown kind '{other}'")),
+    };
+    let spec = ForwardSpec {
+        kind,
+        bind_addr: forward.bind_addr,
+        bind_port: forward.bind_port,
+        remote_host: forward.remote_host,
+        remote_port: forward.remote_port,
+    };
+    let s = settings.get();
+    let connect_timeout = std::time::Duration::from_secs(s.ssh_connect_timeout_secs as u64);
+    let keepalive = std::time::Duration::from_secs(s.ssh_keepalive_interval_secs as u64);
+
+    manager.start(app, id, target, auth, spec, connect_timeout, keepalive).await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn forward_stop(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, ForwardManager>,
+    id: String,
+) -> Result<ForwardStatus, String> {
+    Ok(manager.stop(app, &id))
+}

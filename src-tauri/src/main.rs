@@ -4,7 +4,8 @@ use power_term::pty::PtyManager;
 use power_term::settings::SettingsStore;
 use power_term::sftp::SftpManager;
 use power_term::ssh::SshManager;
-use power_term::store::{Db, HostStore, SnippetStore};
+use power_term::store::{Db, ForwardStore, HostStore, SnippetStore};
+use power_term::ssh::forward_manager::ForwardManager;
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -15,6 +16,7 @@ fn main() {
         .expect("failed to initialize sqlite store");
     let host_store = HostStore::new(db.clone());
     let snippet_store = SnippetStore::new(db.clone());
+    let forward_store = ForwardStore::new(db.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -24,6 +26,8 @@ fn main() {
         .manage(settings)
         .manage(host_store)
         .manage(snippet_store)
+        .manage(forward_store)
+        .manage(ForwardManager::new())
         .manage(db)
         .invoke_handler(tauri::generate_handler![
             power_term::commands::pty_spawn,
@@ -60,6 +64,14 @@ fn main() {
             power_term::commands::sftp_rename,
             power_term::commands::sftp_download,
             power_term::commands::sftp_upload,
+            power_term::commands::forwards_list,
+            power_term::commands::forwards_create,
+            power_term::commands::forwards_update,
+            power_term::commands::forwards_delete,
+            power_term::commands::forward_start,
+            power_term::commands::forward_stop,
+            power_term::commands::forward_status,
+            power_term::commands::forwards_status_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
