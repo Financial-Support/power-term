@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Snippet, SnippetInput } from '../types';
 
 interface Props {
@@ -10,9 +10,8 @@ interface Props {
 
 export function SnippetFormModal({ mode, snippet, onSave, onCancel }: Props) {
   const [name, setName] = useState(snippet?.name ?? '');
-  const [contentEmpty, setContentEmpty] = useState((snippet?.content ?? '') === '');
+  const [content, setContent] = useState(snippet?.content ?? '');
   const [tagsText, setTagsText] = useState((snippet?.tags ?? []).join(', '));
-  const contentRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -27,12 +26,11 @@ export function SnippetFormModal({ mode, snippet, onSave, onCancel }: Props) {
 
   const validForm =
     name.trim() !== '' &&
-    !contentEmpty &&
+    content !== '' &&
     name.length <= 80;
 
   const submit = () => {
     if (!validForm) return;
-    const content = contentRef.current?.value ?? '';
     const tags = tagsText
       .split(/[,\n]/)
       .map((t) => t.trim())
@@ -60,11 +58,10 @@ export function SnippetFormModal({ mode, snippet, onSave, onCancel }: Props) {
         <label htmlFor="sfm-content">Content</label>
         <textarea
           id="sfm-content"
-          ref={contentRef}
           className="snippet-content"
           rows={8}
-          defaultValue={snippet?.content ?? ''}
-          onChange={(e) => setContentEmpty(e.target.value === '')}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
           spellCheck={false}
         />
 

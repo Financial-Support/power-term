@@ -19,7 +19,10 @@ describe('SnippetFormModal', () => {
     render(<SnippetFormModal mode="edit" snippet={sample()} onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByText(/edit snippet/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('ls')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('ls -la\n')).toBeInTheDocument();
+    // testing-library's getByDisplayValue trims whitespace by default; assert
+    // the textarea's raw .value to verify trailing newlines are preserved.
+    const content = screen.getByLabelText(/^content$/i) as HTMLTextAreaElement;
+    expect(content.value).toBe('ls -la\n');
   });
 
   it('Cancel calls onCancel', async () => {

@@ -17,7 +17,8 @@ beforeEach(() => {
 describe('SnippetsPanel', () => {
   it('renders header with + button and Snippets label', () => {
     render(<SnippetsPanel onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} onInsert={vi.fn()} />);
-    expect(screen.getByText(/snippets/i)).toBeInTheDocument();
+    // Disambiguate from the empty-state hint by scoping to the toggle button.
+    expect(screen.getByRole('button', { name: /toggle snippets section/i })).toHaveTextContent(/snippets/i);
     expect(screen.getByRole('button', { name: /add snippet/i })).toBeInTheDocument();
   });
 

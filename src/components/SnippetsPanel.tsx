@@ -29,9 +29,7 @@ export function SnippetsPanel({ onAdd, onEdit, onDelete, onInsert }: Props) {
           onClick={() => setCollapsed((v) => !v)}
         >
           <span className="sidebar-caret">{collapsed ? '▸' : '▾'}</span>
-          {(collapsed || sorted.length > 0) && (
-            <span className="snippets-title">Snippets</span>
-          )}
+          <span className="snippets-title">Snippets</span>
         </button>
         <button
           type="button"
