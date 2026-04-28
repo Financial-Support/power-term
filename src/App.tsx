@@ -10,6 +10,9 @@ import { AuthPrompt } from './components/AuthPrompt';
 import { Sidebar } from './components/Sidebar';
 import { HostFormModal, type HostFormSaveArgs } from './components/HostFormModal';
 import { ConfirmModal } from './components/ConfirmModal';
+import { SnippetsPanel } from './components/SnippetsPanel';
+import { SnippetFormModal } from './components/SnippetFormModal';
+import { useSnippetStore } from './state/snippetStore';
 import { useSessionStore } from './state/sessionStore';
 import { useSettingsStore } from './state/settingsStore';
 import { useHostStore } from './state/hostStore';
@@ -18,10 +21,10 @@ import { useHotkeys } from './hooks/useHotkeys';
 import { useTheme } from './hooks/useTheme';
 import { useSidebarToggle } from './hooks/useSidebarToggle';
 import {
-  ptyKill, ptySpawn, secretDelete, secretGet, secretSet,
-  sftpClose, sftpOpen, sshConnect, sshKill,
+  ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
+  sftpClose, sftpOpen, sshConnect, sshKill, sshWrite, snippetsTouch,
 } from './lib/ipc';
-import type { AuthRequest, Host, SshTarget } from './types';
+import type { AuthRequest, Host, Snippet, SnippetInput, SshTarget } from './types';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -39,6 +42,11 @@ type FormMode =
   | { kind: 'create' }
   | { kind: 'edit'; host: Host };
 
+type SnippetFormMode =
+  | { kind: 'closed' }
+  | { kind: 'create' }
+  | { kind: 'edit'; snippet: Snippet };
+
 export function App() {
   const settings = useSettingsStore((s) => s.settings);
   const loadSettings = useSettingsStore((s) => s.load);
@@ -53,6 +61,12 @@ export function App() {
   const deleteHost = useHostStore((s) => s.delete);
   const touchHost = useHostStore((s) => s.touch);
 
+  const loadSnippets = useSnippetStore((s) => s.load);
+  const createSnippet = useSnippetStore((s) => s.create);
+  const updateSnippet = useSnippetStore((s) => s.update);
+  const deleteSnippet = useSnippetStore((s) => s.delete);
+  const touchSnippetLocal = useSnippetStore((s) => s.touch);
+
   const initSftpTab = useSftpStore((s) => s.init);
   const closeSftpTabState = useSftpStore((s) => s.closeTab);
 
@@ -62,10 +76,13 @@ export function App() {
   const [flow, setFlow] = useState<RemoteFlow>({ phase: 'idle' });
   const [form, setForm] = useState<FormMode>({ kind: 'closed' });
   const [confirmDelete, setConfirmDelete] = useState<Host | null>(null);
+  const [snippetForm, setSnippetForm] = useState<SnippetFormMode>({ kind: 'closed' });
+  const [confirmDeleteSnippet, setConfirmDeleteSnippet] = useState<Snippet | null>(null);
   const flowToken = useRef(0);
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);
   useEffect(() => { void loadHosts(); }, [loadHosts]);
+  useEffect(() => { void loadSnippets(); }, [loadSnippets]);
 
   const newLocalTab = useCallback(async () => {
     try {
@@ -178,19 +195,45 @@ export function App() {
     setConfirmDelete(null);
   }, [deleteHost]);
 
+  const onInsertSnippet = useCallback((snip: Snippet) => {
+    const tab = useSessionStore.getState().tabs.find((t) => t.id === activeTabId);
+    if (!tab) return;
+    if (tab.kind === 'sftp') {
+      console.warn('Snippets cannot be inserted into an SFTP tab.');
+      return;
+    }
+    if (tab.kind === 'ssh') void sshWrite(tab.ptyId, snip.content);
+    else void ptyWrite(tab.ptyId, snip.content);
+    void snippetsTouch(snip.id).catch(() => {});
+    void touchSnippetLocal(snip.id);
+  }, [activeTabId, touchSnippetLocal]);
+
+  const handleSnippetSave = useCallback(async (input: SnippetInput) => {
+    const targetId = snippetForm.kind === 'edit' ? snippetForm.snippet.id : null;
+    if (targetId) await updateSnippet(targetId, input);
+    else await createSnippet(input);
+    setSnippetForm({ kind: 'closed' });
+  }, [snippetForm, updateSnippet, createSnippet]);
+
+  const handleSnippetDelete = useCallback(async (snip: Snippet) => {
+    await deleteSnippet(snip.id);
+    setConfirmDeleteSnippet(null);
+  }, [deleteSnippet]);
+
   useHotkeys({ onNewTab: () => void newLocalTab(), onCloseTab: (id) => void handleClose(id) });
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey && e.key.toLowerCase() === 'k') {
         if (flow.phase !== 'idle' || form.kind !== 'closed' || confirmDelete) return;
+        if (snippetForm.kind !== 'closed' || confirmDeleteSnippet) return;
         e.preventDefault();
         setPaletteOpen(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [flow.phase, form.kind, confirmDelete]);
+  }, [flow.phase, form.kind, confirmDelete, snippetForm.kind, confirmDeleteSnippet]);
 
   const openedFirstTab = useRef(false);
   useEffect(() => {
@@ -218,6 +261,14 @@ export function App() {
             onAdd={() => setForm({ kind: 'create' })}
             onEdit={(h) => setForm({ kind: 'edit', host: h })}
             onDelete={(h) => setConfirmDelete(h)}
+            snippetsSlot={
+              <SnippetsPanel
+                onAdd={() => setSnippetForm({ kind: 'create' })}
+                onEdit={(snip) => setSnippetForm({ kind: 'edit', snippet: snip })}
+                onDelete={(snip) => setConfirmDeleteSnippet(snip)}
+                onInsert={onInsertSnippet}
+              />
+            }
           />
         )}
         <main className="terminals">
@@ -279,6 +330,24 @@ export function App() {
           destructive
           onConfirm={() => void handleDelete(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+      {snippetForm.kind !== 'closed' && (
+        <SnippetFormModal
+          mode={snippetForm.kind === 'edit' ? 'edit' : 'create'}
+          snippet={snippetForm.kind === 'edit' ? snippetForm.snippet : undefined}
+          onSave={(input) => void handleSnippetSave(input)}
+          onCancel={() => setSnippetForm({ kind: 'closed' })}
+        />
+      )}
+      {confirmDeleteSnippet && (
+        <ConfirmModal
+          title="Delete snippet?"
+          message={`Remove "${confirmDeleteSnippet.name}" from saved snippets?`}
+          confirmLabel="Delete"
+          destructive
+          onConfirm={() => void handleSnippetDelete(confirmDeleteSnippet)}
+          onCancel={() => setConfirmDeleteSnippet(null)}
         />
       )}
     </div>

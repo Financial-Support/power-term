@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useHostStore } from '../state/hostStore';
 import type { Host, HostInput } from '../types';
 
@@ -8,6 +9,7 @@ interface Props {
   onAdd: () => void;
   onEdit: (host: Host) => void;
   onDelete: (host: Host) => void;
+  snippetsSlot?: ReactNode;
 }
 
 interface Group {
@@ -19,7 +21,7 @@ interface Group {
 const UNGROUPED = 'Ungrouped';
 const HOST_DRAG_MIME = 'application/x-power-term-host-id';
 
-export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete }: Props) {
+export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete, snippetsSlot }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const error = useHostStore((s) => s.error);
   const updateHost = useHostStore((s) => s.update);
@@ -207,6 +209,7 @@ export function Sidebar({ onConnect, onOpenSftp, onAdd, onEdit, onDelete }: Prop
             </div>
           );
         })}
+        {snippetsSlot}
       </div>
       <p className="sidebar-hint">Tip: Cmd+K opens the command palette.</p>
     </aside>
