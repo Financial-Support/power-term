@@ -15,6 +15,7 @@ import { SnippetFormModal } from './components/SnippetFormModal';
 import { useSnippetStore } from './state/snippetStore';
 import { ForwardsPanel } from './components/ForwardsPanel';
 import { ForwardFormModal } from './components/ForwardFormModal';
+import { SettingsModal } from './components/SettingsModal';
 import { useForwardStore } from './state/forwardStore';
 import { onForwardStatusForId } from './lib/forwardEvents';
 import { useSessionStore } from './state/sessionStore';
@@ -98,6 +99,7 @@ export function App() {
   const [confirmDeleteSnippet, setConfirmDeleteSnippet] = useState<Snippet | null>(null);
   const [forwardForm, setForwardForm] = useState<ForwardFormMode>({ kind: 'closed' });
   const [confirmDeleteForward, setConfirmDeleteForward] = useState<Forward | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const flowToken = useRef(0);
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);
@@ -290,17 +292,26 @@ export function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.metaKey && e.key === ',') {
+        if (flow.phase !== 'idle' || form.kind !== 'closed' || confirmDelete) return;
+        if (snippetForm.kind !== 'closed' || confirmDeleteSnippet) return;
+        if (forwardForm.kind !== 'closed' || confirmDeleteForward) return;
+        if (settingsOpen) return;
+        e.preventDefault();
+        setSettingsOpen(true);
+      }
       if (e.metaKey && e.key.toLowerCase() === 'k') {
         if (flow.phase !== 'idle' || form.kind !== 'closed' || confirmDelete) return;
         if (snippetForm.kind !== 'closed' || confirmDeleteSnippet) return;
         if (forwardForm.kind !== 'closed' || confirmDeleteForward) return;
+        if (settingsOpen) return;
         e.preventDefault();
         setPaletteOpen(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [flow.phase, form.kind, confirmDelete, snippetForm.kind, confirmDeleteSnippet, forwardForm.kind, confirmDeleteForward]);
+  }, [flow.phase, form.kind, confirmDelete, snippetForm.kind, confirmDeleteSnippet, forwardForm.kind, confirmDeleteForward, settingsOpen]);
 
   const openedFirstTab = useRef(false);
   useEffect(() => {
@@ -442,6 +453,7 @@ export function App() {
           onCancel={() => setConfirmDeleteForward(null)}
         />
       )}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }
