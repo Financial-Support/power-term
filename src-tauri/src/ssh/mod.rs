@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod handshake;
 pub mod known_hosts;
 pub mod manager;
 pub mod session;
