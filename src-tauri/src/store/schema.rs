@@ -130,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate_v1_to_v2_only_creates_snippets() {
+    fn migrate_from_v1_runs_all_migrations_to_current() {
         let conn = open_in_memory();
         // Pretend a previous build wrote schema v1 (just hosts).
         conn.execute_batch(
