@@ -361,3 +361,11 @@ html, body, #root { height: 100%; margin: 0; }
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
+.modal-form .forward-section-title {
+  font-size: 11px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.4px;
+  margin: 6px 0 6px 0;
+}
+.modal-form select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font: inherit; font-size: 13px;
+}
