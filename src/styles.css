@@ -284,3 +284,13 @@ html, body, #root { height: 100%; margin: 0; }
 .file-row .file-actions button:hover { opacity: 1; }
 .fb-loading, .fb-error { padding: 12px; font-size: 12px; }
 .fb-error { color: #dc2626; }
+.modal-form .snippet-content {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  display: block; width: 100%; box-sizing: border-box; resize: vertical; margin: 0 0 14px 0;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font-size: 13px; outline: none;
+}
+.modal-form .snippet-content:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
