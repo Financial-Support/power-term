@@ -284,6 +284,36 @@ html, body, #root { height: 100%; margin: 0; }
 .file-row .file-actions button:hover { opacity: 1; }
 .fb-loading, .fb-error { padding: 12px; font-size: 12px; }
 .fb-error { color: #dc2626; }
+.snippets-panel { border-top: 1px solid var(--border); }
+.snippets-header { display: flex; align-items: center; padding: 0 4px; }
+.snippets-toggle {
+  flex: 1; text-align: left; padding: 6px 8px; font-size: 12px; font-weight: 600;
+  background: transparent; border: 0; color: var(--fg); cursor: pointer;
+  display: flex; align-items: center; gap: 2px;
+}
+.snippets-add {
+  background: transparent; border: 0; cursor: pointer; color: var(--fg);
+  padding: 4px 8px; opacity: 0.7; font-size: 14px;
+}
+.snippets-add:hover { opacity: 1; }
+.snippets-empty { padding: 0 12px 12px 12px; font-size: 12px; opacity: 0.7; }
+.snippets-list { list-style: none; margin: 0; padding: 0 4px 8px 4px; }
+.snippet-row {
+  display: flex; align-items: center; padding: 0 8px; border-radius: 4px;
+}
+.snippet-row:hover { background: var(--tab-active); }
+.snippet-name {
+  flex: 1; text-align: left; padding: 4px 8px; background: transparent; border: 0;
+  color: var(--fg); cursor: pointer; font: inherit; font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.snippet-actions { display: none; gap: 2px; }
+.snippet-row:hover .snippet-actions { display: flex; }
+.snippet-actions button {
+  background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
+  color: var(--fg); opacity: 0.6;
+}
+.snippet-actions button:hover { opacity: 1; }
 .modal-form .snippet-content {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   display: block; width: 100%; box-sizing: border-box; resize: vertical; margin: 0 0 14px 0;
