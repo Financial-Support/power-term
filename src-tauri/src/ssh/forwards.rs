@@ -1,7 +1,10 @@
 use crate::ssh::auth::Auth;
 use crate::ssh::handshake::{handshake_and_auth, HandshakeError, SshTarget};
+use crate::ssh::known_hosts::{HostVerdict, KnownHosts};
 use async_trait::async_trait;
+use base64::Engine;
 use russh::client::{self, Handle, Msg};
+use russh::keys::PublicKeyBase64;
 use russh::Disconnect;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -60,7 +63,6 @@ impl Drop for RunningForward {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn start_forward(
     target: SshTarget,
     auth: Auth,
@@ -171,8 +173,11 @@ async fn start_local(
 /// finished) we need to accept `forwarded-tcpip` channels coming from the
 /// SSH server. russh dispatches them via this trait method.
 struct ForwardingHandler {
-    local_target: (String, u16),
+    forward_target: (String, u16),
     cancel: CancellationToken,
+    host: String,
+    port: u16,
+    known_hosts_path: PathBuf,
 }
 
 #[async_trait]
@@ -188,7 +193,7 @@ impl client::Handler for ForwardingHandler {
         _originator_port: u32,
         _session: &mut client::Session,
     ) -> Result<(), Self::Error> {
-        let local = self.local_target.clone();
+        let local = self.forward_target.clone();
         let cancel = self.cancel.clone();
         tokio::spawn(async move {
             let mut stream = channel.into_stream();
@@ -210,10 +215,16 @@ impl client::Handler for ForwardingHandler {
 
     async fn check_server_key(
         &mut self,
-        _key: &russh::keys::key::PublicKey,
+        key: &russh::keys::key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        // Should not be called during the post-auth phase; if russh ever invokes it, accept.
-        Ok(true)
+        let key_type = key.name().to_string();
+        let raw = key.public_key_bytes();
+        let key_b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
+        let kh = KnownHosts::at(self.known_hosts_path.clone());
+        match kh.verify(&self.host, self.port, &key_type, &key_b64) {
+            Ok(HostVerdict::Match) => Ok(true),
+            _ => Ok(false),
+        }
     }
 }
 
@@ -237,7 +248,7 @@ async fn start_remote(
             auth.clone(),
             connect_timeout,
             keepalive,
-            known_hosts_path,
+            known_hosts_path.clone(),
             None,
         )
         .await?;
@@ -245,11 +256,14 @@ async fn start_remote(
     }
 
     // Real connection wired to the forwarding handler. ForwardingHandler
-    // accepts whatever key the server presents — the trampoline above already
-    // pinned it in known_hosts.
+    // verifies the server key against known_hosts — the trampoline above
+    // already pinned it, so this should always match.
     let handler = ForwardingHandler {
-        local_target: (spec.remote_host.clone(), spec.remote_port),
+        forward_target: (spec.remote_host.clone(), spec.remote_port),
         cancel: cancel.clone(),
+        host: target.host.clone(),
+        port: target.port,
+        known_hosts_path,
     };
     let config = client::Config {
         inactivity_timeout: Some(keepalive * 4),
