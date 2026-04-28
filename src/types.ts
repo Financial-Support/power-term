@@ -107,3 +107,37 @@ export interface SnippetInput {
   content: string;
   tags: string[];
 }
+
+export type ForwardKind = 'local' | 'remote';
+
+export interface Forward {
+  id: string;
+  host_id: string;
+  name: string;
+  kind: ForwardKind;
+  bind_addr: string;
+  bind_port: number;
+  remote_host: string;
+  remote_port: number;
+  auto_start: boolean;
+  created_at: number;
+}
+
+export interface ForwardInput {
+  host_id: string;
+  name: string;
+  kind: ForwardKind;
+  bind_addr: string;
+  bind_port: number;
+  remote_host: string;
+  remote_port: number;
+  auto_start: boolean;
+}
+
+export type ForwardState = 'stopped' | 'starting' | 'running' | 'error';
+
+export interface ForwardStatus {
+  id: string;
+  state: ForwardState;
+  error: string | null;
+}
