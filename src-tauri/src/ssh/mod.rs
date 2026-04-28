@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod forward_manager;
 pub mod forwards;
 pub mod handshake;
 pub mod known_hosts;
