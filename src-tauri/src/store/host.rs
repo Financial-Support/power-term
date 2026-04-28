@@ -1,8 +1,7 @@
-use crate::store::{StoreError, schema};
-use parking_lot::Mutex;
+use crate::store::{Db, StoreError};
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -35,46 +34,28 @@ pub struct Host {
 }
 
 pub struct HostStore {
-    conn: Mutex<Connection>,
+    db: Arc<Db>,
 }
 
 impl HostStore {
-    pub fn open(path: PathBuf) -> Result<Self, StoreError> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let conn = Connection::open(&path)?;
-        schema::migrate(&conn)?;
-        Ok(Self { conn: Mutex::new(conn) })
+    pub fn new(db: Arc<Db>) -> Self {
+        Self { db }
     }
 
+    /// Convenience for tests — opens an in-memory db and returns the store.
     pub fn open_in_memory() -> Result<Self, StoreError> {
-        let conn = Connection::open_in_memory()?;
-        schema::migrate(&conn)?;
-        Ok(Self { conn: Mutex::new(conn) })
-    }
-
-    pub fn open_default_path() -> Result<Self, StoreError> {
-        let dir = dirs::config_dir().ok_or(StoreError::NoConfigDir)?.join("power-term");
-        Self::open(dir.join("hosts.db"))
+        let db = Db::open_in_memory()?;
+        Ok(Self { db })
     }
 
     pub fn list(&self) -> Result<Vec<Host>, StoreError> {
-        let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, name, hostname, port, username, group_name, tags_json, \
-                    auth_method, key_path, notes, created_at, last_used_at \
-             FROM hosts ORDER BY group_name IS NULL, group_name, name",
-        )?;
-        let rows = stmt.query_map([], row_to_host)?;
-        let mut out = Vec::new();
-        for r in rows { out.push(r?); }
-        Ok(out)
+        let conn = self.db.lock();
+        list_with(&conn)
     }
 
     pub fn create(&self, input: &HostInput) -> Result<Host, StoreError> {
         validate(input)?;
-        let conn = self.conn.lock();
+        let conn = self.db.lock();
         let id = uuid::Uuid::new_v4().to_string();
         let created_at = now_millis();
         let tags_json = serde_json::to_string(&input.tags).map_err(|e| StoreError::Serde(e.to_string()))?;
@@ -106,7 +87,7 @@ impl HostStore {
 
     pub fn update(&self, id: &str, input: &HostInput) -> Result<Host, StoreError> {
         validate(input)?;
-        let conn = self.conn.lock();
+        let conn = self.db.lock();
         let tags_json = serde_json::to_string(&input.tags).map_err(|e| StoreError::Serde(e.to_string()))?;
         let changed = conn.execute(
             "UPDATE hosts SET name=?1, hostname=?2, port=?3, username=?4, group_name=?5, \
@@ -128,7 +109,7 @@ impl HostStore {
     }
 
     pub fn delete(&self, id: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock();
+        let conn = self.db.lock();
         let changed = conn.execute("DELETE FROM hosts WHERE id=?1", params![id])?;
         if changed == 0 {
             return Err(StoreError::NotFound(id.to_string()));
@@ -137,7 +118,7 @@ impl HostStore {
     }
 
     pub fn touch(&self, id: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock();
+        let conn = self.db.lock();
         let now = now_millis();
         let changed = conn.execute("UPDATE hosts SET last_used_at=?1 WHERE id=?2", params![now, id])?;
         if changed == 0 {
@@ -145,6 +126,18 @@ impl HostStore {
         }
         Ok(())
     }
+}
+
+fn list_with(conn: &Connection) -> Result<Vec<Host>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, hostname, port, username, group_name, tags_json, \
+                auth_method, key_path, notes, created_at, last_used_at \
+         FROM hosts ORDER BY group_name IS NULL, group_name, name",
+    )?;
+    let rows = stmt.query_map([], row_to_host)?;
+    let mut out = Vec::new();
+    for r in rows { out.push(r?); }
+    Ok(out)
 }
 
 fn validate(input: &HostInput) -> Result<(), StoreError> {

@@ -4,15 +4,16 @@ use power_term::pty::PtyManager;
 use power_term::settings::SettingsStore;
 use power_term::sftp::SftpManager;
 use power_term::ssh::SshManager;
-use power_term::store::HostStore;
+use power_term::store::{Db, HostStore};
 
 fn main() {
     tracing_subscriber::fmt::init();
 
     let settings = SettingsStore::load_default_path()
         .expect("failed to initialize settings store");
-    let host_store = HostStore::open_default_path()
-        .expect("failed to initialize host store");
+    let db = Db::open_default_path()
+        .expect("failed to initialize sqlite store");
+    let host_store = HostStore::new(db.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -21,6 +22,7 @@ fn main() {
         .manage(SftpManager::new())
         .manage(settings)
         .manage(host_store)
+        .manage(db)
         .invoke_handler(tauri::generate_handler![
             power_term::commands::pty_spawn,
             power_term::commands::pty_write,

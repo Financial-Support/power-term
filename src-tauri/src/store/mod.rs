@@ -1,7 +1,9 @@
+pub mod db;
 pub mod host;
 pub mod schema;
 pub mod secrets;
 
+pub use db::Db;
 pub use host::{Host, HostInput, HostStore};
 
 #[derive(thiserror::Error, Debug)]
