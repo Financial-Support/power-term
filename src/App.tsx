@@ -29,7 +29,8 @@ import {
   ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
   sftpClose, sftpOpen, sshConnect, sshKill, sshWrite, snippetsTouch,
 } from './lib/ipc';
-import type { AuthRequest, Forward, ForwardInput, Host, Snippet, SnippetInput, SshTarget } from './types';
+import type { AuthRequest, Forward, ForwardInput, Host, LayoutKind, Snippet, SnippetInput, SshTarget } from './types';
+import { LAYOUT_SLOT_COUNTS as COUNTS } from './types';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -64,6 +65,12 @@ export function App() {
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const addTab = useSessionStore((s) => s.addTab);
   const closeTab = useSessionStore((s) => s.closeTab);
+  const layoutKind = useSessionStore((s) => s.layoutKind);
+  const layoutSlots = useSessionStore((s) => s.layoutSlots);
+  const activePaneIndex = useSessionStore((s) => s.activePaneIndex);
+  const setLayout = useSessionStore((s) => s.setLayout);
+  const setActivePane = useSessionStore((s) => s.setActivePane);
+  const assignSlot = useSessionStore((s) => s.assignSlot);
 
   const loadHosts = useHostStore((s) => s.load);
   const createHost = useHostStore((s) => s.create);
@@ -138,6 +145,18 @@ export function App() {
       addTab(ptyId, defaultLocalTitle(settings?.shell ?? null), 'local');
     } catch (e) { console.error('pty_spawn failed', e); }
   }, [addTab, settings?.shell]);
+
+  const fillNullSlots = useCallback(async (kind: LayoutKind) => {
+    setLayout(kind);
+    // After setLayout the store has new slots; read them to find nulls
+    const { layoutSlots: slots, activePaneIndex: origPane } = useSessionStore.getState();
+    const nullIndices = slots.map((s, i) => (s === null ? i : -1)).filter((i) => i >= 0);
+    for (const idx of nullIndices) {
+      useSessionStore.getState().setActivePane(idx);
+      await newLocalTab();
+    }
+    useSessionStore.getState().setActivePane(Math.min(origPane, COUNTS[kind] - 1));
+  }, [setLayout, newLocalTab]);
 
   const handleClose = useCallback(async (id: string) => {
     const tab = useSessionStore.getState().tabs.find((t) => t.id === id);
@@ -324,8 +343,6 @@ export function App() {
   const theme = useTheme();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
-  const visibleId = useMemo(() => activeTabId, [activeTabId]);
-
   return (
     <div className={`app theme-${theme}`}>
       <TitleBar sidebarOpen={sidebar.open}>
@@ -356,16 +373,37 @@ export function App() {
             }
           />
         )}
-        <main className="terminals">
-          {tabs.map((t) =>
-            t.kind === 'sftp' ? (
-              <div key={t.id} className="sftp-mount" style={{ display: t.id === visibleId ? 'flex' : 'none' }}>
-                <FileBrowser tabId={t.id} onClose={() => void handleClose(t.id)} />
+        <main className={`terminals layout-${layoutKind}`}>
+          {layoutSlots.map((tabId, i) => {
+            const tab = tabs.find((t) => t.id === tabId);
+            return (
+              <div
+                key={tabId ?? `empty-${i}`}
+                className={`pane${i === activePaneIndex ? ' pane-active' : ''}`}
+                onClick={() => setActivePane(i)}
+              >
+                {tab ? (
+                  tab.kind === 'sftp' ? (
+                    <div className="sftp-mount" style={{ width: '100%', height: '100%', display: 'flex' }}>
+                      <FileBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
+                    </div>
+                  ) : (
+                    <Terminal key={tab.id} tab={tab} visible={true} />
+                  )
+                ) : (
+                  <div className="pane-empty">
+                    <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); void newLocalTab(); }}>
+                      +
+                    </button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <Terminal key={t.id} tab={t} visible={t.id === visibleId} />
-            ),
-          )}
+            );
+          })}
+          {/* Keep non-slot tabs mounted so their PTYs stay alive */}
+          {tabs
+            .filter((t) => !layoutSlots.includes(t.id) && t.kind !== 'sftp')
+            .map((t) => <Terminal key={t.id} tab={t} visible={false} />)}
         </main>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onSshConnect={onPaletteSshConnect} />
