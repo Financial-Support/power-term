@@ -1,6 +1,6 @@
 use crate::store::Db;
 use crate::sync::client::{ClientError, SupabaseClient};
-use crate::sync::encrypt::{decrypt, EncryptError};
+use crate::sync::encrypt::decrypt;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
