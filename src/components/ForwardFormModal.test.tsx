@@ -54,6 +54,18 @@ describe('ForwardFormModal', () => {
     expect(arg.bind_port).toBe(5432);
   });
 
+  it('edit mode Save sends pre-filled values to onSave', async () => {
+    const onSave = vi.fn();
+    render(<ForwardFormModal mode="edit" forward={sample()} onSave={onSave} onCancel={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const arg = onSave.mock.calls[0][0];
+    expect(arg.host_id).toBe('h1');
+    expect(arg.bind_port).toBe(5432);
+    expect(arg.remote_port).toBe(5432);
+    expect(arg.name).toBe('tunnel');
+  });
+
   it('Save disabled until required fields filled', () => {
     render(<ForwardFormModal mode="create" onSave={vi.fn()} onCancel={vi.fn()} />);
     expect((screen.getByRole('button', { name: /save/i }) as HTMLButtonElement).disabled).toBe(true);

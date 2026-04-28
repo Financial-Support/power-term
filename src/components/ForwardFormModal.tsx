@@ -45,7 +45,7 @@ export function ForwardFormModal({ mode, forward, onSave, onCancel }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-label="forward form">
+    <div className="modal-backdrop" role="dialog" aria-label="forward form" aria-modal="true">
       <div className="modal modal-form">
         <h2>{mode === 'create' ? 'Add forward' : 'Edit forward'}</h2>
         <div className="form-grid">
@@ -72,8 +72,8 @@ export function ForwardFormModal({ mode, forward, onSave, onCancel }: Props) {
           <label htmlFor="ffm-bind-addr">Bind address</label>
           <input id="ffm-bind-addr" value={bindAddr} onChange={(e) => setBindAddr(e.target.value)} />
           <label htmlFor="ffm-bind-port">Bind port</label>
-          <input id="ffm-bind-port" type="number" min={1} max={65535} value={bindPort || ''}
-            onChange={(e) => setBindPort(Number(e.target.value))} />
+          <input id="ffm-bind-port" type="number" min={1} max={65535} step={1} value={bindPort || ''}
+            onChange={(e) => setBindPort(parseInt(e.target.value, 10) || 0)} />
         </div>
 
         <p className="forward-section-title">{kind === 'local' ? 'Forward to' : 'Forward back to'}</p>
@@ -81,8 +81,8 @@ export function ForwardFormModal({ mode, forward, onSave, onCancel }: Props) {
           <label htmlFor="ffm-remote-host">Remote host</label>
           <input id="ffm-remote-host" value={remoteHost} onChange={(e) => setRemoteHost(e.target.value)} />
           <label htmlFor="ffm-remote-port">Remote port</label>
-          <input id="ffm-remote-port" type="number" min={1} max={65535} value={remotePort || ''}
-            onChange={(e) => setRemotePort(Number(e.target.value))} />
+          <input id="ffm-remote-port" type="number" min={1} max={65535} step={1} value={remotePort || ''}
+            onChange={(e) => setRemotePort(parseInt(e.target.value, 10) || 0)} />
         </div>
 
         <label className="checkbox">
