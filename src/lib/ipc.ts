@@ -184,3 +184,32 @@ export async function snippetsDelete(id: string): Promise<void> {
 export async function snippetsTouch(id: string): Promise<void> {
   await invoke('snippets_touch', { id });
 }
+
+// ─── Port Forwarding ────────────────────────────────────────────────────────
+
+import type { Forward, ForwardInput, ForwardStatus } from '../types';
+
+export async function forwardsList(): Promise<Forward[]> {
+  return invoke<Forward[]>('forwards_list');
+}
+export async function forwardsCreate(input: ForwardInput): Promise<Forward> {
+  return invoke<Forward>('forwards_create', { input });
+}
+export async function forwardsUpdate(id: string, input: ForwardInput): Promise<Forward> {
+  return invoke<Forward>('forwards_update', { id, input });
+}
+export async function forwardsDelete(id: string): Promise<void> {
+  await invoke('forwards_delete', { id });
+}
+export async function forwardStart(id: string): Promise<ForwardStatus> {
+  return invoke<ForwardStatus>('forward_start', { id });
+}
+export async function forwardStop(id: string): Promise<ForwardStatus> {
+  return invoke<ForwardStatus>('forward_stop', { id });
+}
+export async function forwardStatus(id: string): Promise<ForwardStatus> {
+  return invoke<ForwardStatus>('forward_status', { id });
+}
+export async function forwardsStatusAll(): Promise<ForwardStatus[]> {
+  return invoke<ForwardStatus[]>('forwards_status_all');
+}
