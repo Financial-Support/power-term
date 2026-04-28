@@ -92,3 +92,18 @@ export type SftpOpenResult =
   | { status: 'needs_auth'; tried: string[]; available: string[] };
 
 export type SortKey = 'name' | 'size' | 'modified';
+
+export interface Snippet {
+  id: string;
+  name: string;
+  content: string;
+  tags: string[];
+  created_at: number;
+  last_used_at: number | null;
+}
+
+export interface SnippetInput {
+  name: string;
+  content: string;
+  tags: string[];
+}
