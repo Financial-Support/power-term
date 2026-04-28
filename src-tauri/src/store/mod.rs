@@ -1,10 +1,12 @@
 pub mod db;
+pub mod forwards;
 pub mod host;
 pub mod schema;
 pub mod secrets;
 pub mod snippets;
 
 pub use db::Db;
+pub use forwards::{Forward, ForwardInput, ForwardStore};
 pub use host::{Host, HostInput, HostStore};
 pub use snippets::{Snippet, SnippetInput, SnippetStore};
 
