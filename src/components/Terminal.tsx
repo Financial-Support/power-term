@@ -68,22 +68,29 @@ export function Terminal({ tab, visible }: Props) {
     });
 
     term.open(containerRef.current);
-    fit.fit();
 
     xtermRef.current = term;
     fitRef.current = fit;
 
-    // Initial fit can race the WebView's first layout pass for a freshly
-    // mounted tab — without this rAF re-fit, opening an SSH/SFTP tab via
-    // addTab() can leave the xterm canvas sized 0×0 until the user toggles
-    // tab visibility. Re-fit on the next frame once layout has settled.
-    const initialFitFrame = requestAnimationFrame(() => {
-      fitRef.current?.fit();
-      xtermRef.current?.refresh(0, (xtermRef.current.rows ?? 1) - 1);
-      // Focus on initial mount when the tab is already visible (e.g., a fresh
-      // SSH/SFTP connect lands here as the active tab).
-      if (visible) xtermRef.current?.focus();
-    });
+    // The WebView frequently reports the container as 0×0 on the first
+    // useEffect after a freshly-added tab — calling fit() at 0×0 locks
+    // xterm at 0 cols × 0 rows AND fires onResize(0, 0) which corrupts
+    // the remote shell. Defer all fit() calls behind a "container has
+    // real dimensions" check, retried every animation frame until it
+    // actually has size.
+    let initialFitFrame = 0;
+    const tryInitialFit = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      if (container.clientWidth > 0 && container.clientHeight > 0) {
+        fitRef.current?.fit();
+        xtermRef.current?.refresh(0, (xtermRef.current.rows ?? 1) - 1);
+        if (visible) xtermRef.current?.focus();
+        return; // ResizeObserver below will pick up any later resizes.
+      }
+      initialFitFrame = requestAnimationFrame(tryInitialFit);
+    };
+    initialFitFrame = requestAnimationFrame(tryInitialFit);
 
     let unsubOutput: (() => void) | null = null;
     let unsubExit: (() => void) | null = null;
@@ -103,11 +110,21 @@ export function Terminal({ tab, visible }: Props) {
       else void ptyWrite(tab.ptyId, data);
     });
     const onResize = term.onResize(({ cols, rows }) => {
+      // Drop bogus 0×0 resizes that can leak through during initial
+      // mount before the container has dimensions.
+      if (cols < 1 || rows < 1) return;
       if (tab.kind === 'ssh') void sshResize(tab.ptyId, cols, rows);
       else void ptyResize(tab.ptyId, cols, rows);
     });
 
-    const ro = new ResizeObserver(() => fit.fit());
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      // Only fit when the container actually has dimensions — prevents the
+      // 0×0 feedback loop when a tab is being hidden via display:none.
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) fitRef.current?.fit();
+    });
     ro.observe(containerRef.current);
 
     return () => {
@@ -124,16 +141,20 @@ export function Terminal({ tab, visible }: Props) {
   }, [tab.ptyId, settings, markExit]);
 
   useEffect(() => {
-    if (visible) {
-      requestAnimationFrame(() => {
+    if (!visible) return;
+    requestAnimationFrame(() => {
+      const container = containerRef.current;
+      // Only fit when the container actually has dimensions; otherwise
+      // fit() locks xterm at 0×0 and dispatches a bogus resize event.
+      if (container && container.clientWidth > 0 && container.clientHeight > 0) {
         fitRef.current?.fit();
-        // Auto-focus the xterm so the user can type immediately on tab switch.
-        // Without this, switching tabs leaves focus on the previously-focused
-        // element (typically the TabBar button) and the user has to click
-        // inside the terminal area before typing reaches the shell.
-        xtermRef.current?.focus();
-      });
-    }
+      }
+      // Auto-focus the xterm so the user can type immediately on tab switch.
+      // Without this, switching tabs leaves focus on the previously-focused
+      // element (typically the TabBar button) and the user has to click
+      // inside the terminal area before typing reaches the shell.
+      xtermRef.current?.focus();
+    });
   }, [visible]);
 
   // React to runtime theme changes (auto-mode following macOS appearance, or
