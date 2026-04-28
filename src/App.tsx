@@ -354,8 +354,10 @@ export function App() {
   );
 }
 
-function defaultLocalTitle(shell: string | null): string {
-  if (!shell) return 'shell';
-  const base = shell.split('/').pop() ?? 'shell';
-  return base;
+function defaultLocalTitle(_shell: string | null): string {
+  // Fixed label so all local PTY tabs read "local"; the shell binary
+  // (zsh, bash, fish, …) is implementation detail. SSH tabs already
+  // show user@host or the saved host name as their title, so "local"
+  // distinguishes the local-PTY tabs at a glance.
+  return 'local';
 }

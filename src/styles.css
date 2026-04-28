@@ -2,24 +2,37 @@
 html, body, #root { height: 100%; margin: 0; }
 
 .app { display: flex; flex-direction: column; height: 100%; }
-.app.theme-dark { --bg: #0f1115; --fg: #e6e6e6; --tab-bg: #1a1d24; --tab-active: #0f1115; --border: #2a2e36; }
-.app.theme-light { --bg: #ffffff; --fg: #1a1a1a; --tab-bg: #efefef; --tab-active: #ffffff; --border: #d6d6d6; }
+.app.theme-dark { --bg: #0f1115; --fg: #e6e6e6; --tab-bg: #1a1d24; --tab-active: #2a3142; --border: #2a2e36; }
+.app.theme-light { --bg: #ffffff; --fg: #1a1a1a; --tab-bg: #e0e3e8; --tab-active: #ffffff; --border: #c2c6cc; }
 .app { background: var(--bg); color: var(--fg); }
 
 .titlebar {
-  display: flex; align-items: stretch; height: 36px;
+  display: flex; align-items: stretch; height: 30px;
   border-bottom: 1px solid var(--border); user-select: none;
 }
 .titlebar-drag-left { width: 78px; }
 .titlebar-drag-right { flex: 0 0 12px; }
 
-.tabbar { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; }
+.tabbar { display: flex; align-items: stretch; gap: 2px; flex: 1; min-width: 0; padding: 3px 0 0 0; }
 .tab {
-  display: flex; align-items: center; padding: 6px 8px 6px 12px;
+  display: flex; align-items: center; padding: 0 14px;
   background: var(--tab-bg); border: 1px solid transparent; border-bottom: none;
-  border-radius: 6px 6px 0 0; cursor: default; min-width: 80px; max-width: 200px;
+  border-radius: 6px 6px 0 0; cursor: default;
+  min-width: 130px; max-width: 240px;
+  position: relative;
 }
-.tab.active { background: var(--tab-active); border-color: var(--border); }
+.tab.active {
+  background: var(--tab-active);
+  border-color: var(--border);
+}
+/* Bright accent strip on the active tab — a clear, instant signal that this
+   is the focused tab, even when the bg shades are close together. */
+.tab.active::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: #2563eb;
+  border-radius: 2px 2px 0 0;
+}
 .tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .tab input { font: inherit; font-size: 12px; background: transparent; border: 0; outline: 0; color: var(--fg); width: 100%; }
 .tab-close { background: transparent; border: 0; color: var(--fg); opacity: 0.6; cursor: pointer; padding: 0 4px; }
