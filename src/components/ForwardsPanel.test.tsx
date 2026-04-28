@@ -86,4 +86,26 @@ describe('ForwardsPanel', () => {
     await userEvent.click(screen.getByLabelText(/delete forward db/i));
     expect(onDelete.mock.calls[0][0].id).toBe('a');
   });
+
+  it('clicking ⏸ on a starting forward calls store.stop', async () => {
+    useForwardStore.setState({
+      forwards: [f({ id: 'a', name: 'db' })],
+      statuses: { a: status('a', 'starting') },
+    });
+    const stopSpy = vi.spyOn(useForwardStore.getState(), 'stop').mockResolvedValue();
+    render(<ForwardsPanel onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText(/stop forward db/i));
+    expect(stopSpy).toHaveBeenCalledWith('a');
+    stopSpy.mockRestore();
+  });
+
+  it('toggle button collapses and expands the list', async () => {
+    useForwardStore.setState({ forwards: [f({ id: 'a', name: 'db' })] });
+    render(<ForwardsPanel onAdd={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.getByText('db')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /toggle forwards/i }));
+    expect(screen.queryByText('db')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /toggle forwards/i }));
+    expect(screen.getByText('db')).toBeInTheDocument();
+  });
 });

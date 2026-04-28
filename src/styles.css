@@ -397,7 +397,8 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .forward-toggle:hover { opacity: 1; }
 .forward-actions { display: none; gap: 2px; }
-.forward-row:hover .forward-actions { display: flex; }
+.forward-row:hover .forward-actions,
+.forward-row:focus-within .forward-actions { display: flex; }
 .forward-actions button {
   background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
   color: var(--fg); opacity: 0.6;
