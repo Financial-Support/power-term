@@ -233,6 +233,15 @@ export function App() {
         </main>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onSshConnect={onPaletteSshConnect} />
+      {flow.phase === 'connecting' && (
+        <div className="connecting-overlay" role="status" aria-live="polite">
+          <div className="connecting-card">
+            <div className="spinner" />
+            <div className="label">{flow.targetKind === 'sftp' ? 'Opening SFTP…' : 'Connecting…'}</div>
+            <div className="target">{flow.target.user}@{flow.target.host}{flow.target.port !== 22 ? `:${flow.target.port}` : ''}</div>
+          </div>
+        </div>
+      )}
       {flow.phase === 'fingerprint' && (
         <HostFingerprintPrompt
           host={flow.target.host}

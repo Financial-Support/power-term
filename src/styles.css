@@ -174,6 +174,38 @@ html, body, #root { height: 100%; margin: 0; }
 
 .modal-actions button.danger { background: #dc2626; color: white; border-color: #dc2626; }
 
+/* Key path input + Browse button row inside HostFormModal. */
+.modal-form .key-path-row { display: flex; gap: 6px; align-items: center; }
+.modal-form .key-path-row input { flex: 1; }
+.modal-form .key-path-browse {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--tab-bg); color: var(--fg); cursor: pointer;
+  font: inherit; font-size: 12px; white-space: nowrap;
+}
+.modal-form .key-path-browse:hover { background: var(--tab-active); }
+
+/* Connecting overlay shown while sshConnect/sftpOpen is awaiting. */
+.connecting-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 90;
+}
+.connecting-card {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 24px; min-width: 280px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.connecting-card .spinner {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2.5px solid var(--border); border-top-color: #2563eb;
+  animation: ptm-spin 0.9s linear infinite;
+}
+.connecting-card .target { font-size: 13px; opacity: 0.85; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.connecting-card .label { font-size: 12px; opacity: 0.6; }
+@keyframes ptm-spin { to { transform: rotate(360deg); } }
+
 .sftp-mount { width: 100%; height: 100%; display: flex; }
 .file-browser {
   display: flex; flex-direction: column; flex: 1; min-height: 0;

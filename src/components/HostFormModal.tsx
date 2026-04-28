@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { homeDir } from '@tauri-apps/api/path';
 import type { AuthMethodKind, Host, HostInput } from '../types';
 
 export interface HostFormSaveArgs {
@@ -35,6 +37,35 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
     setSecretDirty(false);
     setSaveSecretDirty(false);
   }, [authMethod]);
+
+  // Esc closes the modal.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onCancel]);
+
+  const browseKeyPath = async () => {
+    let defaultPath: string | undefined;
+    try {
+      const home = await homeDir();
+      defaultPath = `${home.replace(/\/$/, '')}/.ssh`;
+    } catch { /* ignore — dialog will fall back to its default */ }
+    const picked = await openDialog({
+      multiple: false,
+      directory: false,
+      title: 'Select private key',
+      defaultPath,
+    });
+    if (typeof picked === 'string' && picked.length > 0) {
+      setKeyPath(picked);
+    }
+  };
 
   const validatePort = (p: number) => Number.isInteger(p) && p >= 1 && p <= 65535;
 
@@ -115,7 +146,10 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
         {authMethod === 'key' && (
           <div className="auth-fields">
             <label htmlFor="hfm-key-path">Key path</label>
-            <input id="hfm-key-path" value={keyPath} onChange={(e) => setKeyPath(e.target.value)} placeholder="/Users/you/.ssh/id_ed25519" />
+            <div className="key-path-row">
+              <input id="hfm-key-path" value={keyPath} onChange={(e) => setKeyPath(e.target.value)} placeholder="/Users/you/.ssh/id_ed25519" />
+              <button type="button" className="key-path-browse" onClick={() => void browseKeyPath()}>Browse…</button>
+            </div>
 
             <label htmlFor="hfm-passphrase">Passphrase (optional)</label>
             <input id="hfm-passphrase" type="password" value={secret} onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
