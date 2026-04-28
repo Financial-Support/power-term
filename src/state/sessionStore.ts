@@ -91,7 +91,7 @@ export const useSessionStore = create<State>((set, get) => ({
 
   setActivePane: (index) => {
     set((s) => {
-      const clamped = Math.min(index, COUNTS[s.layoutKind] - 1);
+      const clamped = Math.max(0, Math.min(index, COUNTS[s.layoutKind] - 1));
       const activeTabId = s.layoutSlots[clamped] ?? null;
       return { activePaneIndex: clamped, activeTabId };
     });
@@ -99,6 +99,7 @@ export const useSessionStore = create<State>((set, get) => ({
 
   assignSlot: (index, tabId) => {
     set((s) => {
+      if (index < 0 || index >= COUNTS[s.layoutKind]) return s;
       const slots = [...s.layoutSlots];
       slots[index] = tabId;
       const activeTabId = slots[s.activePaneIndex] ?? null;
