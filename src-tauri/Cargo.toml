@@ -39,9 +39,14 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 keyring = { version = "3", features = ["apple-native"] }
 russh-sftp = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-deep-link = "2"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+aes-gcm = "0.10"
+bs58 = "0.5"
 
 [dev-dependencies]
 tempfile = "3"
+mockito = "1"
 
 [features]
 default = ["custom-protocol"]

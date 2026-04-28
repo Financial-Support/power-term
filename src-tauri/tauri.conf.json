@@ -33,5 +33,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns"
     ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["power-term"]
+      }
+    }
   }
 }
