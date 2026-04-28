@@ -9,6 +9,7 @@ export interface Settings {
   scrollback_lines: number;
   ssh_connect_timeout_secs: number;
   ssh_keepalive_interval_secs: number;
+  terminal_theme: string;
 }
 
 export type SettingsPatch = Partial<Omit<Settings, 'shell'>> & { shell?: string | null };
@@ -22,6 +23,16 @@ export interface Tab {
   kind: TabKind;
   exitCode?: number | null;
 }
+
+export type LayoutKind = 'solo' | '2col' | '2row' | '3col' | '2x2';
+
+export const LAYOUT_SLOT_COUNTS: Record<LayoutKind, number> = {
+  solo: 1,
+  '2col': 2,
+  '2row': 2,
+  '3col': 3,
+  '2x2': 4,
+};
 
 export interface PtyExitPayload {
   code: number | null;
