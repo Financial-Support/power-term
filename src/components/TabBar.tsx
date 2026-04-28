@@ -43,7 +43,7 @@ export function TabBar({ onNew, onClose }: Props) {
                 className="tab-title"
                 onDoubleClick={() => { setDraft(tab.title); setEditingId(tab.id); }}
               >
-                {tab.title}
+                {tab.kind === 'sftp' ? `SFTP - ${tab.title}` : tab.title}
               </span>
             )}
             <button
