@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSessionStore } from '../state/sessionStore';
+import { SyncStatus } from './SyncStatus';
 import type { LayoutKind } from '../types';
 
 interface Props {
   children: ReactNode;
   sidebarOpen?: boolean;
   onLayoutChange?: (kind: LayoutKind) => void;
+  onOpenSyncSettings?: () => void;
 }
 
 const LAYOUT_ICONS: { kind: LayoutKind; label: string }[] = [
@@ -18,7 +20,7 @@ const LAYOUT_ICONS: { kind: LayoutKind; label: string }[] = [
   { kind: '2x2',   label: '2×2' },
 ];
 
-export function TitleBar({ children, sidebarOpen, onLayoutChange }: Props) {
+export function TitleBar({ children, sidebarOpen, onLayoutChange, onOpenSyncSettings }: Props) {
   const layoutKind = useSessionStore((s) => s.layoutKind);
   const [pickerOpen, setPickerOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -59,6 +61,7 @@ export function TitleBar({ children, sidebarOpen, onLayoutChange }: Props) {
       <div className="titlebar-drag-left" />
       {children}
       <div className="titlebar-drag-right" />
+      <SyncStatus onErrorClick={onOpenSyncSettings} />
       <div className="layout-picker-wrap" data-no-drag ref={wrapRef}>
         <button
           type="button"

@@ -5,6 +5,10 @@ import { SettingsModal } from './SettingsModal';
 import { useSettingsStore } from '../state/settingsStore';
 import type { Settings } from '../types';
 
+vi.mock('./SyncTab', () => ({
+  SyncTab: () => <div data-testid="sync-tab-mock">Sync Tab</div>,
+}));
+
 const defaults: Settings = {
   shell: null, font_family: 'SF Mono', font_size: 14, theme: 'auto',
   cursor_blink: true, scrollback_lines: 10000,
@@ -72,5 +76,12 @@ describe('SettingsModal', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     await userEvent.click(screen.getByRole('tab', { name: /terminal/i }));
     expect(screen.getByLabelText(/scrollback/i)).toBeInTheDocument();
+  });
+
+  it('renders Sync as the third tab', () => {
+    render(<SettingsModal onClose={() => {}} />);
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs).toHaveLength(3);
+    expect(tabs[2]).toHaveTextContent('Sync');
   });
 });

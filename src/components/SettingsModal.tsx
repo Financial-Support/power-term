@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../state/settingsStore';
 import { THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from '../themes';
+import { SyncTab } from './SyncTab';
 import type { SettingsPatch } from '../types';
 
 interface Props {
   onClose: () => void;
+  initialTab?: Tab;
 }
 
-type Tab = 'appearance' | 'terminal';
+type Tab = 'appearance' | 'terminal' | 'sync';
 
-export function SettingsModal({ onClose }: Props) {
+export function SettingsModal({ onClose, initialTab }: Props) {
   const settings = useSettingsStore((s) => s.settings);
   const updateSettings = useSettingsStore((s) => s.update);
 
-  const [activeTab, setActiveTab] = useState<Tab>('appearance');
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'appearance');
   const [terminalTheme, setTerminalTheme] = useState(settings?.terminal_theme ?? 'default');
   const [fontFamily, setFontFamily] = useState(settings?.font_family ?? 'SF Mono');
   const [fontSize, setFontSize] = useState(settings?.font_size ?? 14);
@@ -69,6 +71,7 @@ export function SettingsModal({ onClose }: Props) {
             aria-selected={activeTab === 'terminal'}
             onClick={() => setActiveTab('terminal')}
           >Terminal</button>
+          <button role="tab" aria-selected={activeTab === 'sync'} onClick={() => setActiveTab('sync')}>Sync</button>
         </div>
 
         {activeTab === 'appearance' && (
@@ -127,17 +130,25 @@ export function SettingsModal({ onClose }: Props) {
           </div>
         )}
 
+        {activeTab === 'sync' && (
+          <div className="sync-tab-panel">
+            <SyncTab />
+          </div>
+        )}
+
         {localError && <p className="form-error">{localError}</p>}
 
-        <div className="modal-actions">
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            className="primary"
-            onClick={() => void handleSave()}
-            disabled={!valid || saving}
-          >Save</button>
-        </div>
+        {activeTab !== 'sync' && (
+          <div className="modal-actions">
+            <button type="button" onClick={onClose}>Cancel</button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void handleSave()}
+              disabled={!valid || saving}
+            >Save</button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ import { useSftpStore } from './state/sftpStore';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useTheme } from './hooks/useTheme';
 import { useSidebarToggle } from './hooks/useSidebarToggle';
+import { useSyncStore } from './state/syncStore';
 import {
   ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
   sftpClose, sftpOpen, sshConnect, sshKill, sshWrite, snippetsTouch,
@@ -106,7 +107,17 @@ export function App() {
   const [forwardForm, setForwardForm] = useState<ForwardFormMode>({ kind: 'closed' });
   const [confirmDeleteForward, setConfirmDeleteForward] = useState<Forward | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'appearance' | 'terminal' | 'sync'>('appearance');
   const flowToken = useRef(0);
+
+  useEffect(() => {
+    const { fetchStatus, pull } = useSyncStore.getState();
+    fetchStatus().then(() => {
+      if (useSyncStore.getState().syncState?.user) {
+        void pull();
+      }
+    });
+  }, []);
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);
   useEffect(() => { void loadHosts(); }, [loadHosts]);
@@ -380,7 +391,7 @@ export function App() {
 
   return (
     <div className={`app theme-${theme}`}>
-      <TitleBar sidebarOpen={sidebar.open} onLayoutChange={(kind) => void fillNullSlots(kind)}>
+      <TitleBar sidebarOpen={sidebar.open} onLayoutChange={(kind) => void fillNullSlots(kind)} onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}>
         <TabBar onNew={() => void newLocalTab()} onClose={(id) => void handleClose(id)} />
       </TitleBar>
       <div className="body">
@@ -526,7 +537,7 @@ export function App() {
           onCancel={() => setConfirmDeleteForward(null)}
         />
       )}
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} initialTab={settingsInitialTab} />}
     </div>
   );
 }
