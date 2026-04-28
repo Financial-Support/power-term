@@ -345,6 +345,7 @@ export function App() {
           ? (activePaneIndex + 1) % count
           : (activePaneIndex - 1 + count) % count;
       } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (layoutKind !== '2row' && layoutKind !== '2x2') return;
         e.preventDefault();
         if (layoutKind === '2row') {
           next = e.key === 'ArrowDown'
@@ -426,7 +427,7 @@ export function App() {
                   )
                 ) : (
                   <div className="pane-empty">
-                    <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); void newLocalTab(); }}>
+                    <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
                       +
                     </button>
                   </div>

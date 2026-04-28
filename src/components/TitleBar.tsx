@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSessionStore } from '../state/sessionStore';
@@ -21,6 +21,25 @@ const LAYOUT_ICONS: { kind: LayoutKind; label: string }[] = [
 export function TitleBar({ children, sidebarOpen, onLayoutChange }: Props) {
   const layoutKind = useSessionStore((s) => s.layoutKind);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pickerOpen]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -40,7 +59,7 @@ export function TitleBar({ children, sidebarOpen, onLayoutChange }: Props) {
       <div className="titlebar-drag-left" />
       {children}
       <div className="titlebar-drag-right" />
-      <div className="layout-picker-wrap" data-no-drag>
+      <div className="layout-picker-wrap" data-no-drag ref={wrapRef}>
         <button
           type="button"
           className="layout-picker-btn"
