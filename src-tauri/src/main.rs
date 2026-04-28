@@ -2,6 +2,7 @@
 
 use power_term::pty::PtyManager;
 use power_term::settings::SettingsStore;
+use power_term::sftp::SftpManager;
 use power_term::ssh::SshManager;
 use power_term::store::HostStore;
 
@@ -14,8 +15,10 @@ fn main() {
         .expect("failed to initialize host store");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(PtyManager::new())
         .manage(SshManager::new())
+        .manage(SftpManager::new())
         .manage(settings)
         .manage(host_store)
         .invoke_handler(tauri::generate_handler![
@@ -38,6 +41,16 @@ fn main() {
             power_term::commands::secret_set,
             power_term::commands::secret_get,
             power_term::commands::secret_delete,
+            power_term::commands::sftp_open,
+            power_term::commands::sftp_close,
+            power_term::commands::sftp_list,
+            power_term::commands::sftp_canonicalize,
+            power_term::commands::sftp_mkdir,
+            power_term::commands::sftp_remove_file,
+            power_term::commands::sftp_remove_dir,
+            power_term::commands::sftp_rename,
+            power_term::commands::sftp_download,
+            power_term::commands::sftp_upload,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

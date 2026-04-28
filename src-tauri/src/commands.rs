@@ -268,3 +268,141 @@ pub fn secret_get(host_id: String) -> Result<Option<String>, String> {
 pub fn secret_delete(host_id: String) -> Result<(), String> {
     store::secrets::delete(&host_id).map_err(|e| format!("{e:?}"))
 }
+
+use crate::sftp::session::{SftpEntry, SftpTarget};
+use crate::sftp::{SftpError, SftpManager};
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum SftpOpenResult {
+    Connected { id: String },
+    NeedsFingerprint { fingerprint: String, host: String, key_type: String },
+    FingerprintMismatch { fingerprint: String, expected: String, host: String },
+    NeedsAuth { tried: Vec<String>, available: Vec<String> },
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn sftp_open(
+    manager: tauri::State<'_, SftpManager>,
+    settings: tauri::State<'_, crate::settings::SettingsStore>,
+    host: String,
+    port: u16,
+    user: String,
+    auth: AuthRequest,
+    accept_fingerprint: Option<String>,
+) -> Result<SftpOpenResult, String> {
+    let s = settings.get();
+    let connect_timeout = Duration::from_secs(s.ssh_connect_timeout_secs as u64);
+    let keepalive = Duration::from_secs(s.ssh_keepalive_interval_secs as u64);
+    let target = SftpTarget { host, port, user };
+    let tried_tag = match &auth {
+        AuthRequest::Agent => "agent",
+        AuthRequest::Password { .. } => "password",
+        AuthRequest::Key { .. } => "publickey",
+    }.to_string();
+
+    match manager.open(target, auth.into(), connect_timeout, keepalive, accept_fingerprint).await {
+        Ok(id) => Ok(SftpOpenResult::Connected { id }),
+        Err(SftpError::UnknownFingerprint { fingerprint, host, key_type }) =>
+            Ok(SftpOpenResult::NeedsFingerprint { fingerprint, host, key_type }),
+        Err(SftpError::FingerprintMismatch { fingerprint, expected, host }) =>
+            Ok(SftpOpenResult::FingerprintMismatch { fingerprint, expected, host }),
+        Err(SftpError::Auth) => Ok(SftpOpenResult::NeedsAuth {
+            tried: vec![tried_tag],
+            available: vec!["agent".into(), "publickey".into(), "password".into()],
+        }),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn sftp_close(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+) -> Result<(), String> {
+    manager.close(&sftp_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_list(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+    path: String,
+) -> Result<Vec<SftpEntry>, String> {
+    let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
+    s.list(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_canonicalize(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+    path: String,
+) -> Result<String, String> {
+    let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
+    s.canonicalize(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_mkdir(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+    path: String,
+) -> Result<(), String> {
+    let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
+    s.mkdir(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_remove_file(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+    path: String,
+) -> Result<(), String> {
+    let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
+    s.remove_file(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_remove_dir(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+    path: String,
+) -> Result<(), String> {
+    let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
+    s.remove_dir(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_rename(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+    from: String,
+    to: String,
+) -> Result<(), String> {
+    let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
+    s.rename(&from, &to).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_download(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+    remote: String,
+    local: String,
+) -> Result<u64, String> {
+    let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
+    s.download(&remote, std::path::Path::new(&local)).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn sftp_upload(
+    manager: tauri::State<'_, SftpManager>,
+    sftp_id: String,
+    local: String,
+    remote: String,
+) -> Result<u64, String> {
+    let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
+    s.upload(std::path::Path::new(&local), &remote).await.map_err(|e| e.to_string())
+}
