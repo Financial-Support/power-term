@@ -14,8 +14,6 @@ pub enum SftpError {
     Handshake(String),
     #[error("authentication failed")]
     Auth,
-    #[error("authentication required")]
-    NeedsAuth { available: Vec<String> },
     #[error("host fingerprint unknown")]
     UnknownFingerprint { fingerprint: String, host: String, key_type: String },
     #[error("host fingerprint mismatch")]
@@ -28,8 +26,6 @@ pub enum SftpError {
     Io(#[from] std::io::Error),
     #[error("unknown sftp id: {0}")]
     Unknown(String),
-    #[error("disconnected")]
-    Disconnected,
     #[error("any: {0}")]
     Any(String),
 }

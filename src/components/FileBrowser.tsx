@@ -16,6 +16,7 @@ export function FileBrowser({ tabId }: Props) {
   const reload = useSftpStore((s) => s.reload);
   const toggleSort = useSftpStore((s) => s.toggleSort);
   const toggleHidden = useSftpStore((s) => s.toggleHidden);
+  const setError = useSftpStore((s) => s.setError);
   const [pathDraft, setPathDraft] = useState(tab?.cwd ?? '');
   const [mkdirOpen, setMkdirOpen] = useState(false);
   const [mkdirDraft, setMkdirDraft] = useState('');
@@ -66,11 +67,19 @@ export function FileBrowser({ tabId }: Props) {
     }
   };
 
+  // Surface a per-op failure into the existing tab.error banner so the user sees
+  // why a delete/rename/upload/download silently "didn't happen". Spec §9.
+  const reportOpError = (verb: string, err: unknown) => {
+    console.warn(`${verb} failed`, err);
+    setError(tabId, `${verb} failed: ${String(err)}`);
+  };
+
   const submitMkdir = async () => {
     const name = mkdirDraft.trim();
     if (!name) { setMkdirOpen(false); return; }
+    setError(tabId, null);
     try { await sftpMkdir(tab.sftpId, joinPath(tab.cwd, name)); }
-    catch (err) { console.warn('mkdir failed', err); }
+    catch (err) { reportOpError('mkdir', err); }
     setMkdirDraft('');
     setMkdirOpen(false);
     void reload(tabId);
@@ -79,52 +88,64 @@ export function FileBrowser({ tabId }: Props) {
   const onDelete = async (entry: SftpEntry) => {
     const fullPath = joinPath(tab.cwd, entry.name);
     if (!confirm(`Delete ${entry.kind} "${entry.name}"?`)) return;
+    setError(tabId, null);
     try {
       if (entry.kind === 'dir') await sftpRemoveDir(tab.sftpId, fullPath);
       else await sftpRemoveFile(tab.sftpId, fullPath);
-    } catch (err) { console.warn('delete failed', err); }
+    } catch (err) { reportOpError('delete', err); }
     void reload(tabId);
   };
 
   const onRename = async (entry: SftpEntry) => {
     const next = prompt(`Rename "${entry.name}" to:`, entry.name);
     if (!next || next === entry.name) return;
+    setError(tabId, null);
     try { await sftpRename(tab.sftpId, joinPath(tab.cwd, entry.name), joinPath(tab.cwd, next)); }
-    catch (err) { console.warn('rename failed', err); }
+    catch (err) { reportOpError('rename', err); }
     void reload(tabId);
   };
 
   const onDownload = async (entry: SftpEntry) => {
     const local = await pickLocalSavePath(entry.name);
     if (!local) return;
+    setError(tabId, null);
     try {
       await sftpDownload(tab.sftpId, joinPath(tab.cwd, entry.name), local);
-    } catch (err) { console.warn('download failed', err); }
+    } catch (err) { reportOpError('download', err); }
   };
 
   const onUpload = async () => {
     const local = await pickLocalFile();
     if (!local) return;
     const base = local.split('/').pop() ?? 'upload';
+    // Spec §9: confirm before overwriting an existing remote file. The current
+    // listing is the source of truth; if the entry is stale, the SFTP server's
+    // overwrite is still TRUNCATE — we accept that race for MVP.
+    const clash = tab.entries.find((e) => e.name === base);
+    if (clash) {
+      const ok = confirm(`File "${base}" already exists at ${tab.cwd}. Overwrite?`);
+      if (!ok) return;
+    }
+    setError(tabId, null);
     try {
       await sftpUpload(tab.sftpId, local, joinPath(tab.cwd, base));
-    } catch (err) { console.warn('upload failed', err); }
+    } catch (err) { reportOpError('upload', err); }
     void reload(tabId);
   };
 
   return (
     <div className="file-browser">
       <div className="fb-toolbar">
-        <button type="button" aria-label="parent dir" className="fb-up" onClick={cdParent}>◀</button>
+        <button type="button" aria-label="parent dir" className="fb-up" disabled={tab.loading} onClick={cdParent}>◀</button>
         <input
           className="fb-breadcrumb"
           value={pathDraft}
           onChange={(e) => setPathDraft(e.target.value)}
           onKeyDown={onPathKey}
         />
-        <button type="button" aria-label="reload" onClick={() => void reload(tabId)}>⟳</button>
-        <button type="button" aria-label="upload" onClick={() => void onUpload()}>⬆</button>
-        <button type="button" aria-label="new folder" onClick={() => setMkdirOpen(true)}>📁+</button>
+        <button type="button" aria-label="reload" disabled={tab.loading} onClick={() => void reload(tabId)}>⟳</button>
+        <button type="button" aria-label="upload" disabled={tab.loading} onClick={() => void onUpload()}>⬆</button>
+        <button type="button" aria-label="new folder" disabled={tab.loading} onClick={() => setMkdirOpen(true)}>📁+</button>
         <label className="fb-toggle">
           <input type="checkbox" aria-label="show hidden files" checked={tab.showHidden} onChange={() => toggleHidden(tabId)} />
           show hidden
