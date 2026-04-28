@@ -160,12 +160,42 @@ impl SftpSession {
 
         let connect_future =
             client::connect(config, (target.host.as_str(), target.port), handler);
-        let mut session: Handle<ClientHandler> =
-            tokio::time::timeout(connect_timeout, connect_future)
-                .await
-                .map_err(|_| SftpError::Connect("timed out".into()))?
-                .map_err(|e| SftpError::Handshake(e.to_string()))?;
+        let connect_result = tokio::time::timeout(connect_timeout, connect_future)
+            .await
+            .map_err(|_| SftpError::Connect("timed out".into()))?;
 
+        // When check_server_key returns Ok(false), russh aborts the handshake
+        // and `connect_result` is Err(_). Translate that to the typed
+        // fingerprint error using the verdict we captured inside the handler,
+        // BEFORE falling back to a generic Handshake error.
+        let captured_verdict = verdict.lock().clone();
+        match captured_verdict {
+            Some(HostKeyVerdict::Unknown { fingerprint, key_type }) => {
+                return Err(SftpError::UnknownFingerprint {
+                    fingerprint,
+                    host: target.host.clone(),
+                    key_type,
+                });
+            }
+            Some(HostKeyVerdict::Mismatch { fingerprint, expected_b64, expected_type }) => {
+                return Err(SftpError::FingerprintMismatch {
+                    fingerprint,
+                    expected: format!("{expected_type} {expected_b64}"),
+                    host: target.host.clone(),
+                });
+            }
+            Some(HostKeyVerdict::AcceptedMismatch { accepted, live }) => {
+                return Err(SftpError::Any(format!(
+                    "fingerprint did not match server: accepted {accepted}, server presented {live}"
+                )));
+            }
+            _ => {}
+        }
+
+        let mut session: Handle<ClientHandler> = connect_result
+            .map_err(|e| SftpError::Handshake(e.to_string()))?;
+
+        // Defense in depth: re-check verdict if anything mutated post-connect.
         let captured_verdict = verdict.lock().clone();
         if let Some(v) = captured_verdict {
             match v {

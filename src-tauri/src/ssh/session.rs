@@ -177,12 +177,44 @@ impl SshSession {
 
         let connect_future =
             client::connect(config, (target.host.as_str(), target.port), handler);
-        let mut session: Handle<ClientHandler> =
-            tokio::time::timeout(connect_timeout, connect_future)
-                .await
-                .map_err(|_| SshError::Connect("timed out".into()))?
-                .map_err(|e| SshError::Handshake(e.to_string()))?;
+        let connect_result = tokio::time::timeout(connect_timeout, connect_future)
+            .await
+            .map_err(|_| SshError::Connect("timed out".into()))?;
 
+        // When check_server_key returns Ok(false), russh aborts the handshake
+        // and `connect_result` is Err(_). Translate that to the typed
+        // fingerprint error using the verdict we captured inside the handler,
+        // BEFORE falling back to a generic Handshake error.
+        let captured_verdict = verdict.lock().clone();
+        match captured_verdict {
+            Some(HostKeyVerdict::Unknown { fingerprint, key_type }) => {
+                return Err(SshError::UnknownFingerprint {
+                    fingerprint,
+                    host: target.host.clone(),
+                    key_type,
+                });
+            }
+            Some(HostKeyVerdict::Mismatch { fingerprint, expected_b64, expected_type, .. }) => {
+                return Err(SshError::FingerprintMismatch {
+                    fingerprint,
+                    expected: format!("{expected_type} {expected_b64}"),
+                    host: target.host.clone(),
+                });
+            }
+            Some(HostKeyVerdict::AcceptedMismatch { accepted, live }) => {
+                return Err(SshError::Any(format!(
+                    "fingerprint did not match server: accepted {accepted}, server presented {live}"
+                )));
+            }
+            // Trusted or None — fall through; connect_result will be Ok.
+            _ => {}
+        }
+
+        let mut session: Handle<ClientHandler> = connect_result
+            .map_err(|e| SshError::Handshake(e.to_string()))?;
+
+        // Re-check verdict in case it was mutated between the unlock above
+        // and the auth phase below (defense in depth — should be a no-op).
         let captured_verdict = verdict.lock().clone();
         if let Some(v) = captured_verdict {
             match v {
