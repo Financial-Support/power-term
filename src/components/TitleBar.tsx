@@ -6,7 +6,15 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 // active. Use an explicit onMouseDown handler that calls startDragging() and
 // short-circuits when the click landed on an interactive element. This works
 // across Tauri 2 versions regardless of the implicit attribute pipeline.
-export function TitleBar({ children }: { children: ReactNode }) {
+interface Props {
+  children: ReactNode;
+  /** When true, the left spacer expands to align tabs with the right edge of
+   *  the open sidebar. Otherwise the spacer is the minimum reserved area for
+   *  the macOS traffic lights. */
+  sidebarOpen?: boolean;
+}
+
+export function TitleBar({ children, sidebarOpen }: Props) {
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // Only react to primary mouse button; skip if it was a synthetic re-fire.
     if (e.button !== 0) return;
@@ -20,7 +28,7 @@ export function TitleBar({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="titlebar" onMouseDown={handleMouseDown}>
+    <div className={`titlebar ${sidebarOpen ? 'sidebar-open' : ''}`} onMouseDown={handleMouseDown}>
       <div className="titlebar-drag-left" />
       {children}
       <div className="titlebar-drag-right" />

@@ -250,7 +250,7 @@ export function App() {
 
   return (
     <div className={`app theme-${theme}`}>
-      <TitleBar>
+      <TitleBar sidebarOpen={sidebar.open}>
         <TabBar onNew={() => void newLocalTab()} onClose={(id) => void handleClose(id)} />
       </TitleBar>
       <div className="body">
