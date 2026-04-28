@@ -16,12 +16,14 @@ impl Db {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(&path)?;
+        conn.pragma_update(None, "foreign_keys", true)?;
         schema::migrate(&conn)?;
         Ok(Arc::new(Self { conn: Mutex::new(conn) }))
     }
 
     pub fn open_in_memory() -> Result<Arc<Self>, StoreError> {
         let conn = Connection::open_in_memory()?;
+        conn.pragma_update(None, "foreign_keys", true)?;
         schema::migrate(&conn)?;
         Ok(Arc::new(Self { conn: Mutex::new(conn) }))
     }
