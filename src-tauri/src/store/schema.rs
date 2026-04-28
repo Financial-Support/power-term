@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-pub const CURRENT_VERSION: u32 = 3;
+pub const CURRENT_VERSION: u32 = 4;
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     let mut version: u32 = conn
@@ -19,6 +19,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             0 => migration_v1(conn)?,
             1 => migration_v2(conn)?,
             2 => migration_v3(conn)?,
+            3 => migration_v4(conn)?,
             other => {
                 return Err(rusqlite::Error::SqliteFailure(
                     rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
@@ -88,6 +89,17 @@ fn migration_v3(conn: &Connection) -> Result<()> {
             created_at INTEGER NOT NULL
         );
         CREATE INDEX forwards_host_id_idx ON forwards(host_id);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migration_v4(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        ALTER TABLE hosts    ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE snippets ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE forwards ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
         "#,
     )?;
     Ok(())
@@ -204,7 +216,7 @@ mod tests {
         let conn = open_in_memory();
         migrate(&conn).unwrap();
         let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 3);
+        assert_eq!(v, CURRENT_VERSION);
         let n: i64 = conn.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='forwards'",
             [], |r| r.get(0),
@@ -231,7 +243,7 @@ mod tests {
         conn.pragma_update(None, "user_version", 2u32).unwrap();
         migrate(&conn).unwrap();
         let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 3);
+        assert_eq!(v, CURRENT_VERSION);
     }
 
     #[test]
@@ -252,5 +264,39 @@ mod tests {
         conn.execute("DELETE FROM hosts WHERE id='h1'", []).unwrap();
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM forwards", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "ON DELETE CASCADE should have removed the forward row");
+    }
+
+    #[test]
+    fn migration_v4_adds_updated_at_columns() {
+        let conn = open_in_memory();
+        migrate(&conn).unwrap();
+        let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, 4);
+        conn.execute_batch("SELECT updated_at FROM hosts LIMIT 0").unwrap();
+        conn.execute_batch("SELECT updated_at FROM snippets LIMIT 0").unwrap();
+        conn.execute_batch("SELECT updated_at FROM forwards LIMIT 0").unwrap();
+    }
+
+    #[test]
+    fn migration_v3_to_v4_adds_updated_at_to_existing_tables() {
+        let conn = open_in_memory();
+        conn.execute_batch(r#"
+            CREATE TABLE hosts (id TEXT PRIMARY KEY, name TEXT NOT NULL, hostname TEXT NOT NULL,
+              port INTEGER NOT NULL DEFAULT 22, username TEXT NOT NULL, group_name TEXT,
+              tags_json TEXT NOT NULL DEFAULT '[]', auth_method TEXT NOT NULL, key_path TEXT,
+              notes TEXT, created_at INTEGER NOT NULL, last_used_at INTEGER);
+            CREATE TABLE snippets (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,
+              content TEXT NOT NULL, tags_json TEXT NOT NULL DEFAULT '[]',
+              created_at INTEGER NOT NULL, last_used_at INTEGER);
+            CREATE TABLE forwards (id TEXT PRIMARY KEY NOT NULL, host_id TEXT NOT NULL,
+              name TEXT NOT NULL, kind TEXT NOT NULL, bind_addr TEXT NOT NULL DEFAULT '127.0.0.1',
+              bind_port INTEGER NOT NULL, remote_host TEXT NOT NULL, remote_port INTEGER NOT NULL,
+              auto_start INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
+        "#).unwrap();
+        conn.pragma_update(None, "user_version", 3u32).unwrap();
+        migrate(&conn).unwrap();
+        conn.execute_batch("SELECT updated_at FROM hosts LIMIT 0").unwrap();
+        conn.execute_batch("SELECT updated_at FROM snippets LIMIT 0").unwrap();
+        conn.execute_batch("SELECT updated_at FROM forwards LIMIT 0").unwrap();
     }
 }

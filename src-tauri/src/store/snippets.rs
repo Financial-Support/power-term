@@ -19,6 +19,7 @@ pub struct Snippet {
     pub tags: Vec<String>,
     pub created_at: i64,
     pub last_used_at: Option<i64>,
+    pub updated_at: i64,
 }
 
 pub struct SnippetStore {
@@ -47,8 +48,8 @@ impl SnippetStore {
         let created_at = now_millis();
         let tags_json = serde_json::to_string(&input.tags).map_err(|e| StoreError::Serde(e.to_string()))?;
         conn.execute(
-            "INSERT INTO snippets (id, name, content, tags_json, created_at, last_used_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
+            "INSERT INTO snippets (id, name, content, tags_json, created_at, last_used_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?5)",
             params![id, input.name, input.content, tags_json, created_at],
         )?;
         Ok(Snippet {
@@ -58,6 +59,7 @@ impl SnippetStore {
             tags: input.tags.clone(),
             created_at,
             last_used_at: None,
+            updated_at: created_at,
         })
     }
 
@@ -66,14 +68,14 @@ impl SnippetStore {
         let conn = self.db.lock();
         let tags_json = serde_json::to_string(&input.tags).map_err(|e| StoreError::Serde(e.to_string()))?;
         let changed = conn.execute(
-            "UPDATE snippets SET name=?1, content=?2, tags_json=?3 WHERE id=?4",
-            params![input.name, input.content, tags_json, id],
+            "UPDATE snippets SET name=?1, content=?2, tags_json=?3, updated_at=?5 WHERE id=?4",
+            params![input.name, input.content, tags_json, id, now_millis()],
         )?;
         if changed == 0 {
             return Err(StoreError::NotFound(id.to_string()));
         }
         let mut stmt = conn.prepare(
-            "SELECT id, name, content, tags_json, created_at, last_used_at FROM snippets WHERE id=?1",
+            "SELECT id, name, content, tags_json, created_at, last_used_at, updated_at FROM snippets WHERE id=?1",
         )?;
         stmt.query_row(params![id], row_to_snippet).map_err(StoreError::from)
     }
@@ -100,7 +102,7 @@ impl SnippetStore {
 
 fn list_with(conn: &Connection) -> Result<Vec<Snippet>, StoreError> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, content, tags_json, created_at, last_used_at \
+        "SELECT id, name, content, tags_json, created_at, last_used_at, updated_at \
          FROM snippets ORDER BY name",
     )?;
     let rows = stmt.query_map([], row_to_snippet)?;
@@ -126,6 +128,7 @@ fn row_to_snippet(row: &Row<'_>) -> rusqlite::Result<Snippet> {
         tags,
         created_at: row.get(4)?,
         last_used_at: row.get(5)?,
+        updated_at: row.get(6)?,
     })
 }
 

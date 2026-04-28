@@ -31,6 +31,7 @@ pub struct Host {
     pub notes: Option<String>,
     pub created_at: i64,
     pub last_used_at: Option<i64>,
+    pub updated_at: i64,
 }
 
 pub struct HostStore {
@@ -57,7 +58,7 @@ impl HostStore {
         let conn = self.db.lock();
         let mut stmt = conn.prepare(
             "SELECT id, name, hostname, port, username, group_name, tags_json, \
-                    auth_method, key_path, notes, created_at, last_used_at \
+                    auth_method, key_path, notes, created_at, last_used_at, updated_at \
              FROM hosts WHERE id=?1",
         )?;
         stmt.query_row(params![id], row_to_host).map_err(|e| match e {
@@ -74,8 +75,8 @@ impl HostStore {
         let tags_json = serde_json::to_string(&input.tags).map_err(|e| StoreError::Serde(e.to_string()))?;
         conn.execute(
             "INSERT INTO hosts \
-             (id, name, hostname, port, username, group_name, tags_json, auth_method, key_path, notes, created_at, last_used_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, NULL)",
+             (id, name, hostname, port, username, group_name, tags_json, auth_method, key_path, notes, created_at, last_used_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, NULL, ?11)",
             params![
                 id, input.name, input.hostname, input.port, input.username,
                 input.group_name, tags_json, input.auth_method, input.key_path,
@@ -95,6 +96,7 @@ impl HostStore {
             notes: input.notes.clone(),
             created_at,
             last_used_at: None,
+            updated_at: created_at,
         })
     }
 
@@ -104,10 +106,10 @@ impl HostStore {
         let tags_json = serde_json::to_string(&input.tags).map_err(|e| StoreError::Serde(e.to_string()))?;
         let changed = conn.execute(
             "UPDATE hosts SET name=?1, hostname=?2, port=?3, username=?4, group_name=?5, \
-             tags_json=?6, auth_method=?7, key_path=?8, notes=?9 WHERE id=?10",
+             tags_json=?6, auth_method=?7, key_path=?8, notes=?9, updated_at=?11 WHERE id=?10",
             params![
                 input.name, input.hostname, input.port, input.username, input.group_name,
-                tags_json, input.auth_method, input.key_path, input.notes, id,
+                tags_json, input.auth_method, input.key_path, input.notes, id, now_millis(),
             ],
         )?;
         if changed == 0 {
@@ -115,7 +117,7 @@ impl HostStore {
         }
         let mut stmt = conn.prepare(
             "SELECT id, name, hostname, port, username, group_name, tags_json, \
-                    auth_method, key_path, notes, created_at, last_used_at \
+                    auth_method, key_path, notes, created_at, last_used_at, updated_at \
              FROM hosts WHERE id=?1",
         )?;
         stmt.query_row(params![id], row_to_host).map_err(StoreError::from)
@@ -144,7 +146,7 @@ impl HostStore {
 fn list_with(conn: &Connection) -> Result<Vec<Host>, StoreError> {
     let mut stmt = conn.prepare(
         "SELECT id, name, hostname, port, username, group_name, tags_json, \
-                auth_method, key_path, notes, created_at, last_used_at \
+                auth_method, key_path, notes, created_at, last_used_at, updated_at \
          FROM hosts ORDER BY group_name IS NULL, group_name, name",
     )?;
     let rows = stmt.query_map([], row_to_host)?;
@@ -187,6 +189,7 @@ fn row_to_host(row: &Row<'_>) -> rusqlite::Result<Host> {
         notes: row.get(9)?,
         created_at: row.get(10)?,
         last_used_at: row.get(11)?,
+        updated_at: row.get(12)?,
     })
 }
 

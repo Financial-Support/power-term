@@ -28,6 +28,7 @@ pub struct Forward {
     pub remote_port: u16,
     pub auto_start: bool,
     pub created_at: i64,
+    pub updated_at: i64,
 }
 
 pub struct ForwardStore {
@@ -51,7 +52,7 @@ impl ForwardStore {
     pub fn list_by_host(&self, host_id: &str) -> Result<Vec<Forward>, StoreError> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, host_id, name, kind, bind_addr, bind_port, remote_host, remote_port, auto_start, created_at \
+            "SELECT id, host_id, name, kind, bind_addr, bind_port, remote_host, remote_port, auto_start, created_at, updated_at \
              FROM forwards WHERE host_id=?1 ORDER BY name",
         )?;
         let rows = stmt.query_map(params![host_id], row_to_forward)?;
@@ -63,7 +64,7 @@ impl ForwardStore {
     pub fn get(&self, id: &str) -> Result<Forward, StoreError> {
         let conn = self.db.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, host_id, name, kind, bind_addr, bind_port, remote_host, remote_port, auto_start, created_at \
+            "SELECT id, host_id, name, kind, bind_addr, bind_port, remote_host, remote_port, auto_start, created_at, updated_at \
              FROM forwards WHERE id=?1",
         )?;
         stmt.query_row(params![id], row_to_forward).map_err(|e| match e {
@@ -87,8 +88,8 @@ impl ForwardStore {
         let created_at = now_millis();
         conn.execute(
             "INSERT INTO forwards (id, host_id, name, kind, bind_addr, bind_port, \
-             remote_host, remote_port, auto_start, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             remote_host, remote_port, auto_start, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
             params![
                 id, input.host_id, input.name, input.kind, input.bind_addr, input.bind_port,
                 input.remote_host, input.remote_port, input.auto_start as i64, created_at,
@@ -105,6 +106,7 @@ impl ForwardStore {
             remote_port: input.remote_port,
             auto_start: input.auto_start,
             created_at,
+            updated_at: created_at,
         })
     }
 
@@ -113,17 +115,17 @@ impl ForwardStore {
         let conn = self.db.lock();
         let changed = conn.execute(
             "UPDATE forwards SET host_id=?1, name=?2, kind=?3, bind_addr=?4, bind_port=?5, \
-             remote_host=?6, remote_port=?7, auto_start=?8 WHERE id=?9",
+             remote_host=?6, remote_port=?7, auto_start=?8, updated_at=?10 WHERE id=?9",
             params![
                 input.host_id, input.name, input.kind, input.bind_addr, input.bind_port,
-                input.remote_host, input.remote_port, input.auto_start as i64, id,
+                input.remote_host, input.remote_port, input.auto_start as i64, id, now_millis(),
             ],
         )?;
         if changed == 0 {
             return Err(StoreError::NotFound(id.to_string()));
         }
         let mut stmt = conn.prepare(
-            "SELECT id, host_id, name, kind, bind_addr, bind_port, remote_host, remote_port, auto_start, created_at \
+            "SELECT id, host_id, name, kind, bind_addr, bind_port, remote_host, remote_port, auto_start, created_at, updated_at \
              FROM forwards WHERE id=?1",
         )?;
         stmt.query_row(params![id], row_to_forward).map_err(StoreError::from)
@@ -141,7 +143,7 @@ impl ForwardStore {
 
 fn list_with(conn: &Connection) -> Result<Vec<Forward>, StoreError> {
     let mut stmt = conn.prepare(
-        "SELECT id, host_id, name, kind, bind_addr, bind_port, remote_host, remote_port, auto_start, created_at \
+        "SELECT id, host_id, name, kind, bind_addr, bind_port, remote_host, remote_port, auto_start, created_at, updated_at \
          FROM forwards ORDER BY name",
     )?;
     let rows = stmt.query_map([], row_to_forward)?;
@@ -178,6 +180,7 @@ fn row_to_forward(row: &Row<'_>) -> rusqlite::Result<Forward> {
         remote_port: row.get(7)?,
         auto_start: auto_start != 0,
         created_at: row.get(9)?,
+        updated_at: row.get(10)?,
     })
 }
 
