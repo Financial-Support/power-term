@@ -46,62 +46,117 @@ html, body, #root { height: 100%; margin: 0; }
   color: var(--fg);
 }
 
+/* ─── Titlebar / tab strip ──────────────────────────────────────────────
+   titleBarStyle: "Overlay" overlays native traffic lights at top-left.
+   The 78px left spacer keeps tabs clear of the traffic lights.           */
 .titlebar {
-  display: flex; align-items: stretch; height: 30px;
-  border-bottom: 1px solid var(--border); user-select: none;
+  display: flex;
+  align-items: stretch;
+  height: 34px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  flex-shrink: 0;
 }
 .titlebar-drag-left {
-  /* 78px reserves space for the macOS traffic lights. When the sidebar is
-     open the spacer grows to 240px so the first tab aligns with the right
-     edge of the sidebar. */
   width: 78px;
   flex: 0 0 78px;
-  transition: flex-basis 120ms ease, width 120ms ease;
 }
-.titlebar.sidebar-open .titlebar-drag-left { width: 240px; flex-basis: 240px; }
-.titlebar-drag-right { flex: 0 0 12px; }
+.titlebar-drag-right { flex: 0 0 8px; }
 
 .tabbar {
-  display: flex; align-items: stretch; gap: 2px;
-  flex: 1; min-width: 0; padding: 3px 0 0 0;
-  /* Scroll horizontally inside the tab bar instead of pushing the rest of the
-     window when there are too many tabs to fit. */
-  overflow-x: auto; overflow-y: hidden;
-  scrollbar-width: thin;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0 0 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
-.tabbar::-webkit-scrollbar { height: 4px; }
-.tabbar::-webkit-scrollbar-thumb { background: rgba(127,127,127,0.4); border-radius: 2px; }
-.tabbar::-webkit-scrollbar-track { background: transparent; }
+.tabbar::-webkit-scrollbar { display: none; }
+
 .tab {
-  display: flex; align-items: center; padding: 0 0 0 14px;
-  background: var(--tab-bg); border: 1px solid transparent; border-bottom: none;
-  border-radius: 6px 6px 0 0; cursor: default;
-  min-width: 130px; max-width: 240px;
+  display: flex;
+  align-items: center;
+  padding: 0 0 0 10px;
+  height: 28px;
+  background: transparent;
+  border-radius: 6px 6px 0 0;
+  cursor: default;
+  min-width: 100px;
+  max-width: 200px;
   flex-shrink: 0;
   position: relative;
+  color: var(--fg-muted);
+  font-size: 12px;
+  transition: background 0.1s, color 0.1s;
 }
+.tab:hover { background: var(--bg-hover); color: var(--fg); }
 .tab.active {
-  background: var(--tab-active);
-  border-color: var(--border);
+  background: rgba(255,240,220,0.05);
+  color: var(--fg);
 }
-/* Bright accent strip on the active tab — a clear, instant signal that this
-   is the focused tab, even when the bg shades are close together. */
-.tab.active::before {
+.tab.active::after {
   content: "";
-  position: absolute; left: 0; right: 0; top: 0; height: 2px;
-  background: #2563eb;
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--accent);
   border-radius: 2px 2px 0 0;
 }
-.tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding-right: 8px; }
-.tab input { font: inherit; font-size: 12px; background: transparent; border: 0; outline: 0; color: var(--fg); width: 100%; }
-.tab-close {
-  background: transparent; border: 0; color: var(--fg); opacity: 0.5;
-  cursor: pointer; padding: 0 12px; align-self: stretch;
-  font-size: 14px; line-height: 1;
+.tab-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--online);
+  flex-shrink: 0;
+  margin-right: 6px;
 }
-.tab-close:hover { opacity: 1; background: rgba(127,127,127,0.15); }
-.tab.active .tab-close { opacity: 0.7; }
-.tab-new { background: transparent; border: 0; color: var(--fg); cursor: pointer; padding: 4px 10px; font-size: 16px; }
+.tab-dot.offline { background: var(--fg-dim); }
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  padding-right: 4px;
+}
+.tab input {
+  font: inherit;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  width: 100%;
+}
+.tab-close {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0 8px;
+  align-self: stretch;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.tab:hover .tab-close,
+.tab.active .tab-close { opacity: 0.5; }
+.tab-close:hover { opacity: 1 !important; }
+.tab-new {
+  background: transparent;
+  border: 0;
+  color: var(--fg-dim);
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 18px;
+  line-height: 1;
+  align-self: center;
+  transition: color 0.1s;
+}
+.tab-new:hover { color: var(--fg); }
 
 .terminals {
   flex: 1;
