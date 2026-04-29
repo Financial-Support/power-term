@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
-  "productName": "power-term",
+  "productName": "Power Term",
   "version": "0.0.1",
   "identifier": "com.band.power-term",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "power-term",
+        "title": "Power Term",
         "width": 1200,
         "height": 760,
         "minWidth": 600,

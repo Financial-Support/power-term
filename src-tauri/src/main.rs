@@ -8,7 +8,8 @@ use power_term::ssh::forward_manager::ForwardManager;
 use power_term::store::{Db, ForwardStore, HostStore, SnippetStore};
 use power_term::sync::SyncManager;
 use std::sync::Arc;
-use tauri::{Listener, Manager};
+use tauri::{Emitter, Listener, Manager};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -36,6 +37,31 @@ fn main() {
         .manage(db)
         .manage(sync_manager)
         .setup(|app| {
+            // macOS menu bar: App menu with Settings…
+            let settings_item = MenuItemBuilder::with_id("open_settings", "Settings…")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+            let app_submenu = SubmenuBuilder::new(app, "Power Term")
+                .about(None)
+                .separator()
+                .item(&settings_item)
+                .separator()
+                .services()
+                .separator()
+                .hide()
+                .hide_others()
+                .show_all()
+                .separator()
+                .quit()
+                .build()?;
+            let menu = MenuBuilder::new(app).item(&app_submenu).build()?;
+            app.set_menu(menu)?;
+            app.on_menu_event(|app_handle, event| {
+                if event.id() == "open_settings" {
+                    let _ = app_handle.emit("menu:open-settings", ());
+                }
+            });
+
             let handle = app.handle().clone();
             app.listen("deep-link://new-url", move |event| {
                 let sync_state = handle.state::<SyncManager>();

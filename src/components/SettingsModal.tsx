@@ -58,7 +58,10 @@ export function SettingsModal({ onClose, initialTab }: Props) {
   return (
     <div className="modal-backdrop" role="dialog" aria-label="settings" aria-modal="true">
       <div className="modal modal-form modal-settings">
-        <h2>Settings</h2>
+        <div className="modal-settings-header">
+          <h2>Settings</h2>
+          <button type="button" className="modal-close-btn" aria-label="Close settings" onClick={onClose}>✕</button>
+        </div>
 
         <div className="settings-tabs" role="tablist">
           <button

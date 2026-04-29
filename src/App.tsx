@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
 import { TitleBar } from './components/TitleBar';
 import { TabBar } from './components/TabBar';
 import { Terminal } from './components/Terminal';
@@ -117,6 +118,13 @@ export function App() {
         void pull();
       }
     });
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen('menu:open-settings', () => { setSettingsOpen(true); })
+      .then(fn => { unlisten = fn; });
+    return () => { unlisten?.(); };
   }, []);
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);

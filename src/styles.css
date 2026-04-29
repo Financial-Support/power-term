@@ -455,6 +455,19 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .modal.modal-warning { border-color: var(--danger); }
 .modal h2 { margin: 0 0 10px 0; font-size: 15px; font-weight: 600; }
+.modal-settings-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 0 0 10px 0;
+}
+.modal-settings-header h2 { margin: 0; }
+.modal-close-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 6px; border: none;
+  background: transparent; color: var(--fg-muted);
+  font-size: 13px; cursor: pointer; padding: 0; line-height: 1;
+  transition: background 0.12s, color 0.12s;
+}
+.modal-close-btn:hover { background: rgba(255,240,220,0.1); color: var(--fg); }
 .modal p { font-size: 13px; line-height: 1.5; margin: 0 0 14px 0; color: var(--fg-muted); }
 .modal .error { color: var(--danger); font-size: 12px; }
 .modal dl.fingerprint {
