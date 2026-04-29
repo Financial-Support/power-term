@@ -28,7 +28,7 @@ export function SnippetsPanel({ onAdd, onEdit, onDelete, onInsert }: Props) {
           aria-label="toggle snippets section"
           onClick={() => setCollapsed((v) => !v)}
         >
-          <span className="sidebar-caret">{collapsed ? '▸' : '▾'}</span>
+          <span className="sp-caret">{collapsed ? '▸' : '▾'}</span>
           <span className="snippets-title">Snippets</span>
         </button>
         <button
@@ -38,7 +38,7 @@ export function SnippetsPanel({ onAdd, onEdit, onDelete, onInsert }: Props) {
           onClick={onAdd}
         >+</button>
       </div>
-      {error && <p className="sidebar-error">{error}</p>}
+      {error && <p className="sp-error">{error}</p>}
       {!collapsed && (
         sorted.length === 0 ? (
           <p className="snippets-empty">No snippets. Click + to add one.</p>

@@ -38,7 +38,7 @@ export function ForwardsPanel({ onAdd, onEdit, onDelete }: Props) {
           aria-label="toggle forwards section"
           onClick={() => setCollapsed((v) => !v)}
         >
-          <span className="sidebar-caret">{collapsed ? '▸' : '▾'}</span>
+          <span className="sp-caret">{collapsed ? '▸' : '▾'}</span>
           <span className="forwards-title">Forwards</span>
         </button>
         <button type="button" className="forwards-add" aria-label="add forward" onClick={onAdd}>+</button>

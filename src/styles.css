@@ -829,20 +829,22 @@ html, body, #root { height: 100%; margin: 0; }
   font-size: 13px; line-height: 1;
   display: flex; align-items: center;
 }
+.sync-status--synced  { color: var(--online); }
+.sync-status--syncing { color: var(--fg-muted); }
 .sync-status--error { color: #f87171; cursor: pointer; }
 .sync-spinner { display: inline-block; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .sync-tab { display: flex; flex-direction: column; gap: 12px; }
-.sync-tab-desc { color: var(--text-muted); font-size: 13px; margin: 0; }
+.sync-tab-desc { color: var(--fg-muted); font-size: 13px; margin: 0; }
 .sync-user-row { display: flex; align-items: center; justify-content: space-between; }
 .sync-user-email { font-weight: 500; }
 .sync-sign-out { font-size: 12px; }
-.sync-last-synced { font-size: 12px; color: var(--text-muted); margin: 0; }
+.sync-last-synced { font-size: 12px; color: var(--fg-muted); margin: 0; }
 .sync-pull-btn { align-self: flex-start; }
 .sync-key-section h3 { margin: 0 0 8px; font-size: 13px; }
 .sync-key-display { display: flex; align-items: center; gap: 8px; }
 .sync-key-display code { font-family: monospace; font-size: 13px; letter-spacing: 0.05em; }
-.sync-key-notice { color: var(--text-muted); font-size: 13px; margin: 0; }
+.sync-key-notice { color: var(--fg-muted); font-size: 13px; margin: 0; }
 .sync-key-input-row { display: flex; gap: 8px; }
 .sync-key-input-row input { flex: 1; }
