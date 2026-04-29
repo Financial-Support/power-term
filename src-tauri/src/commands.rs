@@ -246,14 +246,18 @@ pub fn hosts_create(
 ) -> Result<Host, String> {
     let host = store.create(&input).map_err(|e| e.to_string())?;
     {
-        let row = crate::sync::push::host_to_row(&host);
+        let host_clone = host.clone();
         let queue = sync.queue();
         tauri::async_runtime::spawn(async move {
             if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertHost(row.clone())).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::UpsertHost(row));
+                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
+                if !user_id.is_empty() {
+                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                        let row = crate::sync::push::host_to_row(&host_clone, &user_id);
+                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertHost(row.clone())).await {
+                            tracing::warn!(error = %e, "sync push failed — queuing");
+                            queue.enqueue(PendingOp::UpsertHost(row));
+                        }
                     }
                 }
             }
@@ -271,14 +275,18 @@ pub fn hosts_update(
 ) -> Result<Host, String> {
     let host = store.update(&id, &input).map_err(|e| e.to_string())?;
     {
-        let row = crate::sync::push::host_to_row(&host);
+        let host_clone = host.clone();
         let queue = sync.queue();
         tauri::async_runtime::spawn(async move {
             if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertHost(row.clone())).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::UpsertHost(row));
+                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
+                if !user_id.is_empty() {
+                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                        let row = crate::sync::push::host_to_row(&host_clone, &user_id);
+                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertHost(row.clone())).await {
+                            tracing::warn!(error = %e, "sync push failed — queuing");
+                            queue.enqueue(PendingOp::UpsertHost(row));
+                        }
                     }
                 }
             }
@@ -493,14 +501,18 @@ pub fn snippets_create(
 ) -> Result<Snippet, String> {
     let snippet = store.create(&input).map_err(|e| e.to_string())?;
     {
-        let row = crate::sync::push::snippet_to_row(&snippet);
+        let snippet_clone = snippet.clone();
         let queue = sync.queue();
         tauri::async_runtime::spawn(async move {
             if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::UpsertSnippet(row));
+                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
+                if !user_id.is_empty() {
+                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                        let row = crate::sync::push::snippet_to_row(&snippet_clone, &user_id);
+                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
+                            tracing::warn!(error = %e, "sync push failed — queuing");
+                            queue.enqueue(PendingOp::UpsertSnippet(row));
+                        }
                     }
                 }
             }
@@ -518,14 +530,18 @@ pub fn snippets_update(
 ) -> Result<Snippet, String> {
     let snippet = store.update(&id, &input).map_err(|e| e.to_string())?;
     {
-        let row = crate::sync::push::snippet_to_row(&snippet);
+        let snippet_clone = snippet.clone();
         let queue = sync.queue();
         tauri::async_runtime::spawn(async move {
             if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::UpsertSnippet(row));
+                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
+                if !user_id.is_empty() {
+                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                        let row = crate::sync::push::snippet_to_row(&snippet_clone, &user_id);
+                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
+                            tracing::warn!(error = %e, "sync push failed — queuing");
+                            queue.enqueue(PendingOp::UpsertSnippet(row));
+                        }
                     }
                 }
             }
@@ -590,14 +606,18 @@ pub fn forwards_create(
 ) -> Result<Forward, String> {
     let forward = store.create(&input).map_err(|e| e.to_string())?;
     {
-        let row = crate::sync::push::forward_to_row(&forward);
+        let forward_clone = forward.clone();
         let queue = sync.queue();
         tauri::async_runtime::spawn(async move {
             if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertForward(row.clone())).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::UpsertForward(row));
+                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
+                if !user_id.is_empty() {
+                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                        let row = crate::sync::push::forward_to_row(&forward_clone, &user_id);
+                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertForward(row.clone())).await {
+                            tracing::warn!(error = %e, "sync push failed — queuing");
+                            queue.enqueue(PendingOp::UpsertForward(row));
+                        }
                     }
                 }
             }
@@ -615,14 +635,18 @@ pub fn forwards_update(
 ) -> Result<Forward, String> {
     let forward = store.update(&id, &input).map_err(|e| e.to_string())?;
     {
-        let row = crate::sync::push::forward_to_row(&forward);
+        let forward_clone = forward.clone();
         let queue = sync.queue();
         tauri::async_runtime::spawn(async move {
             if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertForward(row.clone())).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::UpsertForward(row));
+                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
+                if !user_id.is_empty() {
+                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                        let row = crate::sync::push::forward_to_row(&forward_clone, &user_id);
+                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertForward(row.clone())).await {
+                            tracing::warn!(error = %e, "sync push failed — queuing");
+                            queue.enqueue(PendingOp::UpsertForward(row));
+                        }
                     }
                 }
             }

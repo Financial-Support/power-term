@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>power-term — Full Mockup</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0a0906;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  color: rgba(255,240,220,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px 60px;
+  min-height: 100vh;
+}
+h1 {
+  font-size: 17px;
+  font-weight: 600;
+  color: rgba(255,240,220,0.9);
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+.subtitle {
+  font-size: 13px;
+  color: rgba(255,240,220,0.4);
+  margin-bottom: 32px;
+}
+
+/* ── App window shell ── */
+.app-window {
+  width: 860px;
+  height: 540px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,240,220,0.08);
+  display: flex;
+  flex-direction: column;
+  background: #161412;
+  position: relative;
+}
+
+/* traffic lights row */
+.traffic-row {
+  height: 24px;
+  background: #161412;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 6px;
+  flex-shrink: 0;
+  cursor: default;
+}
+.tl { width: 11px; height: 11px; border-radius: 50%; }
+.tl-r { background: #ff5f57; }
+.tl-y { background: #febc2e; }
+.tl-g { background: #28c840; }
+
+/* tab strip */
+.tabstrip {
+  height: 34px;
+  background: #131210;
+  border-bottom: 1px solid rgba(255,240,220,0.07);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 8px 0 6px;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.tab {
+  height: 28px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px 6px 0 0;
+  font-size: 12px;
+  color: rgba(255,240,220,0.3);
+  position: relative;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab.active {
+  background: rgba(255,240,220,0.05);
+  color: rgba(255,240,220,0.88);
+}
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: #f59e0b;
+  border-radius: 2px 2px 0 0;
+}
+.tab-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+}
+.tab-dot.inactive { background: rgba(255,240,220,0.2); }
+.tab-close {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  color: rgba(255,240,220,0.25);
+  cursor: pointer;
+}
+.tab-new {
+  height: 22px;
+  width: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 5px;
+  font-size: 16px;
+  color: rgba(255,240,220,0.2);
+  margin-left: 4px;
+  margin-bottom: 3px;
+  cursor: pointer;
+}
+
+/* ── Body ── */
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* icon rail */
+.icon-rail {
+  width: 44px;
+  background: rgba(255,240,220,0.02);
+  border-right: 1px solid rgba(255,240,220,0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 8px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.rail-icon {
+  width: 32px; height: 32px;
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,240,220,0.28);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  font-size: 15px;
+}
+.rail-icon.active {
+  background: rgba(245,158,11,0.18);
+  color: #fbbf24;
+}
+.rail-icon:hover:not(.active) {
+  background: rgba(255,240,220,0.06);
+  color: rgba(255,240,220,0.55);
+}
+.rail-spacer { flex: 1; }
+.rail-icon.bottom { margin-top: 0; }
+
+/* sidebar panel */
+.sidebar-panel {
+  width: 168px;
+  background: rgba(255,240,220,0.025);
+  border-right: 1px solid rgba(255,240,220,0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.panel-search {
+  margin: 8px 8px 4px;
+  height: 24px;
+  background: rgba(255,240,220,0.06);
+  border: 1px solid rgba(255,240,220,0.08);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 5px;
+  font-size: 11px;
+  color: rgba(255,240,220,0.3);
+}
+.panel-search svg { opacity: 0.4; }
+.section-header {
+  padding: 8px 10px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(255,240,220,0.3);
+}
+.host-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px 5px 10px;
+  border-radius: 6px;
+  margin: 0 4px;
+  font-size: 12px;
+  color: rgba(255,240,220,0.5);
+  cursor: pointer;
+}
+.host-item:hover { background: rgba(255,240,220,0.05); color: rgba(255,240,220,0.75); }
+.host-item.active {
+  background: rgba(245,158,11,0.12);
+  color: rgba(255,240,220,0.92);
+}
+.host-status { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.host-status.online { background: #22c55e; box-shadow: 0 0 5px rgba(34,197,94,0.5); }
+.host-status.offline { background: rgba(255,240,220,0.18); }
+.host-meta { font-size: 10px; color: rgba(255,240,220,0.3); margin-left: auto; }
+
+.section-divider { height: 1px; background: rgba(255,240,220,0.06); margin: 8px 10px; }
+
+.add-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  margin: 0 4px;
+  font-size: 11px;
+  color: rgba(255,240,220,0.3);
+  cursor: pointer;
+}
+.add-btn:hover { background: rgba(255,240,220,0.05); color: rgba(255,240,220,0.6); }
+
+/* ── Terminal area ── */
+.terminal-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #100e0c;
+  overflow: hidden;
+}
+.pane-bar {
+  height: 28px;
+  background: rgba(255,240,220,0.02);
+  border-bottom: 1px solid rgba(255,240,220,0.05);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255,240,220,0.35);
+  flex-shrink: 0;
+}
+.pane-bar-title { color: rgba(255,240,220,0.5); font-weight: 500; }
+.pane-bar-host { color: #fbbf24; }
+.pane-bar-sep { opacity: 0.3; }
+.pane-actions { margin-left: auto; display: flex; gap: 4px; }
+.pane-btn {
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  color: rgba(255,240,220,0.3);
+  cursor: pointer;
+}
+.pane-btn:hover { background: rgba(255,240,220,0.07); color: rgba(255,240,220,0.7); }
+
+.terminal-content {
+  flex: 1;
+  padding: 12px 14px;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+.t-line { color: rgba(255,240,220,0.7); }
+.t-dim { color: rgba(255,240,220,0.3); }
+.t-prompt { color: #22c55e; }
+.t-cmd { color: #93c5fd; }
+.t-out { color: rgba(255,240,220,0.55); }
+.t-success { color: #4ade80; }
+.t-warn { color: #fbbf24; }
+.t-err { color: #f87171; }
+.cursor {
+  display: inline-block;
+  width: 8px; height: 14px;
+  background: rgba(255,240,220,0.75);
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  animation: blink 1.1s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* ── Annotations ── */
+.annotation-layer {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+}
+.callout {
+  position: absolute;
+  background: rgba(245,158,11,0.92);
+  color: #000;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.callout::before {
+  content: '';
+  position: absolute;
+  background: rgba(245,158,11,0.5);
+}
+.line {
+  position: absolute;
+  background: rgba(245,158,11,0.4);
+}
+</style>
+</head>
+<body>
+
+<h1>power-term — Warm Charcoal Design</h1>
+<p class="subtitle">Borderless · Persistent sidebar · Amber accent · Warm charcoal palette</p>
+
+<div class="app-window">
+
+  <!-- Traffic lights -->
+  <div class="traffic-row">
+    <div class="tl tl-r"></div>
+    <div class="tl tl-y"></div>
+    <div class="tl tl-g"></div>
+  </div>
+
+  <!-- Tab strip -->
+  <div class="tabstrip">
+    <div class="tab active">
+      <div class="tab-dot"></div>
+      server-01
+      <div class="tab-close">×</div>
+    </div>
+    <div class="tab">
+      <div class="tab-dot inactive"></div>
+      staging
+      <div class="tab-close">×</div>
+    </div>
+    <div class="tab">
+      <div class="tab-dot inactive"></div>
+      local
+      <div class="tab-close">×</div>
+    </div>
+    <div class="tab-new">+</div>
+  </div>
+
+  <!-- Body -->
+  <div class="body">
+
+    <!-- Icon rail -->
+    <div class="icon-rail">
+      <div class="rail-icon active" title="Hosts">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="2" y="2" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <rect x="2" y="7" width="12" height="4" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+          <circle cx="12.5" cy="4" r="0.8" fill="currentColor"/>
+          <circle cx="12.5" cy="9" r="0.8" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="rail-icon" title="Snippets">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M3 4h10M3 7h7M3 10h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="rail-icon" title="Port Forwards">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M2 8h12M10 5l3 3-3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="4" cy="8" r="1.2" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="rail-spacer"></div>
+      <div class="rail-icon bottom" title="Settings">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14M3.1 3.1l1 1M10.9 10.9l1 1M10.9 3.1l-1 1M3.1 10.9l1-1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="rail-icon bottom" title="Sync">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <path d="M12.5 7.5A5 5 0 0 1 3 10M2.5 7.5A5 5 0 0 1 12 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M11 2.5l1 2.5 2.5-1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 12.5l-1-2.5-2.5 1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Sidebar panel -->
+    <div class="sidebar-panel">
+      <div class="panel-search">
+        <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+          <circle cx="4.5" cy="4.5" r="3.2" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M7 7l2.5 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        Filter hosts…
+      </div>
+
+      <div class="section-header">Connected</div>
+      <div class="host-item active">
+        <div class="host-status online"></div>
+        server-01
+        <div class="host-meta">22</div>
+      </div>
+
+      <div class="section-divider"></div>
+      <div class="section-header">Saved</div>
+      <div class="host-item">
+        <div class="host-status offline"></div>
+        staging
+        <div class="host-meta">22</div>
+      </div>
+      <div class="host-item">
+        <div class="host-status offline"></div>
+        local
+        <div class="host-meta">2222</div>
+      </div>
+      <div class="host-item">
+        <div class="host-status offline"></div>
+        db-replica
+        <div class="host-meta">22</div>
+      </div>
+      <div class="host-item">
+        <div class="host-status offline"></div>
+        bastion
+        <div class="host-meta">22</div>
+      </div>
+
+      <div class="section-divider"></div>
+      <div class="add-btn">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        Add Host
+      </div>
+    </div>
+
+    <!-- Terminal -->
+    <div class="terminal-area">
+      <div class="pane-bar">
+        <span class="pane-bar-host">server-01</span>
+        <span class="pane-bar-sep">·</span>
+        <span class="pane-bar-title">root@prod-1</span>
+        <span class="pane-bar-sep">·</span>
+        <span style="color:rgba(255,240,220,0.3);font-size:10px">~/app</span>
+        <div class="pane-actions">
+          <div class="pane-btn" title="Split vertical">⊟</div>
+          <div class="pane-btn" title="Split horizontal">⊞</div>
+        </div>
+      </div>
+      <div class="terminal-content">
+        <div class="t-line"><span class="t-prompt">root@prod-1</span><span class="t-dim">:~/app</span><span class="t-dim"> $ </span><span class="t-cmd">git pull origin main</span></div>
+        <div class="t-line t-out">remote: Enumerating objects: 12, done.</div>
+        <div class="t-line t-out">remote: Counting objects: 100% (12/12), done.</div>
+        <div class="t-line t-out">Updating 3a4f1b2..e8c9d05</div>
+        <div class="t-line t-success">Fast-forward</div>
+        <div class="t-line t-out"> src/api/routes.ts | 24 <span class="t-success">++++++</span><span class="t-err">--</span></div>
+        <div class="t-line t-out"> 1 file changed, 22 insertions(+), 2 deletions(-)</div>
+        <div class="t-line">&nbsp;</div>
+        <div class="t-line"><span class="t-prompt">root@prod-1</span><span class="t-dim">:~/app</span><span class="t-dim"> $ </span><span class="t-cmd">npm run build</span></div>
+        <div class="t-line t-out">▸ Building for production…</div>
+        <div class="t-line t-out">✓ 847 modules transformed</div>
+        <div class="t-line t-warn">⚠ bundle size 892kb (limit 500kb)</div>
+        <div class="t-line t-success">✓ Built in 4.3s</div>
+        <div class="t-line">&nbsp;</div>
+        <div class="t-line"><span class="t-prompt">root@prod-1</span><span class="t-dim">:~/app</span><span class="t-dim"> $ </span><div class="cursor"></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div style="margin-top:32px;max-width:860px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+  <div style="background:rgba(255,240,220,0.04);border:1px solid rgba(255,240,220,0.08);border-radius:10px;padding:14px">
+    <div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:rgba(255,240,220,0.3);margin-bottom:8px">Chrome</div>
+    <div style="font-size:12px;color:rgba(255,240,220,0.7);line-height:1.6">Frameless window. Native traffic lights. Amber tab underline. Drag area on title rows.</div>
+  </div>
+  <div style="background:rgba(255,240,220,0.04);border:1px solid rgba(255,240,220,0.08);border-radius:10px;padding:14px">
+    <div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:rgba(255,240,220,0.3);margin-bottom:8px">Navigation</div>
+    <div style="font-size:12px;color:rgba(255,240,220,0.7);line-height:1.6">44px icon rail. SVG icons. Active section highlighted amber. Settings + Sync pinned to bottom.</div>
+  </div>
+  <div style="background:rgba(255,240,220,0.04);border:1px solid rgba(255,240,220,0.08);border-radius:10px;padding:14px">
+    <div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:rgba(255,240,220,0.3);margin-bottom:8px">Sidebar</div>
+    <div style="font-size:12px;color:rgba(255,240,220,0.7);line-height:1.6">168px panel. Search filter. Connected/Saved groups. Inline port badge. Add button at bottom.</div>
+  </div>
+  <div style="background:rgba(255,240,220,0.04);border:1px solid rgba(255,240,220,0.08);border-radius:10px;padding:14px">
+    <div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:rgba(255,240,220,0.3);margin-bottom:8px">Terminal</div>
+    <div style="font-size:12px;color:rgba(255,240,220,0.7);line-height:1.6">Pane info bar with host + path. Split controls top-right. #100e0c background with warm white text.</div>
+  </div>
+</div>
+
+<div style="margin-top:16px;max-width:860px;padding:14px 18px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:10px;font-size:12px;color:rgba(255,240,220,0.6);line-height:1.6">
+  <strong style="color:#fbbf24">Does this look right?</strong> — Reply in the terminal to confirm or request changes before I write the spec.
+</div>
+
+</body>
+</html>

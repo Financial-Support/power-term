@@ -1,0 +1,222 @@
+<h2>Color palette</h2>
+<p class="subtitle">Same layout, three different color depths — same icons, same structure</p>
+
+<style>
+.color-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 24px;
+}
+.color-card {
+  border: 2px solid transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.color-card:hover { transform: translateY(-2px); }
+.color-card.selected { border-color: #2563eb; }
+.color-card .label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 10px 14px 4px; color: #888; }
+.color-card h3 { font-size: 15px; font-weight: 600; padding: 0 14px 4px; margin: 0; }
+.color-card p { font-size: 12px; padding: 0 14px 10px; margin: 0; color: #888; line-height: 1.5; }
+
+.mf {
+  width: 100%;
+  height: 200px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 10px;
+  overflow: hidden;
+}
+
+.tl-row { height: 22px; display: flex; align-items: center; padding: 0 8px; gap: 5px; }
+.tl { width: 10px; height: 10px; border-radius: 50%; }
+.tl-r { background: #ff5f57; } .tl-y { background: #febc2e; } .tl-g { background: #28c840; }
+.cursor-b { display: inline-block; width: 6px; height: 11px; vertical-align: middle; }
+.dot-g { width: 5px; height: 5px; border-radius: 50%; background: #28c840; flex-shrink: 0; }
+.dot-off { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+/* === A: Pitch black === */
+.pal-a { background: #080808; }
+.pal-a .tabstrip { height: 30px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.04); display: flex; align-items: flex-end; padding: 0 6px; gap: 2px; }
+.pal-a .tab { padding: 4px 10px; border-radius: 4px 4px 0 0; font-size: 10px; color: rgba(255,255,255,0.25); position: relative; }
+.pal-a .tab.active { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.04); }
+.pal-a .tab.active::after { content:''; position: absolute; bottom:0; left:0; right:0; height:2px; background:#3b82f6; border-radius:2px 2px 0 0; }
+.pal-a .body { display: flex; height: calc(100% - 52px); }
+.pal-a .rail { width: 40px; background: rgba(255,255,255,0.015); border-right: 1px solid rgba(255,255,255,0.04); display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 2px; }
+.pal-a .ico { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: rgba(255,255,255,0.22); }
+.pal-a .ico.active { background: rgba(59,130,246,0.2); color: #60a5fa; }
+.pal-a .host-col { width: 110px; background: rgba(255,255,255,0.015); border-right: 1px solid rgba(255,255,255,0.04); padding: 6px 0; }
+.pal-a .sec-title { padding: 6px 10px 3px; font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.25); }
+.pal-a .hi { padding: 4px 8px; border-radius: 4px; margin: 0 4px; display: flex; align-items: center; gap: 5px; color: rgba(255,255,255,0.45); }
+.pal-a .hi.active { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.88); }
+.pal-a .term { flex: 1; padding: 8px; background: #030303; }
+.pal-a .tl { color: rgba(255,255,255,0.6); margin-bottom:1px; }
+.pal-a .prompt { color: #22c55e; }
+.pal-a .cmd { color: #60a5fa; }
+.pal-a .cursor-b { background: rgba(255,255,255,0.65); }
+
+/* === B: Dark navy/slate (refined current) === */
+.pal-b { background: #0e1117; }
+.pal-b .tabstrip { height: 30px; background: rgba(255,255,255,0.025); border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: flex-end; padding: 0 6px; gap: 2px; }
+.pal-b .tab { padding: 4px 10px; border-radius: 4px 4px 0 0; font-size: 10px; color: rgba(255,255,255,0.3); position: relative; }
+.pal-b .tab.active { color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.05); }
+.pal-b .tab.active::after { content:''; position: absolute; bottom:0; left:0; right:0; height:2px; background:#3b82f6; border-radius:2px 2px 0 0; }
+.pal-b .body { display: flex; height: calc(100% - 52px); }
+.pal-b .rail { width: 40px; background: rgba(255,255,255,0.02); border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 2px; }
+.pal-b .ico { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: rgba(255,255,255,0.28); }
+.pal-b .ico.active { background: rgba(59,130,246,0.22); color: #60a5fa; }
+.pal-b .host-col { width: 110px; background: rgba(255,255,255,0.02); border-right: 1px solid rgba(255,255,255,0.06); padding: 6px 0; }
+.pal-b .sec-title { padding: 6px 10px 3px; font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.3); }
+.pal-b .hi { padding: 4px 8px; border-radius: 4px; margin: 0 4px; display: flex; align-items: center; gap: 5px; color: rgba(255,255,255,0.5); }
+.pal-b .hi.active { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.9); }
+.pal-b .term { flex: 1; padding: 8px; background: #080c12; }
+.pal-b .tl { color: rgba(255,255,255,0.65); margin-bottom:1px; }
+.pal-b .prompt { color: #22c55e; }
+.pal-b .cmd { color: #79b8ff; }
+.pal-b .cursor-b { background: rgba(255,255,255,0.7); }
+
+/* === C: Warm dark charcoal === */
+.pal-c { background: #161412; }
+.pal-c .tabstrip { height: 30px; background: rgba(255,255,255,0.025); border-bottom: 1px solid rgba(255,243,220,0.06); display: flex; align-items: flex-end; padding: 0 6px; gap: 2px; }
+.pal-c .tab { padding: 4px 10px; border-radius: 4px 4px 0 0; font-size: 10px; color: rgba(255,240,220,0.28); position: relative; }
+.pal-c .tab.active { color: rgba(255,240,220,0.88); background: rgba(255,240,220,0.05); }
+.pal-c .tab.active::after { content:''; position: absolute; bottom:0; left:0; right:0; height:2px; background:#f59e0b; border-radius:2px 2px 0 0; }
+.pal-c .body { display: flex; height: calc(100% - 52px); }
+.pal-c .rail { width: 40px; background: rgba(255,240,220,0.02); border-right: 1px solid rgba(255,240,220,0.05); display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 2px; }
+.pal-c .ico { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: rgba(255,240,220,0.25); }
+.pal-c .ico.active { background: rgba(245,158,11,0.18); color: #fbbf24; }
+.pal-c .host-col { width: 110px; background: rgba(255,240,220,0.02); border-right: 1px solid rgba(255,240,220,0.05); padding: 6px 0; }
+.pal-c .sec-title { padding: 6px 10px 3px; font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,240,220,0.28); }
+.pal-c .hi { padding: 4px 8px; border-radius: 4px; margin: 0 4px; display: flex; align-items: center; gap: 5px; color: rgba(255,240,220,0.45); }
+.pal-c .hi.active { background: rgba(255,240,220,0.07); color: rgba(255,240,220,0.88); }
+.pal-c .term { flex: 1; padding: 8px; background: #100e0c; }
+.pal-c .tl { color: rgba(255,240,220,0.6); margin-bottom:1px; }
+.pal-c .prompt { color: #22c55e; }
+.pal-c .cmd { color: #93c5fd; }
+.pal-c .cursor-b { background: rgba(255,240,220,0.7); }
+
+.pros-row { display: flex; gap: 4px; padding: 8px 14px 12px; flex-wrap: wrap; }
+.tag { font-size: 10px; background: rgba(37,99,235,0.15); color: #60a5fa; border-radius: 4px; padding: 2px 7px; }
+</style>
+
+<div class="color-cards">
+
+  <!-- A: Pitch black -->
+  <div class="color-card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="label">Option A</div>
+    <h3>Pitch Black</h3>
+    <p>Near-OLED black with subtle blue accent. Maximum contrast, very dramatic.</p>
+    <div class="mf pal-a">
+      <div class="tl-row"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+      <div class="tabstrip">
+        <div class="tab active">server-01</div>
+        <div class="tab">local</div>
+        <div class="tab" style="color:rgba(255,255,255,0.15)">+</div>
+      </div>
+      <div class="body">
+        <div class="rail">
+          <div class="ico active">☰</div>
+          <div class="ico">⌘</div>
+          <div class="ico">⇄</div>
+        </div>
+        <div class="host-col">
+          <div class="sec-title">Hosts</div>
+          <div class="hi active"><div class="dot-g"></div>server-01</div>
+          <div class="hi"><div class="dot-off" style="background:rgba(255,255,255,0.15)"></div>staging</div>
+          <div class="hi"><div class="dot-off" style="background:rgba(255,255,255,0.15)"></div>local</div>
+        </div>
+        <div class="term">
+          <div class="tl"><span class="prompt">~/srv </span><span class="cmd">df -h</span></div>
+          <div class="tl">Filesystem  Size  Used</div>
+          <div class="tl">/dev/sda1   50G   12G</div>
+          <div class="tl"><span class="prompt">~/srv </span><div class="cursor-b" style="background:rgba(255,255,255,0.65)"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pros-row">
+      <span class="tag">#080808 base</span>
+      <span class="tag">Blue accent</span>
+      <span class="tag">Max contrast</span>
+    </div>
+  </div>
+
+  <!-- B: Dark navy -->
+  <div class="color-card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="label">Option B</div>
+    <h3>Dark Navy</h3>
+    <p>Slightly blue-tinted dark. Softer than pitch black, easier on eyes for long sessions.</p>
+    <div class="mf pal-b">
+      <div class="tl-row"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+      <div class="tabstrip">
+        <div class="tab active">server-01</div>
+        <div class="tab">local</div>
+        <div class="tab" style="color:rgba(255,255,255,0.18)">+</div>
+      </div>
+      <div class="body">
+        <div class="rail">
+          <div class="ico active">☰</div>
+          <div class="ico">⌘</div>
+          <div class="ico">⇄</div>
+        </div>
+        <div class="host-col">
+          <div class="sec-title">Hosts</div>
+          <div class="hi active"><div class="dot-g"></div>server-01</div>
+          <div class="hi"><div class="dot-off" style="background:rgba(255,255,255,0.18)"></div>staging</div>
+          <div class="hi"><div class="dot-off" style="background:rgba(255,255,255,0.18)"></div>local</div>
+        </div>
+        <div class="term">
+          <div class="tl"><span class="prompt">~/srv </span><span class="cmd">df -h</span></div>
+          <div class="tl">Filesystem  Size  Used</div>
+          <div class="tl">/dev/sda1   50G   12G</div>
+          <div class="tl"><span class="prompt">~/srv </span><div class="cursor-b" style="background:rgba(255,255,255,0.7)"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pros-row">
+      <span class="tag">#0e1117 base</span>
+      <span class="tag">Blue accent</span>
+      <span class="tag">Familiar</span>
+    </div>
+  </div>
+
+  <!-- C: Warm charcoal -->
+  <div class="color-card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="label">Option C</div>
+    <h3>Warm Charcoal</h3>
+    <p>Warm dark with amber accent. Less cold, more unique — stands out from typical dev tools.</p>
+    <div class="mf pal-c">
+      <div class="tl-row"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+      <div class="tabstrip">
+        <div class="tab active">server-01</div>
+        <div class="tab">local</div>
+        <div class="tab" style="color:rgba(255,240,220,0.18)">+</div>
+      </div>
+      <div class="body">
+        <div class="rail">
+          <div class="ico active">☰</div>
+          <div class="ico">⌘</div>
+          <div class="ico">⇄</div>
+        </div>
+        <div class="host-col">
+          <div class="sec-title">Hosts</div>
+          <div class="hi active"><div class="dot-g"></div>server-01</div>
+          <div class="hi"><div class="dot-off" style="background:rgba(255,240,220,0.18)"></div>staging</div>
+          <div class="hi"><div class="dot-off" style="background:rgba(255,240,220,0.18)"></div>local</div>
+        </div>
+        <div class="term">
+          <div class="tl"><span class="prompt">~/srv </span><span class="cmd">df -h</span></div>
+          <div class="tl">Filesystem  Size  Used</div>
+          <div class="tl">/dev/sda1   50G   12G</div>
+          <div class="tl"><span class="prompt">~/srv </span><div class="cursor-b" style="background:rgba(255,240,220,0.7)"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pros-row">
+      <span class="tag">#161412 base</span>
+      <span class="tag">Amber accent</span>
+      <span class="tag">Warm/unique</span>
+    </div>
+  </div>
+
+</div>

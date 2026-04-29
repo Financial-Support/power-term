@@ -1,0 +1,391 @@
+<h2>Which macOS-native direction?</h2>
+<p class="subtitle">Three design philosophies — pick the one that matches your vision</p>
+
+<style>
+.direction-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 24px;
+}
+.dir-card {
+  border: 2px solid transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+  background: var(--card-bg, #1a1a1a);
+}
+.dir-card:hover { transform: translateY(-2px); }
+.dir-card.selected { border-color: #2563eb; }
+.dir-card .label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 14px 6px;
+  color: #888;
+}
+.dir-card h3 {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 0 14px 4px;
+  margin: 0;
+}
+.dir-card p {
+  font-size: 12px;
+  padding: 0 14px 12px;
+  margin: 0;
+  color: #888;
+  line-height: 1.5;
+}
+.mockup-frame {
+  width: 100%;
+  height: 210px;
+  position: relative;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 10px;
+}
+
+/* ───── Option A: Dark Terminal Chrome ───── */
+.mock-a {
+  background: #1e1e1e;
+}
+.mock-a .toolbar {
+  height: 38px;
+  background: rgba(40,40,40,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.traffic-lights { display: flex; gap: 6px; margin-right: 8px; }
+.tl { width: 12px; height: 12px; border-radius: 50%; }
+.tl-r { background: #ff5f57; }
+.tl-y { background: #febc2e; }
+.tl-g { background: #28c840; }
+.mock-a .tab {
+  background: rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 3px 10px;
+  color: rgba(255,255,255,0.5);
+  font-size: 10px;
+}
+.mock-a .tab.active {
+  background: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.9);
+}
+.mock-a .body { display: flex; height: calc(100% - 38px); }
+.mock-a .sidebar {
+  width: 160px;
+  background: rgba(30,30,30,0.7);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255,255,255,0.07);
+  padding: 8px 0;
+}
+.mock-a .sidebar-section { padding: 3px 10px; color: #666; font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }
+.mock-a .sidebar-item { padding: 4px 10px; color: rgba(255,255,255,0.55); border-radius: 5px; margin: 0 4px; display: flex; align-items: center; gap: 5px; }
+.mock-a .sidebar-item.active { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.9); }
+.mock-a .dot { width: 6px; height: 6px; border-radius: 50%; background: #28c840; flex-shrink: 0; }
+.mock-a .dot.off { background: rgba(255,255,255,0.2); }
+.mock-a .terminal { flex: 1; background: #0d1117; padding: 8px; }
+.mock-a .terminal-line { color: rgba(255,255,255,0.7); margin-bottom: 1px; }
+.mock-a .terminal-line .prompt { color: #28c840; }
+.mock-a .terminal-line .cmd { color: #79b8ff; }
+.mock-a .cursor { display: inline-block; width: 7px; height: 12px; background: rgba(255,255,255,0.8); vertical-align: middle; }
+
+/* ───── Option B: Vibrancy Light (System-Native) ───── */
+.mock-b {
+  background: #f0f0f0;
+}
+.mock-b .titlebar {
+  height: 52px;
+  background: rgba(236,236,236,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.12);
+}
+.mock-b .win-title {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #333;
+}
+.mock-b .toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.mock-b .tb-btn {
+  width: 28px;
+  height: 22px;
+  border-radius: 5px;
+  background: rgba(0,0,0,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #444;
+}
+.mock-b .body { display: flex; height: calc(100% - 52px); }
+.mock-b .sidebar {
+  width: 155px;
+  background: rgba(240,240,240,0.8);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(0,0,0,0.1);
+  padding: 8px 0;
+}
+.mock-b .sidebar-section { padding: 4px 12px 2px; color: #999; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; }
+.mock-b .sidebar-item {
+  padding: 5px 10px;
+  color: #333;
+  border-radius: 6px;
+  margin: 1px 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.mock-b .sidebar-item.active {
+  background: #2563eb;
+  color: #fff;
+}
+.mock-b .sidebar-item .ico { width: 14px; text-align: center; font-size: 10px; }
+.mock-b .content { flex: 1; background: #1a1a1a; }
+.mock-b .terminal { height: 100%; padding: 8px; }
+.mock-b .terminal-line { color: rgba(255,255,255,0.7); margin-bottom: 1px; font-size: 10px; }
+.mock-b .prompt { color: #28c840; }
+.mock-b .cmd { color: #79b8ff; }
+
+/* ───── Option C: Borderless Immersive ───── */
+.mock-c {
+  background: #12121a;
+}
+.mock-c .top {
+  height: 28px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+  -webkit-app-region: drag;
+}
+.mock-c .tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 8px 0 70px;
+  background: rgba(255,255,255,0.03);
+  height: 34px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.mock-c .tab {
+  padding: 4px 12px;
+  color: rgba(255,255,255,0.35);
+  border-radius: 4px 4px 0 0;
+  font-size: 10px;
+  position: relative;
+}
+.mock-c .tab.active {
+  color: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.05);
+}
+.mock-c .tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: #2563eb;
+  border-radius: 2px 2px 0 0;
+}
+.mock-c .body { display: flex; height: calc(100% - 62px); }
+.mock-c .sidebar {
+  width: 44px;
+  background: rgba(255,255,255,0.03);
+  border-right: 1px solid rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 4px;
+}
+.mock-c .nav-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: rgba(255,255,255,0.3);
+}
+.mock-c .nav-icon.active {
+  background: rgba(37,99,235,0.25);
+  color: #60a5fa;
+}
+.mock-c .main-area { flex: 1; display: flex; }
+.mock-c .hosts-panel {
+  width: 120px;
+  background: rgba(255,255,255,0.02);
+  border-right: 1px solid rgba(255,255,255,0.05);
+  padding: 6px;
+}
+.mock-c .host-item {
+  padding: 5px 6px;
+  border-radius: 5px;
+  color: rgba(255,255,255,0.5);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mock-c .host-item.active {
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.9);
+}
+.mock-c .dot { width: 5px; height: 5px; border-radius: 50%; background: #28c840; flex-shrink: 0; }
+.mock-c .terminal { flex: 1; padding: 8px; }
+.mock-c .terminal-line { color: rgba(255,255,255,0.65); margin-bottom: 1px; }
+.mock-c .terminal-line .prompt { color: #28c840; }
+.mock-c .terminal-line .cmd { color: #79b8ff; }
+.mock-c .cursor-c { display: inline-block; width: 7px; height: 11px; background: rgba(255,255,255,0.7); vertical-align: middle; }
+
+.pros-row { display: flex; gap: 4px; padding: 8px 14px 12px; flex-wrap: wrap; }
+.tag { font-size: 10px; background: rgba(37,99,235,0.15); color: #60a5fa; border-radius: 4px; padding: 2px 7px; }
+</style>
+
+<div class="direction-cards">
+
+  <!-- Option A -->
+  <div class="dir-card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="label">Option A</div>
+    <h3>Dark Terminal Chrome</h3>
+    <p>Vibrancy sidebar, tab bar, macOS traffic lights — like iTerm2 reimagined</p>
+    <div class="mockup-frame mock-a">
+      <div class="toolbar">
+        <div class="traffic-lights"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+        <div class="tab active">server-01</div>
+        <div class="tab">local</div>
+        <div class="tab">deploy</div>
+      </div>
+      <div class="body">
+        <div class="sidebar">
+          <div class="sidebar-section">Hosts</div>
+          <div class="sidebar-item active"><div class="dot"></div>server-01</div>
+          <div class="sidebar-item"><div class="dot off"></div>staging</div>
+          <div class="sidebar-item"><div class="dot off"></div>local</div>
+          <div class="sidebar-section">Snippets</div>
+          <div class="sidebar-item">deploy.sh</div>
+          <div class="sidebar-item">nginx restart</div>
+        </div>
+        <div class="terminal">
+          <div class="terminal-line"><span class="prompt">~/projects </span><span class="cmd">git push origin main</span></div>
+          <div class="terminal-line">Enumerating objects: 5, done.</div>
+          <div class="terminal-line">Writing objects: 100% (3/3)</div>
+          <div class="terminal-line"><span class="prompt">~/projects </span><div class="cursor"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pros-row">
+      <span class="tag">Vibrancy blur</span>
+      <span class="tag">Traffic lights</span>
+      <span class="tag">Always dark</span>
+      <span class="tag">Familiar sidebar</span>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="dir-card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="label">Option B</div>
+    <h3>System-Native Light/Dark</h3>
+    <p>Follows macOS HIG — toolbar, source list sidebar, system accent, adapts to OS theme</p>
+    <div class="mockup-frame mock-b">
+      <div class="titlebar">
+        <div class="traffic-lights"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+        <div class="win-title">power-term</div>
+        <div class="toolbar-row">
+          <div class="tb-btn">⌘</div>
+          <div class="tb-btn">⚙</div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="sidebar">
+          <div class="sidebar-section">Hosts</div>
+          <div class="sidebar-item active"><div class="ico">●</div>server-01</div>
+          <div class="sidebar-item"><div class="ico">○</div>staging</div>
+          <div class="sidebar-item"><div class="ico">○</div>local</div>
+          <div class="sidebar-section">Snippets</div>
+          <div class="sidebar-item"><div class="ico">⌘</div>deploy.sh</div>
+          <div class="sidebar-item"><div class="ico">⌘</div>nginx restart</div>
+        </div>
+        <div class="content">
+          <div class="terminal">
+            <div class="terminal-line"><span class="prompt">~/projects </span><span class="cmd">git push origin main</span></div>
+            <div class="terminal-line">Enumerating objects: 5, done.</div>
+            <div class="terminal-line">Writing objects: 100% (3/3)</div>
+            <div class="terminal-line"><span class="prompt">~/projects </span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pros-row">
+      <span class="tag">Light + dark</span>
+      <span class="tag">HIG-compliant</span>
+      <span class="tag">Source list</span>
+      <span class="tag">System font</span>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="dir-card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="label">Option C</div>
+    <h3>Borderless Immersive</h3>
+    <p>Icon-rail navigation, frameless window, terminal is king — like Warp meets macOS</p>
+    <div class="mockup-frame mock-c">
+      <div class="top">
+        <div class="traffic-lights"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+      </div>
+      <div class="tabs-row">
+        <div class="tab active">server-01</div>
+        <div class="tab">local</div>
+        <div class="tab">+ New</div>
+      </div>
+      <div class="body">
+        <div class="sidebar">
+          <div class="nav-icon active">⌫</div>
+          <div class="nav-icon">☰</div>
+          <div class="nav-icon">⌘</div>
+          <div class="nav-icon">⇄</div>
+        </div>
+        <div class="main-area">
+          <div class="hosts-panel">
+            <div class="host-item active"><div class="dot"></div>server-01</div>
+            <div class="host-item"><div class="dot" style="background:rgba(255,255,255,0.2)"></div>staging</div>
+            <div class="host-item"><div class="dot" style="background:rgba(255,255,255,0.2)"></div>local</div>
+          </div>
+          <div class="terminal">
+            <div class="terminal-line"><span class="prompt">~/projects </span><span class="cmd">git push</span></div>
+            <div class="terminal-line">Enumerating objects…</div>
+            <div class="terminal-line"><span class="prompt">~/projects </span><div class="cursor-c"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pros-row">
+      <span class="tag">Frameless</span>
+      <span class="tag">Icon rail</span>
+      <span class="tag">Max terminal space</span>
+      <span class="tag">Minimal chrome</span>
+    </div>
+  </div>
+
+</div>

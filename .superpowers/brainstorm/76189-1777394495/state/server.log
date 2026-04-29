@@ -1,0 +1,4 @@
+{"type":"server-started","port":53608,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:53608","screen_dir":"/Users/band/Projects/band/power-term/.superpowers/brainstorm/76189-1777394495/content","state_dir":"/Users/band/Projects/band/power-term/.superpowers/brainstorm/76189-1777394495/state"}
+{"type":"screen-added","file":"/Users/band/Projects/band/power-term/.superpowers/brainstorm/76189-1777394495/content/architecture.html"}
+{"type":"screen-added","file":"/Users/band/Projects/band/power-term/.superpowers/brainstorm/76189-1777394495/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

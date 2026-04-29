@@ -82,9 +82,15 @@ impl SyncManager {
         let queue = self.queue.clone();
         let result: Result<(), String> = async {
             let token = get_valid_token().await.map_err(|e| e.to_string())?;
+            let user_id = auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
             let client = SupabaseClient::new(token).map_err(|e| e.to_string())?;
             let sync_key = auth::load_sync_key_bytes().ok().flatten();
             pull::pull_all(&client, db, sync_key.as_ref()).await.map_err(|e| e.to_string())?;
+            if !user_id.is_empty() {
+                if let Err(e) = push::push_all_local(&client, db, &user_id).await {
+                    tracing::warn!(error = %e, "push_all_local failed");
+                }
+            }
             flush_queue(&client, &queue).await;
             Ok(())
         }.await;

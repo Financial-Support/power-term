@@ -1,0 +1,66 @@
+<h2>Fixed Layout Presets</h2>
+<p class="subtitle">Which arrangements should we ship? Select all that feel useful.</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="solo" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>Solo</h3>
+      <p>Single pane — the current default. Always available, no change needed.</p>
+      <div style="margin-top:10px;display:flex;gap:4px;height:48px">
+        <div style="flex:1;background:#1a1a2e;border:2px solid #4ade80;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#4ade80;font-size:11px">▌ active</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="2col" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>2-Column</h3>
+      <p>Two panes side by side. Most common split — good for code + logs.</p>
+      <div style="margin-top:10px;display:flex;gap:4px;height:48px">
+        <div style="flex:1;background:#1a1a2e;border:2px solid #4ade80;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#4ade80;font-size:11px">▌</div>
+        <div style="flex:1;background:#0f172a;border:1px solid #334155;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px">▌</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="2row" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>2-Row</h3>
+      <p>Two panes stacked. Good for terminal + output or editor + REPL.</p>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;height:48px">
+        <div style="flex:1;background:#1a1a2e;border:2px solid #4ade80;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#4ade80;font-size:11px">▌</div>
+        <div style="flex:1;background:#0f172a;border:1px solid #334155;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px">▌</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="3col" onclick="toggleSelect(this)">
+    <div class="letter">4</div>
+    <div class="content">
+      <h3>3-Column</h3>
+      <p>Three panes side by side. Useful on wide monitors.</p>
+      <div style="margin-top:10px;display:flex;gap:4px;height:48px">
+        <div style="flex:1;background:#1a1a2e;border:2px solid #4ade80;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#4ade80;font-size:11px">▌</div>
+        <div style="flex:1;background:#0f172a;border:1px solid #334155;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px">▌</div>
+        <div style="flex:1;background:#0f172a;border:1px solid #334155;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px">▌</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="2x2" onclick="toggleSelect(this)">
+    <div class="letter">5</div>
+    <div class="content">
+      <h3>2×2 Grid</h3>
+      <p>Four panes in a grid. Max density — needs a large screen.</p>
+      <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:4px;height:48px">
+        <div style="background:#1a1a2e;border:2px solid #4ade80;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#4ade80;font-size:10px">▌</div>
+        <div style="background:#0f172a;border:1px solid #334155;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:10px">▌</div>
+        <div style="background:#0f172a;border:1px solid #334155;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:10px">▌</div>
+        <div style="background:#0f172a;border:1px solid #334155;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:10px">▌</div>
+      </div>
+    </div>
+  </div>
+</div>

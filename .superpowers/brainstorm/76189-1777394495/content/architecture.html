@@ -1,0 +1,89 @@
+<h2>Cloud Sync Architecture</h2>
+<p class="subtitle">Push-on-change + Pull-on-open via Supabase. Does this flow look right?</p>
+
+<div style="font-family:monospace;font-size:12px;line-height:1.8;background:#0f172a;border-radius:8px;padding:24px;color:#94a3b8">
+
+  <div style="display:grid;grid-template-columns:1fr 80px 1fr;gap:0;align-items:start">
+
+    <!-- Left: Local -->
+    <div>
+      <div style="color:#4ade80;font-size:11px;letter-spacing:0.08em;margin-bottom:12px">LOCAL (Tauri / Rust)</div>
+
+      <div style="border:1px solid #334155;border-radius:6px;padding:12px;margin-bottom:8px;background:#1e293b">
+        <div style="color:#e2e8f0;margin-bottom:4px">SQLite DB</div>
+        <div style="color:#64748b;font-size:11px">hosts · snippets · forwards</div>
+      </div>
+
+      <div style="border:1px solid #334155;border-radius:6px;padding:12px;margin-bottom:8px;background:#1e293b">
+        <div style="color:#e2e8f0;margin-bottom:4px">config.toml</div>
+        <div style="color:#64748b;font-size:11px">settings</div>
+      </div>
+
+      <div style="border:1px solid #334155;border-radius:6px;padding:12px;margin-bottom:16px;background:#1e293b">
+        <div style="color:#e2e8f0;margin-bottom:4px">System Keychain</div>
+        <div style="color:#64748b;font-size:11px">passwords · passphrases · JWT</div>
+      </div>
+
+      <div style="border:1px solid #4ade80;border-radius:6px;padding:12px;background:#0f2a1a">
+        <div style="color:#4ade80;margin-bottom:6px">Sync Engine</div>
+        <div style="color:#86efac;font-size:11px">• pull on app open</div>
+        <div style="color:#86efac;font-size:11px">• push on create/update/delete</div>
+        <div style="color:#86efac;font-size:11px">• last-write-wins (updated_at)</div>
+        <div style="color:#86efac;font-size:11px">• AES-256-GCM for credentials</div>
+      </div>
+    </div>
+
+    <!-- Middle: arrows -->
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:80px;gap:16px;color:#475569">
+      <div style="text-align:center">
+        <div style="color:#4ade80;font-size:18px">⇄</div>
+        <div style="font-size:10px;color:#64748b">REST API<br>+ RLS</div>
+      </div>
+      <div style="text-align:center;margin-top:20px">
+        <div style="color:#818cf8;font-size:18px">⇄</div>
+        <div style="font-size:10px;color:#64748b">GitHub<br>OAuth</div>
+      </div>
+    </div>
+
+    <!-- Right: Supabase -->
+    <div>
+      <div style="color:#818cf8;font-size:11px;letter-spacing:0.08em;margin-bottom:12px">SUPABASE (Cloud)</div>
+
+      <div style="border:1px solid #334155;border-radius:6px;padding:12px;margin-bottom:8px;background:#1e293b">
+        <div style="color:#e2e8f0;margin-bottom:4px">hosts</div>
+        <div style="color:#64748b;font-size:11px">mirrors local schema + updated_at</div>
+      </div>
+
+      <div style="border:1px solid #334155;border-radius:6px;padding:12px;margin-bottom:8px;background:#1e293b">
+        <div style="color:#e2e8f0;margin-bottom:4px">snippets</div>
+        <div style="color:#64748b;font-size:11px">mirrors local schema + updated_at</div>
+      </div>
+
+      <div style="border:1px solid #334155;border-radius:6px;padding:12px;margin-bottom:8px;background:#1e293b">
+        <div style="color:#e2e8f0;margin-bottom:4px">forwards</div>
+        <div style="color:#64748b;font-size:11px">mirrors local schema + updated_at</div>
+      </div>
+
+      <div style="border:1px solid #334155;border-radius:6px;padding:12px;margin-bottom:8px;background:#1e293b">
+        <div style="color:#e2e8f0;margin-bottom:4px">settings</div>
+        <div style="color:#64748b;font-size:11px">single row per user</div>
+      </div>
+
+      <div style="border:1px solid #f87171;border-radius:6px;padding:12px;margin-bottom:8px;background:#2a0f0f">
+        <div style="color:#f87171;margin-bottom:4px">credentials</div>
+        <div style="color:#fca5a5;font-size:11px">AES-256-GCM ciphertext only<br>key never leaves the device</div>
+      </div>
+
+      <div style="border:1px solid #818cf8;border-radius:6px;padding:12px;background:#1a1a2e">
+        <div style="color:#818cf8;margin-bottom:4px">Supabase Auth</div>
+        <div style="color:#a5b4fc;font-size:11px">GitHub OAuth → JWT<br>Row Level Security per user</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:20px;padding:12px;background:#1e293b;border-radius:6px;border-left:3px solid #4ade80">
+    <span style="color:#4ade80">Key invariant:</span>
+    <span style="color:#94a3b8"> The encryption key is <strong style="color:#e2e8f0">derived</strong> from the user's Supabase JWT (HKDF) — never stored anywhere. Supabase only ever sees ciphertext for credentials.</span>
+  </div>
+</div>
