@@ -25,6 +25,7 @@ import { useSettingsStore } from './state/settingsStore';
 import { useHostStore } from './state/hostStore';
 import { useSftpStore } from './state/sftpStore';
 import { useHotkeys } from './hooks/useHotkeys';
+import { useZoom } from './hooks/useZoom';
 import { useTheme } from './hooks/useTheme';
 import { useSyncStore } from './state/syncStore';
 import {
@@ -110,6 +111,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<'appearance' | 'terminal' | 'sync'>('appearance');
   const flowToken = useRef(0);
+  const { zoomIn, zoomOut, zoomReset } = useZoom();
 
   useEffect(() => {
     const { fetchStatus, pull } = useSyncStore.getState();
@@ -121,11 +123,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    listen('menu:open-settings', () => { setSettingsOpen(true); })
-      .then(fn => { unlisten = fn; });
-    return () => { unlisten?.(); };
-  }, []);
+    let u1: (() => void) | undefined;
+    let u2: (() => void) | undefined;
+    let u3: (() => void) | undefined;
+    let u4: (() => void) | undefined;
+    listen('menu:open-settings', () => { setSettingsOpen(true); }).then(fn => { u1 = fn; });
+    listen('menu:zoom-in', () => { zoomIn(); }).then(fn => { u2 = fn; });
+    listen('menu:zoom-out', () => { zoomOut(); }).then(fn => { u3 = fn; });
+    listen('menu:zoom-reset', () => { zoomReset(); }).then(fn => { u4 = fn; });
+    return () => { u1?.(); u2?.(); u3?.(); u4?.(); };
+  }, [zoomIn, zoomOut, zoomReset]);
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);
   useEffect(() => { void loadHosts(); }, [loadHosts]);
@@ -325,7 +332,7 @@ export function App() {
     setConfirmDeleteForward(null);
   }, [deleteForward]);
 
-  useHotkeys({ onNewTab: () => void newLocalTab(), onCloseTab: (id) => void handleClose(id) });
+  useHotkeys({ onNewTab: () => void newLocalTab(), onCloseTab: (id) => void handleClose(id), onZoomIn: zoomIn, onZoomOut: zoomOut, onZoomReset: zoomReset });
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

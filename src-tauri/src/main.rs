@@ -54,11 +54,33 @@ fn main() {
                 .separator()
                 .quit()
                 .build()?;
-            let menu = MenuBuilder::new(app).item(&app_submenu).build()?;
+            let zoom_in_item = MenuItemBuilder::with_id("zoom_in", "Zoom In")
+                .accelerator("CmdOrCtrl+=")
+                .build(app)?;
+            let zoom_out_item = MenuItemBuilder::with_id("zoom_out", "Zoom Out")
+                .accelerator("CmdOrCtrl+-")
+                .build(app)?;
+            let zoom_reset_item = MenuItemBuilder::with_id("zoom_reset", "Actual Size")
+                .accelerator("CmdOrCtrl+0")
+                .build(app)?;
+            let view_submenu = SubmenuBuilder::new(app, "View")
+                .item(&zoom_in_item)
+                .item(&zoom_out_item)
+                .separator()
+                .item(&zoom_reset_item)
+                .build()?;
+            let menu = MenuBuilder::new(app)
+                .item(&app_submenu)
+                .item(&view_submenu)
+                .build()?;
             app.set_menu(menu)?;
             app.on_menu_event(|app_handle, event| {
-                if event.id() == "open_settings" {
-                    let _ = app_handle.emit("menu:open-settings", ());
+                match event.id().as_ref() {
+                    "open_settings" => { let _ = app_handle.emit("menu:open-settings", ()); }
+                    "zoom_in"       => { let _ = app_handle.emit("menu:zoom-in", ()); }
+                    "zoom_out"      => { let _ = app_handle.emit("menu:zoom-out", ()); }
+                    "zoom_reset"    => { let _ = app_handle.emit("menu:zoom-reset", ()); }
+                    _ => {}
                 }
             });
 

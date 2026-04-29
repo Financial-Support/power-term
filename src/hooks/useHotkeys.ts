@@ -4,13 +4,19 @@ import { useSessionStore } from '../state/sessionStore';
 interface Handlers {
   onNewTab: () => void;
   onCloseTab: (id: string) => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
 }
 
-export function useHotkeys({ onNewTab, onCloseTab }: Handlers) {
+export function useHotkeys({ onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomReset }: Handlers) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
       const { tabs, activeTabId, setActive } = useSessionStore.getState();
+      if (e.key === '=' || e.key === '+') { e.preventDefault(); onZoomIn(); return; }
+      if (e.key === '-') { e.preventDefault(); onZoomOut(); return; }
+      if (e.key === '0') { e.preventDefault(); onZoomReset(); return; }
       if (e.key === 't') { e.preventDefault(); onNewTab(); return; }
       if (e.key === 'w') {
         e.preventDefault();
@@ -40,5 +46,5 @@ export function useHotkeys({ onNewTab, onCloseTab }: Handlers) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onNewTab, onCloseTab]);
+  }, [onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomReset]);
 }
