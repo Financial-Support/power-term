@@ -7,20 +7,66 @@ import type { LayoutKind } from '../types';
 
 interface Props {
   children: ReactNode;
-  sidebarOpen?: boolean;
   onLayoutChange?: (kind: LayoutKind) => void;
   onOpenSyncSettings?: () => void;
 }
 
+function LayoutSvg({ kind }: { kind: LayoutKind }) {
+  const s = 18;
+  const r = 2;
+  const stroke = 'currentColor';
+  const sw = 1.4;
+  switch (kind) {
+    case 'solo':
+      return (
+        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
+          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
+        </svg>
+      );
+    case '2col':
+      return (
+        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
+          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
+          <line x1="9" y1="2" x2="9" y2="16" stroke={stroke} strokeWidth={sw} />
+        </svg>
+      );
+    case '2row':
+      return (
+        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
+          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
+          <line x1="2" y1="9" x2="16" y2="9" stroke={stroke} strokeWidth={sw} />
+        </svg>
+      );
+    case '3col':
+      return (
+        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
+          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
+          <line x1="7" y1="2" x2="7" y2="16" stroke={stroke} strokeWidth={sw} />
+          <line x1="11" y1="2" x2="11" y2="16" stroke={stroke} strokeWidth={sw} />
+        </svg>
+      );
+    case '2x2':
+      return (
+        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
+          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
+          <line x1="9" y1="2" x2="9" y2="16" stroke={stroke} strokeWidth={sw} />
+          <line x1="2" y1="9" x2="16" y2="9" stroke={stroke} strokeWidth={sw} />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 const LAYOUT_ICONS: { kind: LayoutKind; label: string }[] = [
   { kind: 'solo',  label: 'Solo' },
-  { kind: '2col',  label: '2 Col' },
-  { kind: '2row',  label: '2 Row' },
-  { kind: '3col',  label: '3 Col' },
-  { kind: '2x2',   label: '2×2' },
+  { kind: '2col',  label: '2 columns' },
+  { kind: '2row',  label: '2 rows' },
+  { kind: '3col',  label: '3 columns' },
+  { kind: '2x2',   label: '2×2 grid' },
 ];
 
-export function TitleBar({ children, sidebarOpen, onLayoutChange, onOpenSyncSettings }: Props) {
+export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props) {
   const layoutKind = useSessionStore((s) => s.layoutKind);
   const [pickerOpen, setPickerOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -57,7 +103,7 @@ export function TitleBar({ children, sidebarOpen, onLayoutChange, onOpenSyncSett
   };
 
   return (
-    <div className={`titlebar ${sidebarOpen ? 'sidebar-open' : ''}`} onMouseDown={handleMouseDown}>
+    <div className="titlebar" onMouseDown={handleMouseDown}>
       <div className="titlebar-drag-left" />
       {children}
       <div className="titlebar-drag-right" />
@@ -67,9 +113,10 @@ export function TitleBar({ children, sidebarOpen, onLayoutChange, onOpenSyncSett
           type="button"
           className="layout-picker-btn"
           aria-label="layout picker"
+          title="Change layout"
           onClick={() => setPickerOpen((o) => !o)}
         >
-          ⊞
+          <LayoutSvg kind={layoutKind} />
         </button>
         {pickerOpen && (
           <div className="layout-picker-popover" role="menu">
@@ -78,12 +125,13 @@ export function TitleBar({ children, sidebarOpen, onLayoutChange, onOpenSyncSett
                 key={kind}
                 type="button"
                 role="menuitem"
-                aria-label={`layout ${label}`}
+                aria-label={label}
                 aria-pressed={layoutKind === kind}
                 className={`layout-option${layoutKind === kind ? ' active' : ''}`}
                 onClick={() => handlePick(kind)}
+                title={label}
               >
-                {label}
+                <LayoutSvg kind={kind} />
               </button>
             ))}
           </div>

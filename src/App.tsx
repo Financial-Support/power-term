@@ -7,7 +7,8 @@ import { FileBrowser } from './components/FileBrowser';
 import { CommandPalette } from './components/CommandPalette';
 import { HostFingerprintPrompt } from './components/HostFingerprintPrompt';
 import { AuthPrompt } from './components/AuthPrompt';
-import { Sidebar } from './components/Sidebar';
+import { IconRail, type SidebarSection } from './components/IconRail';
+import { SidebarPanel } from './components/SidebarPanel';
 import { HostFormModal, type HostFormSaveArgs } from './components/HostFormModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { SnippetsPanel } from './components/SnippetsPanel';
@@ -24,7 +25,6 @@ import { useHostStore } from './state/hostStore';
 import { useSftpStore } from './state/sftpStore';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useTheme } from './hooks/useTheme';
-import { useSidebarToggle } from './hooks/useSidebarToggle';
 import { useSyncStore } from './state/syncStore';
 import {
   ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
@@ -96,7 +96,7 @@ export function App() {
   const initSftpTab = useSftpStore((s) => s.init);
   const closeSftpTabState = useSftpStore((s) => s.closeTab);
 
-  const sidebar = useSidebarToggle();
+  const [sidebarSection, setSidebarSection] = useState<SidebarSection>('hosts');
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [flow, setFlow] = useState<RemoteFlow>({ phase: 'idle' });
@@ -390,35 +390,40 @@ export function App() {
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
   return (
-    <div className={`app theme-${theme}`}>
-      <TitleBar sidebarOpen={sidebar.open} onLayoutChange={(kind) => void fillNullSlots(kind)} onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}>
+    <div className="app">
+      <TitleBar onLayoutChange={(kind) => void fillNullSlots(kind)} onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}>
         <TabBar onNew={() => void newLocalTab()} onClose={(id) => void handleClose(id)} />
       </TitleBar>
       <div className="body">
-        {sidebar.open && (
-          <Sidebar
-            onConnect={(h) => void connectFromHost(h)}
-            onOpenSftp={(h) => void openSftpFromHost(h)}
-            onAdd={() => setForm({ kind: 'create' })}
-            onEdit={(h) => setForm({ kind: 'edit', host: h })}
-            onDelete={(h) => setConfirmDelete(h)}
-            snippetsSlot={
-              <SnippetsPanel
-                onAdd={() => setSnippetForm({ kind: 'create' })}
-                onEdit={(snip) => setSnippetForm({ kind: 'edit', snippet: snip })}
-                onDelete={(snip) => setConfirmDeleteSnippet(snip)}
-                onInsert={onInsertSnippet}
-              />
-            }
-            forwardsSlot={
-              <ForwardsPanel
-                onAdd={() => setForwardForm({ kind: 'create' })}
-                onEdit={(f) => setForwardForm({ kind: 'edit', forward: f })}
-                onDelete={(f) => setConfirmDeleteForward(f)}
-              />
-            }
-          />
-        )}
+        <IconRail
+          activeSection={sidebarSection}
+          onSection={setSidebarSection}
+          onSettings={() => setSettingsOpen(true)}
+          onSync={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}
+        />
+        <SidebarPanel
+          section={sidebarSection}
+          onConnect={(h) => void connectFromHost(h)}
+          onOpenSftp={(h) => void openSftpFromHost(h)}
+          onAddHost={() => setForm({ kind: 'create' })}
+          onEditHost={(h) => setForm({ kind: 'edit', host: h })}
+          onDeleteHost={(h) => setConfirmDelete(h)}
+          snippetsSlot={
+            <SnippetsPanel
+              onAdd={() => setSnippetForm({ kind: 'create' })}
+              onEdit={(snip) => setSnippetForm({ kind: 'edit', snippet: snip })}
+              onDelete={(snip) => setConfirmDeleteSnippet(snip)}
+              onInsert={onInsertSnippet}
+            />
+          }
+          forwardsSlot={
+            <ForwardsPanel
+              onAdd={() => setForwardForm({ kind: 'create' })}
+              onEdit={(f) => setForwardForm({ kind: 'edit', forward: f })}
+              onDelete={(f) => setConfirmDeleteForward(f)}
+            />
+          }
+        />
         <main className={`terminals layout-${layoutKind}`}>
           {layoutSlots.map((tabId, i) => {
             const tab = tabs.find((t) => t.id === tabId);
