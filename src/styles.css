@@ -160,21 +160,21 @@ html, body, #root { height: 100%; margin: 0; }
 
 /* ─── Icon rail ─────────────────────────────────────────────────────────── */
 .icon-rail {
-  width: 44px;
-  flex: 0 0 44px;
+  width: 55px;
+  flex: 0 0 55px;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 0;
-  gap: 2px;
+  padding: 10px 0;
+  gap: 3px;
   user-select: none;
 }
 .rail-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 7px;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
   border: none;
   background: transparent;
   color: var(--fg-muted);
@@ -199,8 +199,8 @@ html, body, #root { height: 100%; margin: 0; }
 
 /* ─── Sidebar panel ─────────────────────────────────────────────────────── */
 .sidebar-panel {
-  width: 168px;
-  flex: 0 0 168px;
+  width: 210px;
+  flex: 0 0 210px;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
@@ -217,30 +217,30 @@ html, body, #root { height: 100%; margin: 0; }
 .sp-section-slot { padding: 0; }
 
 .sp-search-row {
-  padding: 8px 8px 4px;
+  padding: 10px 10px 5px;
 }
 .sp-search {
   width: 100%;
   box-sizing: border-box;
-  height: 26px;
-  padding: 0 8px;
+  height: 32px;
+  padding: 0 10px;
   background: rgba(255,240,220,0.06);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 7px;
   color: var(--fg);
   font: inherit;
-  font-size: 11px;
+  font-size: 14px;
   outline: none;
   transition: border-color 0.1s;
 }
 .sp-search::placeholder { color: var(--fg-dim); }
 .sp-search:focus { border-color: var(--accent-ring); }
 
-.sp-error { color: var(--danger); padding: 0 10px; font-size: 11px; }
-.sp-empty { padding: 10px 12px; font-size: 11px; color: var(--fg-dim); }
+.sp-error { color: var(--danger); padding: 0 12px; font-size: 13px; }
+.sp-empty { padding: 12px 15px; font-size: 13px; color: var(--fg-dim); }
 
-.sp-list { flex: 1; overflow-y: auto; padding: 0 4px; scrollbar-width: thin; }
-.sp-list::-webkit-scrollbar { width: 4px; }
+.sp-list { flex: 1; overflow-y: auto; padding: 0 5px; scrollbar-width: thin; }
+.sp-list::-webkit-scrollbar { width: 5px; }
 .sp-list::-webkit-scrollbar-thumb { background: rgba(255,240,220,0.12); border-radius: 2px; }
 .sp-list::-webkit-scrollbar-track { background: transparent; }
 
@@ -258,8 +258,8 @@ html, body, #root { height: 100%; margin: 0; }
 .sp-group-toggle {
   flex: 1;
   text-align: left;
-  padding: 4px 6px;
-  font-size: 10px;
+  padding: 5px 8px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -269,9 +269,9 @@ html, body, #root { height: 100%; margin: 0; }
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
-.sp-caret { display: inline-block; width: 10px; opacity: 0.6; }
+.sp-caret { display: inline-block; width: 12px; opacity: 0.6; }
 .sp-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-group-rename-btn {
   display: none;
@@ -279,16 +279,16 @@ html, body, #root { height: 100%; margin: 0; }
   border: 0;
   cursor: pointer;
   color: var(--fg-dim);
-  padding: 2px 5px;
-  font-size: 11px;
+  padding: 3px 6px;
+  font-size: 13px;
 }
 .sp-group:hover .sp-group-rename-btn { display: inline-block; }
 .sp-group-rename-btn:hover { color: var(--fg); }
 .sp-group-rename-input {
   flex: 1;
-  padding: 1px 4px;
+  padding: 1px 5px;
   font: inherit;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   background: var(--bg-elevated);
   color: var(--fg);
@@ -301,8 +301,8 @@ html, body, #root { height: 100%; margin: 0; }
 .sp-host {
   display: flex;
   align-items: center;
-  border-radius: 5px;
-  padding: 0 4px 0 0;
+  border-radius: 6px;
+  padding: 0 5px 0 0;
   cursor: grab;
   transition: background 0.08s;
 }
@@ -310,23 +310,23 @@ html, body, #root { height: 100%; margin: 0; }
 .sp-host.dragging { opacity: 0.4; }
 .sp-host-dot {
   display: inline-block;
-  width: 5px; height: 5px;
+  width: 6px; height: 6px;
   border-radius: 50%;
   background: var(--fg-dim);
   flex-shrink: 0;
-  margin: 0 6px 0 8px;
+  margin: 0 8px 0 10px;
 }
 .sp-host-name {
   flex: 1;
   min-width: 0;
   text-align: left;
-  padding: 5px 4px 5px 0;
+  padding: 6px 5px 6px 0;
   background: transparent;
   border: 0;
   color: var(--fg);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -335,9 +335,9 @@ html, body, #root { height: 100%; margin: 0; }
   gap: 0;
 }
 .sp-host-port {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-dim);
-  margin-right: 2px;
+  margin-right: 3px;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
@@ -347,29 +347,29 @@ html, body, #root { height: 100%; margin: 0; }
   background: transparent;
   border: 0;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 3px 5px;
   color: var(--fg-muted);
-  font-size: 11px;
-  border-radius: 3px;
+  font-size: 13px;
+  border-radius: 4px;
 }
 .sp-host-actions button:hover { color: var(--fg); background: var(--bg-hover); }
 
 .sp-footer {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-top: 1px solid var(--border);
 }
 .sp-add-btn {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
+  gap: 8px;
+  padding: 6px 10px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   color: var(--fg-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 15px;
   cursor: pointer;
   transition: background 0.1s, color 0.1s;
 }

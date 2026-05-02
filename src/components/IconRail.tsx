@@ -65,7 +65,7 @@ export function IconRail({ activeSection, onSection, onSettings, onSync }: Props
 
 function IconHosts() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden>
       <rect x="2" y="2" width="12" height="4.5" rx="1.5" stroke="currentColor" strokeWidth="1.25" />
       <rect x="2" y="8.5" width="12" height="4.5" rx="1.5" stroke="currentColor" strokeWidth="1.25" />
       <circle cx="12.5" cy="4.25" r="0.85" fill="currentColor" />
@@ -76,7 +76,7 @@ function IconHosts() {
 
 function IconSnippets() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden>
       <path d="M3 4h10M3 7.5h7M3 11h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
@@ -84,7 +84,7 @@ function IconSnippets() {
 
 function IconForwards() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden>
       <path d="M2 8h12M10 5l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="4" cy="8" r="1.3" fill="currentColor" />
     </svg>
@@ -93,7 +93,7 @@ function IconForwards() {
 
 function IconSettings() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
         d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
         stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
