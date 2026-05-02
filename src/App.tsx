@@ -38,6 +38,28 @@ import { LAYOUT_SLOT_COUNTS as COUNTS } from './types';
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 
+/**
+ * Read the macOS user accent colour via the CSS `AccentColor` system
+ * keyword. We probe a hidden element instead of writing the keyword into
+ * a custom property because WKWebView's `color-mix()` implementation
+ * doesn't pre-resolve system colours, so any derivation that should be
+ * translucent purple ends up failing to compute.
+ *
+ * Returns an `rgb(...)` / `rgba(...)` string, or null if the keyword
+ * resolved to something unusable (very old WebKit).
+ */
+function resolveSystemAccent(): string | null {
+  const probe = document.createElement('span');
+  probe.style.color = 'AccentColor';
+  probe.style.position = 'absolute';
+  probe.style.visibility = 'hidden';
+  probe.style.pointerEvents = 'none';
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color && color.startsWith('rgb') ? color : null;
+}
+
 type TargetKind = 'shell' | 'sftp';
 
 type RemoteFlow =
@@ -415,15 +437,35 @@ export function App() {
     const accent = settings?.accent_color ?? 'system';
     const root = document.documentElement;
     if (accent === 'system') {
-      // `AccentColor` is a CSS system colour keyword that resolves to the
-      // user's macOS accent (Safari 16.4+ / WKWebView). color-mix in the
-      // stylesheet then derives the lighter/translucent variants.
-      root.style.setProperty('--accent', 'AccentColor');
+      // Resolve the `AccentColor` system keyword into a concrete rgb()
+      // value before assigning. Setting `--accent: AccentColor` directly
+      // breaks `color-mix(... var(--accent) ...)` in WebKit because the
+      // mixer can't pre-multiply a system colour. Probing via getComputedStyle
+      // returns the rendered colour, which mixes cleanly.
+      const resolved = resolveSystemAccent();
+      if (resolved) root.style.setProperty('--accent', resolved);
+      else root.style.removeProperty('--accent');
     } else if (/^#[0-9a-f]{6}$/i.test(accent)) {
       root.style.setProperty('--accent', accent);
     } else {
       root.style.removeProperty('--accent');
     }
+  }, [settings?.accent_color]);
+
+  // Re-probe whenever the OS appearance/accent might have changed.
+  useEffect(() => {
+    if (settings?.accent_color !== 'system' && settings?.accent_color != null) return;
+    const apply = () => {
+      const resolved = resolveSystemAccent();
+      if (resolved) document.documentElement.style.setProperty('--accent', resolved);
+    };
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', apply);
+    window.addEventListener('focus', apply);
+    return () => {
+      mq.removeEventListener('change', apply);
+      window.removeEventListener('focus', apply);
+    };
   }, [settings?.accent_color]);
 
   return (

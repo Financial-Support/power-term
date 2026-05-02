@@ -725,7 +725,7 @@ html, body, #root { height: 100%; margin: 0; }
   box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--accent-ring);
   border-color: var(--accent);
 }
-.accent-swatch-system { background: AccentColor, var(--accent); }
+.accent-swatch-system { background: AccentColor; }
 .accent-swatch-custom {
   background: linear-gradient(135deg, #f59e0b, #ef4444 50%, #a855f7);
   position: relative;
