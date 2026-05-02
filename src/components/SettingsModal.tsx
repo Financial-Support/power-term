@@ -60,7 +60,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
       <div className="modal modal-form modal-settings">
         <div className="modal-settings-header">
           <h2>Settings</h2>
-          <button type="button" className="modal-close-btn" aria-label="Close settings" onClick={onClose}>✕</button>
+          <button type="button" className="modal-close-btn" aria-label="Close settings" title="Close (Esc)" onClick={onClose}>✕</button>
         </div>
 
         <div className="settings-tabs" role="tablist">

@@ -28,7 +28,11 @@ export function SyncStatus({ onErrorClick }: Props) {
       className={`sync-status sync-status--${status}`}
       aria-label={status === 'error' ? 'sync error' : status === 'syncing' ? 'syncing' : 'synced'}
       onClick={status === 'error' ? onErrorClick : undefined}
-      title={status === 'error' ? (syncState.error ?? 'Sync error') : undefined}
+      title={
+        status === 'error' ? (syncState.error ?? 'Sync error')
+        : status === 'syncing' ? 'Syncing with Supabase…'
+        : 'All changes synced'
+      }
     >
       {status === 'syncing' && <span className="sync-spinner">↻</span>}
       {status === 'synced' && <span>✓</span>}

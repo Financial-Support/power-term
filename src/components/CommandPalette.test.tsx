@@ -6,13 +6,13 @@ import { CommandPalette } from './CommandPalette';
 describe('CommandPalette', () => {
   it('renders an input', () => {
     render(<CommandPalette open onClose={() => {}} onSshConnect={vi.fn()} />);
-    expect(screen.getByPlaceholderText(/ssh user@host/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/search hosts/i)).toBeInTheDocument();
   });
 
   it('typing "ssh user@host" + Enter triggers onSshConnect', async () => {
     const onSshConnect = vi.fn();
     render(<CommandPalette open onClose={() => {}} onSshConnect={onSshConnect} />);
-    const input = screen.getByPlaceholderText(/ssh user@host/i);
+    const input = screen.getByPlaceholderText(/search hosts/i);
     await userEvent.type(input, 'ssh band@example.com:2222{Enter}');
     expect(onSshConnect).toHaveBeenCalledWith({ user: 'band', host: 'example.com', port: 2222 });
   });
@@ -20,22 +20,21 @@ describe('CommandPalette', () => {
   it('Escape calls onClose', async () => {
     const onClose = vi.fn();
     render(<CommandPalette open onClose={onClose} onSshConnect={vi.fn()} />);
-    const input = screen.getByPlaceholderText(/ssh user@host/i);
+    const input = screen.getByPlaceholderText(/search hosts/i);
     await userEvent.type(input, '{Escape}');
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('shows a parse error and does not call onSshConnect on bad input', async () => {
+  it('does not call onSshConnect on incomplete ssh input', async () => {
     const onSshConnect = vi.fn();
     render(<CommandPalette open onClose={() => {}} onSshConnect={onSshConnect} />);
-    const input = screen.getByPlaceholderText(/ssh user@host/i);
+    const input = screen.getByPlaceholderText(/search hosts/i);
     await userEvent.type(input, 'ssh @@@{Enter}');
     expect(onSshConnect).not.toHaveBeenCalled();
-    expect(screen.getByText(/invalid|empty/i)).toBeInTheDocument();
   });
 
   it('does not render when open is false', () => {
     render(<CommandPalette open={false} onClose={() => {}} onSshConnect={vi.fn()} />);
-    expect(screen.queryByPlaceholderText(/ssh user@host/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/search hosts/i)).not.toBeInTheDocument();
   });
 });

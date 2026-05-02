@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { SearchAddon } from '@xterm/addon-search';
+import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { onPtyExit, onPtyOutput, ptyResize, ptyWrite, sshAttach, sshResize, sshWrite } from '../lib/ipc';
@@ -18,11 +18,16 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
   const settings = useSettingsStore((s) => s.settings);
   const markExit = useSessionStore((s) => s.markExit);
   const resolvedTheme = useTheme();
   const onAutoCloseRef = useRef(onAutoClose);
   useEffect(() => { onAutoCloseRef.current = onAutoClose; }, [onAutoClose]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInfo, setSearchInfo] = useState<{ index: number; count: number }>({ index: -1, count: 0 });
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!containerRef.current || !settings) return;
@@ -38,7 +43,12 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon());
-    term.loadAddon(new SearchAddon());
+    const searchAddon = new SearchAddon();
+    term.loadAddon(searchAddon);
+    searchAddonRef.current = searchAddon;
+    searchAddon.onDidChangeResults(({ resultIndex, resultCount }) =>
+      setSearchInfo({ index: resultIndex, count: resultCount }),
+    );
     term.loadAddon(new Unicode11Addon());
     term.unicode.activeVersion = '11';
     try { term.loadAddon(new WebglAddon()); } catch { /* fall back to canvas */ }
@@ -60,6 +70,12 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
         void navigator.clipboard.readText().then((text) => {
           if (text) term.paste(text);
         });
+        return false;
+      }
+      if (e.key === 'f') {
+        // Open in-terminal search overlay. Focus is moved to the input by
+        // the autoFocus prop on render, so the keystroke is consumed here.
+        setSearchOpen(true);
         return false;
       }
       // Let App-level useHotkeys handle Cmd+T/W/1-9/[/].
@@ -192,11 +208,75 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     term.options.theme = resolveXtermTheme(settings?.terminal_theme ?? 'default', resolvedTheme);
   }, [resolvedTheme, settings?.terminal_theme]);
 
+  const SEARCH_OPTS: ISearchOptions = { caseSensitive: false, wholeWord: false, regex: false };
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchInfo({ index: -1, count: 0 });
+    searchAddonRef.current?.clearDecorations();
+    requestAnimationFrame(() => xtermRef.current?.focus());
+  };
+
   return (
     <div
-      ref={containerRef}
-      style={{ width: '100%', height: '100%', display: visible ? 'block' : 'none' }}
-    />
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        display: visible ? 'block' : 'none',
+      }}
+    >
+      {searchOpen && (
+        <div className="terminal-search" role="search">
+          <input
+            ref={searchInputRef}
+            autoFocus
+            placeholder="Find"
+            value={searchQuery}
+            onChange={(e) => {
+              const q = e.target.value;
+              setSearchQuery(q);
+              if (q) searchAddonRef.current?.findNext(q, SEARCH_OPTS);
+              else { searchAddonRef.current?.clearDecorations(); setSearchInfo({ index: -1, count: 0 }); }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.preventDefault(); closeSearch(); return; }
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (!searchQuery) return;
+                if (e.shiftKey) searchAddonRef.current?.findPrevious(searchQuery, SEARCH_OPTS);
+                else searchAddonRef.current?.findNext(searchQuery, SEARCH_OPTS);
+              }
+            }}
+          />
+          <span className="terminal-search-count">
+            {searchInfo.count > 0 ? `${searchInfo.index + 1}/${searchInfo.count}` : (searchQuery ? '0/0' : '')}
+          </span>
+          <button
+            type="button"
+            className="terminal-search-btn"
+            aria-label="Previous match"
+            title="Previous match (Shift+Enter)"
+            onClick={() => searchQuery && searchAddonRef.current?.findPrevious(searchQuery, SEARCH_OPTS)}
+          >↑</button>
+          <button
+            type="button"
+            className="terminal-search-btn"
+            aria-label="Next match"
+            title="Next match (Enter)"
+            onClick={() => searchQuery && searchAddonRef.current?.findNext(searchQuery, SEARCH_OPTS)}
+          >↓</button>
+          <button
+            type="button"
+            className="terminal-search-btn"
+            aria-label="Close search"
+            title="Close (Esc)"
+            onClick={closeSearch}
+          >✕</button>
+        </div>
+      )}
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+    </div>
   );
 }
 

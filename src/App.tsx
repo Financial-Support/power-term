@@ -497,13 +497,26 @@ export function App() {
                   <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
                     +
                   </button>
+                  <div className="pane-empty-hints">
+                    <div className="pane-empty-hint"><kbd>⌘T</kbd><span>New local tab</span></div>
+                    <div className="pane-empty-hint"><kbd>⌘K</kbd><span>Find host or snippet</span></div>
+                    <div className="pane-empty-hint"><kbd>⌘,</kbd><span>Settings</span></div>
+                  </div>
                 </div>
               </div>
             );
           })}
         </main>
       </div>
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onSshConnect={onPaletteSshConnect} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onSshConnect={onPaletteSshConnect}
+        onConnectHost={(h) => void connectFromHost(h)}
+        onInsertSnippet={onInsertSnippet}
+        onNewLocalTab={() => void newLocalTab()}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
       {flow.phase === 'connecting' && (
         <div className="connecting-overlay" role="status" aria-live="polite">
           <div className="connecting-card">
