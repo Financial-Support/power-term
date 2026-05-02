@@ -156,8 +156,10 @@ export function SidebarPanel({
                         className="sp-group-toggle"
                         onClick={() => toggle(g.name)}
                         onDoubleClick={() => startRenameGroup(g)}
+                        aria-expanded={!isCollapsed}
                       >
-                        <span className="sp-caret">{isCollapsed ? '▸' : '▾'}</span>
+                        <span className={`sp-caret${isCollapsed ? ' collapsed' : ''}`}><CaretIcon /></span>
+                        <span className="sp-group-icon"><FolderIcon open={!isCollapsed} /></span>
                         {isRenaming ? (
                           <input
                             autoFocus
@@ -187,7 +189,7 @@ export function SidebarPanel({
                     </div>
                   )}
                   {!isCollapsed && (
-                    <ul className="sp-host-list">
+                    <ul className={`sp-host-list${showGroupHeader ? ' nested' : ''}`}>
                       {g.hosts.map((host) => (
                         <li
                           key={host.id}
@@ -250,4 +252,35 @@ function hostToInput(host: Host, override: Partial<HostInput>): HostInput {
     auth_method: host.auth_method, key_path: host.key_path, notes: host.notes,
     ...override,
   };
+}
+
+function CaretIcon() {
+  // The caret rotates -90° via CSS when the group is collapsed (keeps a
+  // single SVG asset for both states).
+  return (
+    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
+      <path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" strokeWidth="1.4"
+            strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function FolderIcon({ open }: { open: boolean }) {
+  if (open) {
+    return (
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+        <path d="M2 4.5C2 3.95 2.45 3.5 3 3.5H5.5L6.5 4.5H11C11.55 4.5 12 4.95 12 5.5V6H4L2.6 11.5H2.5C2 11.5 1.5 11 1.5 10.5L2 4.5Z"
+              fill="currentColor" fillOpacity="0.16" />
+        <path d="M2 4.5C2 3.95 2.45 3.5 3 3.5H5.5L6.5 4.5H11C11.55 4.5 12 4.95 12 5.5V6M2 4.5V10.5C2 11.05 2.45 11.5 3 11.5H10.6C11.05 11.5 11.45 11.2 11.55 10.78L12.7 6.78C12.85 6.18 12.4 5.5 11.75 5.5H4.25C3.8 5.5 3.4 5.8 3.3 6.22L2 11.5"
+              stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="M2 5C2 4.45 2.45 4 3 4H5.5L6.5 5H11C11.55 5 12 5.45 12 6V10.5C12 11.05 11.55 11.5 11 11.5H3C2.45 11.5 2 11.05 2 10.5V5Z"
+            fill="currentColor" fillOpacity="0.12"
+            stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+    </svg>
+  );
 }

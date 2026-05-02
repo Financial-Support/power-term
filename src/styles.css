@@ -257,7 +257,7 @@ html, body, #root { height: 100%; margin: 0; }
 .sp-list::-webkit-scrollbar-thumb { background: rgba(255,240,220,0.12); border-radius: 2px; }
 .sp-list::-webkit-scrollbar-track { background: transparent; }
 
-.sp-group { margin-bottom: 2px; }
+.sp-group { margin-bottom: 4px; }
 .sp-group.drop-active {
   background: rgba(245,158,11,0.08);
   border-radius: 6px;
@@ -271,20 +271,33 @@ html, body, #root { height: 100%; margin: 0; }
 .sp-group-toggle {
   flex: 1;
   text-align: left;
-  padding: 5px 8px;
+  padding: 6px 8px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background: transparent;
   border: 0;
-  color: var(--fg-dim);
+  color: var(--fg);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
-.sp-caret { display: inline-block; width: 12px; opacity: 0.6; }
+.sp-group-toggle:hover { color: var(--accent-text); }
+.sp-caret {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 10px; height: 10px;
+  color: var(--fg-muted);
+  transition: transform 0.12s ease;
+}
+.sp-caret.collapsed { transform: rotate(-90deg); }
+.sp-group-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px;
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
 .sp-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-group-rename-btn {
   display: none;
@@ -311,6 +324,14 @@ html, body, #root { height: 100%; margin: 0; }
 }
 
 .sp-host-list { list-style: none; margin: 0; padding: 0; }
+/* Inside a named group: visible parent → child relationship via a thin
+   guide line that drops from under the caret and contains the children. */
+.sp-host-list.nested {
+  margin-left: 13px;         /* aligns left edge with the caret centre        */
+  padding-left: 10px;        /* gap between guide line and host content       */
+  border-left: 1px solid var(--border);
+}
+.sp-host-list.nested:hover { border-left-color: var(--border-med); }
 .sp-host {
   display: flex;
   align-items: center;
