@@ -354,13 +354,15 @@ html, body, #root { height: 100%; margin: 0; }
   flex: 1;
   min-width: 0;
   text-align: left;
-  padding: 6px 5px 6px 0;
+  padding: 5px 5px 5px 0;
   background: transparent;
   border: 0;
   color: var(--fg);
   cursor: pointer;
   font: inherit;
-  font-size: 15px;
+  /* Host name sits one step below the group header (12px uppercase bold)
+     so the parent reads as the heading and children as content. */
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -369,7 +371,7 @@ html, body, #root { height: 100%; margin: 0; }
   gap: 0;
 }
 .sp-host-port {
-  font-size: 12px;
+  font-size: 10px;
   color: var(--fg-dim);
   margin-right: 3px;
   font-variant-numeric: tabular-nums;
