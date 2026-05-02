@@ -171,7 +171,15 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
       xtermRef.current = null;
       fitRef.current = null;
     };
-  }, [tab.ptyId, settings, markExit]);
+    // `settings` is intentionally not in the dep array. We seed the xterm
+    // instance with the current snapshot at construction time and let the
+    // dedicated effects below (theme / cursor / font / scrollback) push
+    // subsequent changes onto the live instance. Otherwise every Save in
+    // the Settings dialog would tear down the terminal and wipe the user's
+    // scrollback. `!!settings` is included so the effect runs once when
+    // settings load for the first time after a fresh start.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.ptyId, markExit, !!settings]);
 
   useEffect(() => {
     if (!visible) return;
@@ -217,6 +225,22 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     if (settings?.cursor_style) term.options.cursorStyle = settings.cursor_style;
     if (typeof settings?.cursor_blink === 'boolean') term.options.cursorBlink = settings.cursor_blink;
   }, [settings?.cursor_style, settings?.cursor_blink]);
+
+  // Font / scrollback updates are also live. fit() reflows after a font
+  // change so the cell grid lines back up with the container.
+  useEffect(() => {
+    const term = xtermRef.current;
+    if (!term || !settings) return;
+    term.options.fontFamily = withMonospaceFallback(settings.font_family);
+    term.options.fontSize = settings.font_size;
+    fitRef.current?.fit();
+  }, [settings?.font_family, settings?.font_size]);
+
+  useEffect(() => {
+    const term = xtermRef.current;
+    if (!term || !settings) return;
+    term.options.scrollback = settings.scrollback_lines;
+  }, [settings?.scrollback_lines]);
 
   const SEARCH_OPTS: ISearchOptions = { caseSensitive: false, wholeWord: false, regex: false };
   const closeSearch = () => {

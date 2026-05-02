@@ -1054,12 +1054,65 @@ html, body, #root { height: 100%; margin: 0; }
 .sync-tab-desc { color: var(--fg-muted); font-size: 13px; margin: 0; }
 .sync-user-row { display: flex; align-items: center; justify-content: space-between; }
 .sync-user-email { font-weight: 500; }
-.sync-sign-out { font-size: 12px; }
 .sync-last-synced { font-size: 12px; color: var(--fg-muted); margin: 0; }
-.sync-pull-btn { align-self: flex-start; }
 .sync-key-section h3 { margin: 0 0 8px; font-size: 13px; }
 .sync-key-display { display: flex; align-items: center; gap: 8px; }
-.sync-key-display code { font-family: monospace; font-size: 13px; letter-spacing: 0.05em; }
+.sync-key-display code {
+  flex: 1;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 13px; letter-spacing: 0.05em;
+  padding: 6px 10px;
+  background: rgba(255,240,220,0.04);
+  border: 1px solid var(--border-med);
+  border-radius: 7px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .sync-key-notice { color: var(--fg-muted); font-size: 13px; margin: 0; }
 .sync-key-input-row { display: flex; gap: 8px; }
 .sync-key-input-row input { flex: 1; }
+
+/* Unify all buttons inside the Sync tab with the modal-actions look used
+   on the Appearance / Terminal tabs so the dialog feels coherent. */
+.sync-tab button,
+.sync-tab .sync-key-display button,
+.sync-tab .sync-key-input-row button {
+  padding: 6px 14px;
+  border: 1px solid var(--border-med);
+  background: var(--bg-hover);
+  color: var(--fg);
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit; font-size: 13px;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.sync-tab button:hover:not(:disabled) { background: rgba(255,240,220,0.1); }
+.sync-tab button:disabled { opacity: 0.5; cursor: not-allowed; }
+.sync-tab button.primary {
+  background: var(--accent);
+  color: #0a0806;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.sync-tab button.primary:hover:not(:disabled) { background: var(--accent-text); border-color: var(--accent-text); }
+.sync-tab button.danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.sync-tab button.danger:hover:not(:disabled) { background: rgba(239,68,68,0.12); }
+.sync-pull-btn { align-self: flex-start; }
+
+/* Inputs inside the Sync tab match form-grid inputs in other tabs. */
+.sync-tab input[type="text"],
+.sync-tab input:not([type]) {
+  padding: 6px 10px;
+  background: rgba(255,240,220,0.04);
+  border: 1px solid var(--border-med);
+  border-radius: 7px;
+  color: var(--fg);
+  font: inherit; font-size: 13px;
+  outline: 0;
+  transition: border-color 0.1s;
+}
+.sync-tab input[type="text"]:focus,
+.sync-tab input:not([type]):focus { border-color: var(--accent-ring); }
