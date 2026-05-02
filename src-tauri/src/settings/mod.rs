@@ -10,6 +10,9 @@ pub struct Settings {
     pub font_size: u16,
     pub theme: String,
     pub cursor_blink: bool,
+    /// xterm.js cursor shape: "block", "underline", or "bar". Anything else
+    /// is treated as "block" by the renderer.
+    pub cursor_style: String,
     pub scrollback_lines: u32,
     pub ssh_connect_timeout_secs: u32,
     pub ssh_keepalive_interval_secs: u32,
@@ -25,6 +28,7 @@ impl Default for Settings {
             font_size: 14,
             theme: "auto".to_string(),
             cursor_blink: true,
+            cursor_style: "block".to_string(),
             scrollback_lines: 10_000,
             ssh_connect_timeout_secs: 10,
             ssh_keepalive_interval_secs: 30,
@@ -42,6 +46,7 @@ pub struct SettingsPatch {
     pub font_size: Option<u16>,
     pub theme: Option<String>,
     pub cursor_blink: Option<bool>,
+    pub cursor_style: Option<String>,
     pub scrollback_lines: Option<u32>,
     pub ssh_connect_timeout_secs: Option<u32>,
     pub ssh_keepalive_interval_secs: Option<u32>,
@@ -86,6 +91,12 @@ impl SettingsStore {
         if let Some(v) = patch.font_size { s.font_size = v; }
         if let Some(v) = patch.theme { s.theme = v; }
         if let Some(v) = patch.cursor_blink { s.cursor_blink = v; }
+        if let Some(v) = patch.cursor_style {
+            // Reject unknown shapes so a typo doesn't poison the config file.
+            if matches!(v.as_str(), "block" | "underline" | "bar") {
+                s.cursor_style = v;
+            }
+        }
         if let Some(v) = patch.scrollback_lines { s.scrollback_lines = v; }
         if let Some(v) = patch.ssh_connect_timeout_secs { s.ssh_connect_timeout_secs = v; }
         if let Some(v) = patch.ssh_keepalive_interval_secs { s.ssh_keepalive_interval_secs = v; }

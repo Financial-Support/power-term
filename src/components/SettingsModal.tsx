@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../state/settingsStore';
 import { THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from '../themes';
 import { SyncTab } from './SyncTab';
-import type { SettingsPatch } from '../types';
+import type { CursorStyle, SettingsPatch } from '../types';
 
 interface Props {
   onClose: () => void;
@@ -20,6 +20,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
   const [fontFamily, setFontFamily] = useState(settings?.font_family ?? 'SF Mono');
   const [fontSize, setFontSize] = useState(settings?.font_size ?? 14);
   const [cursorBlink, setCursorBlink] = useState(settings?.cursor_blink ?? true);
+  const [cursorStyle, setCursorStyle] = useState<CursorStyle>(settings?.cursor_style ?? 'block');
   const [scrollback, setScrollback] = useState(settings?.scrollback_lines ?? 10000);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
     if (fontFamily !== settings.font_family) patch.font_family = fontFamily;
     if (fontSize !== settings.font_size) patch.font_size = fontSize;
     if (cursorBlink !== settings.cursor_blink) patch.cursor_blink = cursorBlink;
+    if (cursorStyle !== settings.cursor_style) patch.cursor_style = cursorStyle;
     if (scrollback !== settings.scrollback_lines) patch.scrollback_lines = scrollback;
     if (Object.keys(patch).length === 0) { onClose(); return; }
     setSaving(true);
@@ -108,6 +110,24 @@ export function SettingsModal({ onClose, initialTab }: Props) {
               onChange={(e) => { const n = parseInt(e.target.value, 10); setFontSize(isNaN(n) ? 0 : n); }}
             />
 
+            <label htmlFor="sm-cursor-style">Cursor style</label>
+            <div className="cursor-style-picker" role="radiogroup" aria-labelledby="sm-cursor-style">
+              {(['block', 'underline', 'bar'] as const).map((style) => (
+                <button
+                  key={style}
+                  type="button"
+                  role="radio"
+                  aria-checked={cursorStyle === style}
+                  className={`cursor-style-option${cursorStyle === style ? ' active' : ''}`}
+                  onClick={() => setCursorStyle(style)}
+                  title={style}
+                >
+                  <CursorPreview style={style} />
+                  <span className="cursor-style-label">{cursorStyleLabel(style)}</span>
+                </button>
+              ))}
+            </div>
+
             <label htmlFor="sm-cursor-blink">Cursor blink</label>
             <input
               id="sm-cursor-blink"
@@ -154,5 +174,24 @@ export function SettingsModal({ onClose, initialTab }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+function cursorStyleLabel(style: CursorStyle): string {
+  switch (style) {
+    case 'block': return 'Block';
+    case 'underline': return 'Underline';
+    case 'bar': return 'Bar';
+  }
+}
+
+/** Mini glyph that mirrors what xterm.js renders for each cursor option,
+ * so the user can pick by shape rather than by name. */
+function CursorPreview({ style }: { style: CursorStyle }) {
+  return (
+    <span className="cursor-preview" aria-hidden>
+      <span className="cursor-preview-text">A</span>
+      <span className={`cursor-preview-cursor cursor-preview-${style}`} />
+    </span>
   );
 }

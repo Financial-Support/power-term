@@ -1,4 +1,5 @@
 export type Theme = 'light' | 'dark' | 'auto';
+export type CursorStyle = 'block' | 'underline' | 'bar';
 
 export interface Settings {
   shell: string | null;
@@ -6,6 +7,7 @@ export interface Settings {
   font_size: number;
   theme: Theme;
   cursor_blink: boolean;
+  cursor_style: CursorStyle;
   scrollback_lines: number;
   ssh_connect_timeout_secs: number;
   ssh_keepalive_interval_secs: number;

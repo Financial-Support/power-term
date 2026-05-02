@@ -673,6 +673,46 @@ html, body, #root { height: 100%; margin: 0; }
   gap: 10px 14px; align-items: center; margin: 0 0 14px 0;
 }
 .modal .form-grid > label { font-size: 12px; color: var(--fg-muted); text-align: left; }
+
+.cursor-style-picker {
+  display: flex; gap: 8px;
+}
+.cursor-style-option {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 8px 0;
+  background: rgba(255,240,220,0.03);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.cursor-style-option:hover { background: var(--bg-hover); color: var(--fg); }
+.cursor-style-option.active {
+  background: var(--bg-active);
+  border-color: var(--accent-ring);
+  color: var(--accent-text);
+}
+.cursor-style-label { font-size: 11px; }
+.cursor-preview {
+  position: relative;
+  display: inline-flex; align-items: center;
+  height: 20px;
+  font-family: "SF Mono", Menlo, monospace;
+}
+.cursor-preview-text { color: var(--fg); font-size: 13px; }
+.cursor-preview-cursor {
+  display: inline-block;
+  background: currentColor;
+  margin-left: 1px;
+  animation: cursor-preview-blink 1s steps(2) infinite;
+}
+.cursor-preview-block { width: 8px; height: 14px; }
+.cursor-preview-underline { width: 8px; height: 2px; align-self: flex-end; margin-bottom: 2px; }
+.cursor-preview-bar { width: 2px; height: 14px; }
+@keyframes cursor-preview-blink { to { opacity: 0; } }
 .modal .form-grid > input,
 .modal-form .auth-fields input,
 .modal-form > textarea,

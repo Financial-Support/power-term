@@ -20,22 +20,20 @@ export function SyncStatus({ onErrorClick }: Props) {
 
   const status: SyncStatusKind = syncState.status;
 
-  if (status === 'idle') return null;
+  // Only surface in-progress / error states. The "synced" check used to
+  // sit permanently in the top-right and added visual noise without telling
+  // the user anything actionable; the spinner / error icon are enough.
+  if (status === 'idle' || status === 'synced') return null;
 
   return (
     <button
       type="button"
       className={`sync-status sync-status--${status}`}
-      aria-label={status === 'error' ? 'sync error' : status === 'syncing' ? 'syncing' : 'synced'}
+      aria-label={status === 'error' ? 'sync error' : 'syncing'}
       onClick={status === 'error' ? onErrorClick : undefined}
-      title={
-        status === 'error' ? (syncState.error ?? 'Sync error')
-        : status === 'syncing' ? 'Syncing with Supabase…'
-        : 'All changes synced'
-      }
+      title={status === 'error' ? (syncState.error ?? 'Sync error') : 'Syncing with Supabase…'}
     >
       {status === 'syncing' && <span className="sync-spinner">↻</span>}
-      {status === 'synced' && <span>✓</span>}
       {status === 'error' && <span>✕</span>}
     </button>
   );

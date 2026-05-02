@@ -41,12 +41,12 @@ describe('SyncStatus', () => {
     expect(screen.getByLabelText('syncing')).toBeTruthy();
   });
 
-  it('shows synced label when status is synced', () => {
+  it('renders nothing when status is synced (no visual noise)', () => {
     vi.mocked(useSyncStore).mockImplementation((sel: any) =>
       sel(makeStore({ syncState: { user: { id: 'u', email: null }, status: 'synced', last_synced: 1000, pending_count: 0, error: null } }))
     );
-    render(<SyncStatus />);
-    expect(screen.getByLabelText('synced')).toBeTruthy();
+    const { container } = render(<SyncStatus />);
+    expect(container.firstChild).toBeNull();
   });
 
   it('shows sync error label when status is error', () => {

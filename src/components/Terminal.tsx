@@ -36,6 +36,7 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
       fontFamily: withMonospaceFallback(settings.font_family),
       fontSize: settings.font_size,
       cursorBlink: settings.cursor_blink,
+      cursorStyle: settings.cursor_style,
       scrollback: settings.scrollback_lines,
       allowProposedApi: true,
       theme: resolveXtermTheme(settings.terminal_theme, resolvedTheme),
@@ -207,6 +208,15 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     if (!term) return;
     term.options.theme = resolveXtermTheme(settings?.terminal_theme ?? 'default', resolvedTheme);
   }, [resolvedTheme, settings?.terminal_theme]);
+
+  // Cursor shape / blink can be tweaked live so the Settings panel reflects
+  // changes without forcing the user to reopen tabs.
+  useEffect(() => {
+    const term = xtermRef.current;
+    if (!term) return;
+    if (settings?.cursor_style) term.options.cursorStyle = settings.cursor_style;
+    if (typeof settings?.cursor_blink === 'boolean') term.options.cursorBlink = settings.cursor_blink;
+  }, [settings?.cursor_style, settings?.cursor_blink]);
 
   const SEARCH_OPTS: ISearchOptions = { caseSensitive: false, wholeWord: false, regex: false };
   const closeSearch = () => {
