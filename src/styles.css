@@ -16,6 +16,7 @@
   --accent-ring:   color-mix(in srgb, var(--accent) 35%, transparent);
   --accent-bg:     color-mix(in srgb, var(--accent) 12%, transparent);
 }
+:root[data-theme="light"] { color-scheme: light; }
 html, body, #root { height: 100%; margin: 0; }
 
 /* ─── Warm-charcoal palette (single theme — dark) ───────────────────────
@@ -28,6 +29,7 @@ html, body, #root { height: 100%; margin: 0; }
   --bg-terminal:   #100e0c;
   --bg-elevated:   #221f1c;
   --bg-hover:      rgba(255,240,220,0.06);
+  --bg-soft:       rgba(255,240,220,0.05);  /* input / inline-code surfaces */
   --bg-active:     var(--accent-bg);
 
   /* text */
@@ -52,6 +54,30 @@ html, body, #root { height: 100%; margin: 0; }
   height: 100%;
   background: var(--bg);
   color: var(--fg);
+}
+
+/* Light theme — warm off-white counterpart of the warm-charcoal default.
+   Same variable names so every component picks it up automatically; only
+   surfaces, text and borders flip. Accent + status stay coloured. */
+[data-theme="light"] .app {
+  --bg:            #f5f3ee;
+  --bg-sidebar:    #e9e5dc;
+  --bg-panel:      #efece4;
+  --bg-terminal:   #ffffff;
+  --bg-elevated:   #ffffff;
+  --bg-hover:      rgba(20,18,16,0.05);
+
+  --fg:            rgba(20,18,16,0.88);
+  --fg-muted:      rgba(20,18,16,0.55);
+  --fg-dim:        rgba(20,18,16,0.32);
+
+  --border:        rgba(20,18,16,0.08);
+  --border-med:    rgba(20,18,16,0.16);
+  --bg-soft:       rgba(20,18,16,0.04);
+
+  /* On a white background lightening the accent further makes it
+     disappear, so flip the derivation to mix toward black. */
+  --accent-text:   color-mix(in srgb, var(--accent) 75%, black 25%);
 }
 
 /* ─── Titlebar / tab strip ──────────────────────────────────────────────
@@ -105,7 +131,7 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .tab:hover { background: var(--bg-hover); color: var(--fg); }
 .tab.active {
-  background: rgba(255,240,220,0.05);
+  background: var(--bg-soft);
   color: var(--fg);
 }
 .tab.active::after {
@@ -245,7 +271,7 @@ html, body, #root { height: 100%; margin: 0; }
   box-sizing: border-box;
   height: 32px;
   padding: 0 10px;
-  background: rgba(255,240,220,0.06);
+  background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--fg);
@@ -481,7 +507,7 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .terminal-search input {
   width: 200px; height: 26px;
-  background: rgba(255,240,220,0.06);
+  background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0 8px;
@@ -540,7 +566,7 @@ html, body, #root { height: 100%; margin: 0; }
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 36px; height: 22px;
   padding: 0 6px;
-  background: rgba(255,240,220,0.05);
+  background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 5px;
   color: var(--fg-muted);
@@ -705,6 +731,33 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .modal .form-grid > label { font-size: 12px; color: var(--fg-muted); text-align: left; }
 
+.theme-picker {
+  display: inline-flex;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 0;
+}
+[data-theme="light"] .theme-picker { background: rgba(20,18,16,0.05); }
+.theme-option {
+  flex: 1;
+  padding: 5px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit; font-size: 12px;
+  transition: background 0.1s, color 0.1s;
+}
+.theme-option:hover { color: var(--fg); }
+.theme-option.active {
+  background: var(--bg-elevated);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+}
+
 .accent-picker {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
 }
@@ -747,7 +800,7 @@ html, body, #root { height: 100%; margin: 0; }
   flex: 1;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 8px 0;
-  background: rgba(255,240,220,0.03);
+  background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--fg-muted);
@@ -787,7 +840,7 @@ html, body, #root { height: 100%; margin: 0; }
   padding: 6px 10px;
   border: 1px solid var(--border-med);
   border-radius: 7px;
-  background: rgba(255,240,220,0.04);
+  background: var(--bg-soft);
   color: var(--fg);
   font: inherit; font-size: 13px;
   outline: none;
@@ -893,14 +946,14 @@ html, body, #root { height: 100%; margin: 0; }
 .fb-toolbar .fb-up { padding: 4px 10px; }
 .fb-breadcrumb {
   flex: 1; padding: 4px 8px; font-family: "SF Mono", Menlo, monospace;
-  font-size: 12px; background: rgba(255,240,220,0.04); color: var(--fg);
+  font-size: 12px; background: var(--bg-soft); color: var(--fg);
   border: 1px solid var(--border-med); border-radius: 6px; outline: none;
 }
 .fb-toggle { font-size: 12px; color: var(--fg-muted); display: flex; align-items: center; gap: 4px; }
 .fb-mkdir { display: flex; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .fb-mkdir input {
   flex: 1; padding: 4px 8px; border: 1px solid var(--border-med); border-radius: 6px;
-  background: rgba(255,240,220,0.04); color: var(--fg); font: inherit; font-size: 13px; outline: none;
+  background: var(--bg-soft); color: var(--fg); font: inherit; font-size: 13px; outline: none;
 }
 .fb-header {
   display: grid; grid-template-columns: 1fr 100px 130px 100px;
@@ -1153,7 +1206,7 @@ html, body, #root { height: 100%; margin: 0; }
   font-family: "SF Mono", Menlo, monospace;
   font-size: 12px; letter-spacing: 0.05em;
   padding: 6px 10px;
-  background: rgba(255,240,220,0.04);
+  background: var(--bg-soft);
   border: 1px solid var(--border-med);
   border-radius: 7px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1200,7 +1253,7 @@ html, body, #root { height: 100%; margin: 0; }
 .sync-tab input[type="text"],
 .sync-tab input:not([type]) {
   padding: 6px 10px;
-  background: rgba(255,240,220,0.04);
+  background: var(--bg-soft);
   border: 1px solid var(--border-med);
   border-radius: 7px;
   color: var(--fg);

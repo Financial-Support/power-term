@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../state/settingsStore';
 import { THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from '../themes';
 import { SyncTab } from './SyncTab';
-import type { CursorStyle, SettingsPatch } from '../types';
+import type { CursorStyle, SettingsPatch, Theme } from '../types';
 
 interface Props {
   onClose: () => void;
@@ -22,6 +22,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
   const [cursorBlink, setCursorBlink] = useState(settings?.cursor_blink ?? true);
   const [cursorStyle, setCursorStyle] = useState<CursorStyle>(settings?.cursor_style ?? 'block');
   const [accentColor, setAccentColor] = useState(settings?.accent_color ?? 'system');
+  const [theme, setTheme] = useState<Theme>(settings?.theme ?? 'auto');
   const [scrollback, setScrollback] = useState(settings?.scrollback_lines ?? 10000);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -48,6 +49,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
     if (cursorBlink !== settings.cursor_blink) patch.cursor_blink = cursorBlink;
     if (cursorStyle !== settings.cursor_style) patch.cursor_style = cursorStyle;
     if (accentColor !== settings.accent_color) patch.accent_color = accentColor;
+    if (theme !== settings.theme) patch.theme = theme;
     if (scrollback !== settings.scrollback_lines) patch.scrollback_lines = scrollback;
     if (Object.keys(patch).length === 0) { onClose(); return; }
     setSaving(true);
@@ -111,6 +113,20 @@ export function SettingsModal({ onClose, initialTab }: Props) {
               value={fontSize}
               onChange={(e) => { const n = parseInt(e.target.value, 10); setFontSize(isNaN(n) ? 0 : n); }}
             />
+
+            <label>Appearance</label>
+            <div className="theme-picker" role="radiogroup" aria-label="appearance">
+              {(['auto', 'light', 'dark'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === t}
+                  className={`theme-option${theme === t ? ' active' : ''}`}
+                  onClick={() => setTheme(t)}
+                >{t === 'auto' ? 'System' : t === 'light' ? 'Light' : 'Dark'}</button>
+              ))}
+            </div>
 
             <label>Accent color</label>
             <AccentPicker value={accentColor} onChange={setAccentColor} />
