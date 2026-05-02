@@ -239,6 +239,13 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .rail-spacer { flex: 1; }
 .rail-icon-bottom { margin-top: 0; }
+.rail-icon-toggle {
+  /* Slightly smaller and dimmer than the section icons so it reads as a
+     control rather than a destination. */
+  color: var(--fg-dim);
+  margin-bottom: 6px;
+}
+.rail-icon-toggle:hover { color: var(--fg); background: var(--bg-hover); }
 .rail-icon:focus-visible {
   outline: 2px solid var(--accent-ring);
   outline-offset: 1px;

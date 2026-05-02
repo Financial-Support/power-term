@@ -242,6 +242,13 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     term.options.scrollback = settings.scrollback_lines;
   }, [settings?.scrollback_lines]);
 
+  // Compute what xterm itself will paint so we can colour the wrapper to
+  // match. xterm only fills `rows × cellHeight` pixels — fractional pixels
+  // at the bottom otherwise show through to whatever sits behind, which
+  // depending on theme is a different shade of dark and looks like a black
+  // strip under each pane.
+  const xtermBg = resolveXtermTheme(settings?.terminal_theme ?? 'default', resolvedTheme).background ?? undefined;
+
   const SEARCH_OPTS: ISearchOptions = { caseSensitive: false, wholeWord: false, regex: false };
   const closeSearch = () => {
     setSearchOpen(false);
@@ -258,6 +265,7 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
         width: '100%',
         height: '100%',
         display: visible ? 'block' : 'none',
+        background: xtermBg,
       }}
     >
       {searchOpen && (

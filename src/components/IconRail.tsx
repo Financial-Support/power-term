@@ -6,35 +6,55 @@ interface Props {
   onSection: (s: SidebarSection) => void;
   onSettings: () => void;
   onSync: () => void;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
-export function IconRail({ activeSection, onSection, onSettings, onSync }: Props) {
+export function IconRail({
+  activeSection, onSection, onSettings, onSync, sidebarOpen, onToggleSidebar,
+}: Props) {
+  // Clicking a section icon while the sidebar is collapsed should also expand
+  // it — otherwise the click feels broken (state changed, panel still hidden).
+  const pickSection = (s: SidebarSection) => {
+    onSection(s);
+    if (!sidebarOpen) onToggleSidebar();
+  };
   return (
     <div className="icon-rail" aria-label="navigation rail">
       <button
         type="button"
-        className={`rail-icon${activeSection === 'hosts' ? ' active' : ''}`}
+        className="rail-icon rail-icon-toggle"
+        aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        aria-expanded={sidebarOpen}
+        onClick={onToggleSidebar}
+      >
+        <IconChevron open={sidebarOpen} />
+      </button>
+      <button
+        type="button"
+        className={`rail-icon${activeSection === 'hosts' && sidebarOpen ? ' active' : ''}`}
         aria-label="Hosts"
         title="Hosts"
-        onClick={() => onSection('hosts')}
+        onClick={() => pickSection('hosts')}
       >
         <IconHosts />
       </button>
       <button
         type="button"
-        className={`rail-icon${activeSection === 'snippets' ? ' active' : ''}`}
+        className={`rail-icon${activeSection === 'snippets' && sidebarOpen ? ' active' : ''}`}
         aria-label="Snippets"
         title="Snippets"
-        onClick={() => onSection('snippets')}
+        onClick={() => pickSection('snippets')}
       >
         <IconSnippets />
       </button>
       <button
         type="button"
-        className={`rail-icon${activeSection === 'forwards' ? ' active' : ''}`}
+        className={`rail-icon${activeSection === 'forwards' && sidebarOpen ? ' active' : ''}`}
         aria-label="Port Forwards"
         title="Port Forwards"
-        onClick={() => onSection('forwards')}
+        onClick={() => pickSection('forwards')}
       >
         <IconForwards />
       </button>
@@ -60,6 +80,19 @@ export function IconRail({ activeSection, onSection, onSettings, onSync }: Props
         <IconSettings />
       </button>
     </div>
+  );
+}
+
+/** Chevron-left when the panel is open (clicking it collapses); chevron-right
+ * when it's collapsed (clicking expands). One asset, rotated via CSS. */
+function IconChevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden
+      style={{ transform: open ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.15s' }}
+    >
+      <path d="M9 3.5L5 7l4 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

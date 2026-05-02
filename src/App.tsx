@@ -117,6 +117,11 @@ export function App() {
   const closeSftpTabState = useSftpStore((s) => s.closeTab);
 
   const [sidebarSection, setSidebarSection] = useState<SidebarSection>('hosts');
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    // Persist collapsed/expanded across launches; default is open.
+    return localStorage.getItem('sidebar-open') !== '0';
+  });
+  useEffect(() => { localStorage.setItem('sidebar-open', sidebarOpen ? '1' : '0'); }, [sidebarOpen]);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [flow, setFlow] = useState<RemoteFlow>({ phase: 'idle' });
@@ -471,10 +476,12 @@ export function App() {
         <IconRail
           activeSection={sidebarSection}
           onSection={setSidebarSection}
-          onSettings={() => setSettingsOpen(true)}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((o) => !o)}
+          onSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
           onSync={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}
         />
-        <SidebarPanel
+        {sidebarOpen && <SidebarPanel
           section={sidebarSection}
           onConnect={(h) => void connectFromHost(h)}
           onOpenSftp={(h) => void openSftpFromHost(h)}
@@ -496,7 +503,7 @@ export function App() {
               onDelete={(f) => setConfirmDeleteForward(f)}
             />
           }
-        />
+        />}
         <main className={`terminals layout-${layoutKind}`}>
           {/* All non-SFTP tabs always mounted at this stable parent so xterm
               state survives slot reassignment. CSS `order` places each visible
