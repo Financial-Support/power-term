@@ -102,16 +102,16 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
       unsubOutput = await onPtyOutput(tab.ptyId, (bytes) => term.write(bytes));
       unsubExit = await onPtyExit(tab.ptyId, (p) => {
         markExit(tab.ptyId, p.code);
-        // Clean exit (e.g. user typed `exit` or Ctrl-D): auto-close the tab.
-        // Anything else (non-zero status, signal, dropped network) keeps the
-        // tab so the user can read what happened.
-        if (p.code === 0 && !p.signal && onAutoCloseRef.current) {
+        // Shell exited cleanly (e.g. `exit`, Ctrl-D, even with a non-zero
+        // status inherited from the last command): auto-close the tab. Only
+        // keep it open when the channel died on a signal — network_error,
+        // kill, etc. — so the user can read what went wrong.
+        if (!p.signal && onAutoCloseRef.current) {
           onAutoCloseRef.current(tab.ptyId);
           return;
         }
         const codeStr = p.code !== null ? p.code.toString() : 'null';
-        const sigStr = p.signal ? ` signal=${p.signal}` : '';
-        term.write(`\r\n\x1b[33m[process exited (code ${codeStr}${sigStr})]\x1b[0m\r\n`);
+        term.write(`\r\n\x1b[33m[process exited (code ${codeStr} signal=${p.signal})]\x1b[0m\r\n`);
       });
       // SSH sessions buffer output server-side until we explicitly attach,
       // so the MOTD / login banner / first prompt aren't lost to the race
