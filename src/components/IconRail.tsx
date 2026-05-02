@@ -93,12 +93,12 @@ function IconForwards() {
 
 function IconSettings() {
   return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
-      <circle cx="7.5" cy="7.5" r="2.2" stroke="currentColor" strokeWidth="1.2" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M7.5 1v1.4M7.5 12.6V14M1 7.5h1.4M12.6 7.5H14M3.05 3.05l1 1M10.95 10.95l1 1M10.95 3.05l-1 1M3.05 10.95l1-1"
-        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+        stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
       />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }
