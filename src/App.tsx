@@ -411,6 +411,20 @@ export function App() {
 
   const theme = useTheme();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+  useEffect(() => {
+    const accent = settings?.accent_color ?? 'system';
+    const root = document.documentElement;
+    if (accent === 'system') {
+      // `AccentColor` is a CSS system colour keyword that resolves to the
+      // user's macOS accent (Safari 16.4+ / WKWebView). color-mix in the
+      // stylesheet then derives the lighter/translucent variants.
+      root.style.setProperty('--accent', 'AccentColor');
+    } else if (/^#[0-9a-f]{6}$/i.test(accent)) {
+      root.style.setProperty('--accent', accent);
+    } else {
+      root.style.removeProperty('--accent');
+    }
+  }, [settings?.accent_color]);
 
   return (
     <div className="app">

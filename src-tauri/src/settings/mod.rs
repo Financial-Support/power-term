@@ -17,6 +17,10 @@ pub struct Settings {
     pub ssh_connect_timeout_secs: u32,
     pub ssh_keepalive_interval_secs: u32,
     pub terminal_theme: String,
+    /// Accent (primary) colour. Either the literal "system" — meaning take
+    /// the macOS user accent via the CSS `AccentColor` keyword — or a
+    /// `#RRGGBB` hex string. Anything else is rejected by the setter.
+    pub accent_color: String,
     pub updated_at: u64,
 }
 
@@ -33,6 +37,7 @@ impl Default for Settings {
             ssh_connect_timeout_secs: 10,
             ssh_keepalive_interval_secs: 30,
             terminal_theme: "default".to_string(),
+            accent_color: "system".to_string(),
             updated_at: 0,
         }
     }
@@ -51,6 +56,7 @@ pub struct SettingsPatch {
     pub ssh_connect_timeout_secs: Option<u32>,
     pub ssh_keepalive_interval_secs: Option<u32>,
     pub terminal_theme: Option<String>,
+    pub accent_color: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -101,6 +107,16 @@ impl SettingsStore {
         if let Some(v) = patch.ssh_connect_timeout_secs { s.ssh_connect_timeout_secs = v; }
         if let Some(v) = patch.ssh_keepalive_interval_secs { s.ssh_keepalive_interval_secs = v; }
         if let Some(v) = patch.terminal_theme { s.terminal_theme = v; }
+        if let Some(v) = patch.accent_color {
+            // Either "system" (= follow macOS) or a 7-char hex literal.
+            // Anything else is silently ignored so a typo can't poison config.
+            let valid_hex = v.len() == 7
+                && v.starts_with('#')
+                && v[1..].chars().all(|c| c.is_ascii_hexdigit());
+            if v == "system" || valid_hex {
+                s.accent_color = v;
+            }
+        }
         s.updated_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

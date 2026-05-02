@@ -21,6 +21,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
   const [fontSize, setFontSize] = useState(settings?.font_size ?? 14);
   const [cursorBlink, setCursorBlink] = useState(settings?.cursor_blink ?? true);
   const [cursorStyle, setCursorStyle] = useState<CursorStyle>(settings?.cursor_style ?? 'block');
+  const [accentColor, setAccentColor] = useState(settings?.accent_color ?? 'system');
   const [scrollback, setScrollback] = useState(settings?.scrollback_lines ?? 10000);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -46,6 +47,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
     if (fontSize !== settings.font_size) patch.font_size = fontSize;
     if (cursorBlink !== settings.cursor_blink) patch.cursor_blink = cursorBlink;
     if (cursorStyle !== settings.cursor_style) patch.cursor_style = cursorStyle;
+    if (accentColor !== settings.accent_color) patch.accent_color = accentColor;
     if (scrollback !== settings.scrollback_lines) patch.scrollback_lines = scrollback;
     if (Object.keys(patch).length === 0) { onClose(); return; }
     setSaving(true);
@@ -109,6 +111,9 @@ export function SettingsModal({ onClose, initialTab }: Props) {
               value={fontSize}
               onChange={(e) => { const n = parseInt(e.target.value, 10); setFontSize(isNaN(n) ? 0 : n); }}
             />
+
+            <label>Accent color</label>
+            <AccentPicker value={accentColor} onChange={setAccentColor} />
 
             <label htmlFor="sm-cursor-style">Cursor style</label>
             <div className="cursor-style-picker" role="radiogroup" aria-labelledby="sm-cursor-style">
@@ -183,6 +188,48 @@ function cursorStyleLabel(style: CursorStyle): string {
     case 'underline': return 'Underline';
     case 'bar': return 'Bar';
   }
+}
+
+const ACCENT_PRESETS: Array<{ id: string; label: string }> = [
+  { id: 'system',  label: 'System (macOS accent)' },
+  { id: '#f59e0b', label: 'Amber' },
+  { id: '#3b82f6', label: 'Blue' },
+  { id: '#a855f7', label: 'Purple' },
+  { id: '#22c55e', label: 'Green' },
+  { id: '#ef4444', label: 'Red' },
+  { id: '#ec4899', label: 'Pink' },
+];
+
+function AccentPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const isPreset = ACCENT_PRESETS.some((p) => p.id === value);
+  // Custom hex picker shows the user's own colour; default to amber when
+  // they haven't picked anything yet so the swatch is always visible.
+  const customValue = !isPreset && /^#[0-9a-f]{6}$/i.test(value) ? value : '#888888';
+  return (
+    <div className="accent-picker">
+      {ACCENT_PRESETS.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          role="radio"
+          aria-checked={value === p.id}
+          aria-label={p.label}
+          title={p.label}
+          className={`accent-swatch${value === p.id ? ' active' : ''}${p.id === 'system' ? ' accent-swatch-system' : ''}`}
+          style={p.id === 'system' ? undefined : { background: p.id }}
+          onClick={() => onChange(p.id)}
+        >{p.id === 'system' ? 'A' : ''}</button>
+      ))}
+      <label className={`accent-swatch accent-swatch-custom${!isPreset ? ' active' : ''}`} title="Custom color">
+        <input
+          type="color"
+          aria-label="Custom accent color"
+          value={customValue}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </label>
+    </div>
+  );
 }
 
 /** Mini glyph that mirrors what xterm.js renders for each cursor option,

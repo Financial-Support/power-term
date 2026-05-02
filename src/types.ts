@@ -12,6 +12,8 @@ export interface Settings {
   ssh_connect_timeout_secs: number;
   ssh_keepalive_interval_secs: number;
   terminal_theme: string;
+  /** "system" (use macOS AccentColor) or a `#RRGGBB` hex string. */
+  accent_color: string;
   updated_at: number;
 }
 
