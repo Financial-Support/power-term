@@ -114,6 +114,7 @@ fn main() {
             power_term::commands::ssh_write,
             power_term::commands::ssh_resize,
             power_term::commands::ssh_kill,
+            power_term::commands::ssh_attach,
             power_term::commands::known_hosts_get,
             power_term::commands::hosts_list,
             power_term::commands::hosts_create,

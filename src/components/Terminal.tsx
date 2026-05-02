@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { onPtyExit, onPtyOutput, ptyResize, ptyWrite, sshResize, sshWrite } from '../lib/ipc';
+import { onPtyExit, onPtyOutput, ptyResize, ptyWrite, sshAttach, sshResize, sshWrite } from '../lib/ipc';
 import type { Tab } from '../types';
 import { useSessionStore } from '../state/sessionStore';
 import { useSettingsStore } from '../state/settingsStore';
@@ -104,6 +104,12 @@ export function Terminal({ tab, visible, active }: Props) {
         const sigStr = p.signal ? ` signal=${p.signal}` : '';
         term.write(`\r\n\x1b[33m[process exited (code ${codeStr}${sigStr})]\x1b[0m\r\n`);
       });
+      // SSH sessions buffer output server-side until we explicitly attach,
+      // so the MOTD / login banner / first prompt aren't lost to the race
+      // between `ssh_connect` returning and this listener binding.
+      if (tab.kind === 'ssh') {
+        try { await sshAttach(tab.ptyId); } catch (e) { console.error('ssh_attach failed', e); }
+      }
     })();
 
     const onData = term.onData((data) => {

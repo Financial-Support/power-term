@@ -200,6 +200,15 @@ pub async fn ssh_kill(
     manager.kill(&pty_id).await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn ssh_attach(
+    app: AppHandle,
+    manager: tauri::State<'_, SshManager>,
+    pty_id: String,
+) -> Result<(), String> {
+    manager.attach(app, &pty_id).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Serialize)]
 pub struct KnownHostsLookup {
     pub fingerprint: Option<String>,

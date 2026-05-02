@@ -5,21 +5,30 @@ use crate::ssh::session::{SshSession, SshTarget};
 use crate::ssh::{SshError, SshId};
 use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 pub struct SshManager {
     sessions: Mutex<HashMap<SshId, Arc<SshSession>>>,
+    /// Receivers held until the frontend calls `ssh_attach`. Without this gate
+    /// the forwarder would emit MOTD/prompt bytes before the renderer has a
+    /// listener bound, dropping them on the floor.
+    pending: Mutex<HashMap<SshId, mpsc::Receiver<PtyEvent>>>,
 }
 
 impl SshManager {
-    pub fn new() -> Self { Self { sessions: Mutex::new(HashMap::new()) } }
+    pub fn new() -> Self {
+        Self {
+            sessions: Mutex::new(HashMap::new()),
+            pending: Mutex::new(HashMap::new()),
+        }
+    }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn connect(
         &self,
-        app: AppHandle,
+        _app: AppHandle,
         target: SshTarget,
         auth: Auth,
         cols: u16,
@@ -43,7 +52,21 @@ impl SshManager {
         ).await?;
         let id = uuid::Uuid::new_v4().to_string();
         self.sessions.lock().insert(id.clone(), session);
-        tracing::info!(ssh_id = %id, host = %host_label, "ssh connected");
+        self.pending.lock().insert(id.clone(), rx);
+        tracing::info!(ssh_id = %id, host = %host_label, "ssh connected (awaiting attach)");
+
+        Ok(id)
+    }
+
+    /// Spawn the output forwarder. Called once the renderer has a listener
+    /// bound to `pty://output/{id}`, so server-pushed bytes (MOTD, last-login
+    /// banner, initial prompt) are not lost to a startup race.
+    pub fn attach(&self, app: AppHandle, id: &SshId) -> Result<(), SshError> {
+        let rx = self
+            .pending
+            .lock()
+            .remove(id)
+            .ok_or_else(|| SshError::Unknown(id.clone()))?;
 
         let app_handle = app.clone();
         let event_id = id.clone();
@@ -73,7 +96,7 @@ impl SshManager {
             }
         });
 
-        Ok(id)
+        Ok(())
     }
 
     pub async fn write(&self, id: &SshId, data: &[u8]) -> Result<(), SshError> {
@@ -91,6 +114,8 @@ impl SshManager {
             let mut sessions = self.sessions.lock();
             sessions.remove(id).ok_or_else(|| SshError::Unknown(id.clone()))?
         };
+        // Drop any unattached receiver so the reader task tears down cleanly.
+        self.pending.lock().remove(id);
         tracing::info!(ssh_id = %id, "ssh killed");
         s.kill().await
     }

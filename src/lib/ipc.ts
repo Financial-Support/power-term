@@ -81,6 +81,10 @@ export async function sshKill(ptyId: string): Promise<void> {
   await invoke('ssh_kill', { ptyId });
 }
 
+export async function sshAttach(ptyId: string): Promise<void> {
+  await invoke('ssh_attach', { ptyId });
+}
+
 export async function knownHostsGet(host: string, port: number): Promise<{ fingerprint: string | null; key_type: string | null }> {
   return invoke('known_hosts_get', { host, port });
 }
