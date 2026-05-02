@@ -1,6 +1,6 @@
 use crate::store::Db;
 use crate::sync::client::{ClientError, SupabaseClient};
-use crate::sync::encrypt::decrypt;
+use crate::sync::encrypt::{decrypt, is_encrypted};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -73,7 +73,7 @@ pub async fn pull_all(
     sync_key: Option<&[u8; 32]>,
 ) -> Result<(), PullError> {
     pull_hosts(client, db).await?;
-    pull_snippets(client, db).await?;
+    pull_snippets(client, db, sync_key).await?;
     pull_forwards(client, db).await?;
     pull_credentials(client, db, sync_key).await?;
     Ok(())
@@ -119,7 +119,11 @@ async fn pull_hosts(client: &SupabaseClient, db: &Arc<Db>) -> Result<(), PullErr
     Ok(())
 }
 
-async fn pull_snippets(client: &SupabaseClient, db: &Arc<Db>) -> Result<(), PullError> {
+async fn pull_snippets(
+    client: &SupabaseClient,
+    db: &Arc<Db>,
+    sync_key: Option<&[u8; 32]>,
+) -> Result<(), PullError> {
     let rows: Vec<RemoteSnippet> = client.select("snippets", "select=*").await?;
     let conn = db.lock();
     for row in rows {
@@ -127,6 +131,24 @@ async fn pull_snippets(client: &SupabaseClient, db: &Arc<Db>) -> Result<(), Pull
             conn.execute("DELETE FROM snippets WHERE id=?1", params![row.id])?;
             continue;
         }
+        // Rows that look encrypted require the user's sync key. Without it
+        // we cannot read the body, so we skip rather than corrupt local
+        // state with the literal ciphertext envelope.
+        let content = if is_encrypted(&row.content) {
+            let Some(key) = sync_key else {
+                tracing::warn!(id = %row.id, "encrypted snippet pulled but no sync key configured — skipping");
+                continue;
+            };
+            match decrypt(&row.content, key, row.id.as_bytes()) {
+                Ok(plain) => plain,
+                Err(e) => {
+                    tracing::warn!(id = %row.id, error = %e, "snippet decrypt failed — wrong key or AAD");
+                    continue;
+                }
+            }
+        } else {
+            row.content.clone()
+        };
         let local_updated: Option<i64> = conn
             .query_row("SELECT updated_at FROM snippets WHERE id=?1", params![row.id], |r| r.get(0))
             .ok();
@@ -136,14 +158,14 @@ async fn pull_snippets(client: &SupabaseClient, db: &Arc<Db>) -> Result<(), Pull
                 conn.execute(
                     "INSERT OR IGNORE INTO snippets (id, name, content, tags_json, created_at, last_used_at, updated_at) \
                      VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                    params![row.id, row.name, row.content, tags_json, row.created_at, row.last_used_at, row.updated_at],
+                    params![row.id, row.name, content, tags_json, row.created_at, row.last_used_at, row.updated_at],
                 )?;
             }
             Some(local_ts) if row.updated_at > local_ts => {
                 let tags_json = row.tags.to_string();
                 conn.execute(
                     "UPDATE snippets SET name=?2, content=?3, tags_json=?4, last_used_at=?5, updated_at=?6 WHERE id=?1",
-                    params![row.id, row.name, row.content, tags_json, row.last_used_at, row.updated_at],
+                    params![row.id, row.name, content, tags_json, row.last_used_at, row.updated_at],
                 )?;
             }
             _ => {}
@@ -205,7 +227,7 @@ async fn pull_credentials(
             continue;
         }
         if cred.ciphertext.starts_with("ENCRYPTED:NO_KEY") { continue; }
-        match decrypt(&cred.ciphertext, key) {
+        match decrypt(&cred.ciphertext, key, cred.id.as_bytes()) {
             Ok(plaintext) => {
                 let _ = crate::store::secrets::backend_set(
                     "com.band.power-term",

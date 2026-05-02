@@ -6,6 +6,18 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+fn encrypt_snippet_content(
+    plaintext: &str,
+    snippet_id: &str,
+    sync_key: Option<&[u8; 32]>,
+) -> Result<String, ClientError> {
+    match sync_key {
+        Some(key) => encrypt(plaintext, key, snippet_id.as_bytes())
+            .map_err(|e| ClientError::Json(e.to_string())),
+        None => Ok(plaintext.to_string()),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteHostRow {
     pub id: String,
@@ -117,18 +129,27 @@ pub fn host_to_row(host: &Host, user_id: &str) -> RemoteHostRow {
     }
 }
 
-pub fn snippet_to_row(snippet: &Snippet, user_id: &str) -> RemoteSnippetRow {
-    RemoteSnippetRow {
+/// Convert a local snippet into the row sent to Supabase. When `sync_key`
+/// is provided, the body is AES-256-GCM encrypted with the snippet id as
+/// AAD so the server cannot relabel one snippet's ciphertext as another's.
+/// If no key is configured the body goes up plaintext (legacy behaviour).
+pub fn snippet_to_row(
+    snippet: &Snippet,
+    user_id: &str,
+    sync_key: Option<&[u8; 32]>,
+) -> Result<RemoteSnippetRow, ClientError> {
+    let content = encrypt_snippet_content(&snippet.content, &snippet.id, sync_key)?;
+    Ok(RemoteSnippetRow {
         id: snippet.id.clone(),
         user_id: user_id.to_string(),
         name: snippet.name.clone(),
-        content: snippet.content.clone(),
+        content,
         tags: serde_json::to_value(&snippet.tags).unwrap_or(serde_json::json!([])),
         created_at: snippet.created_at,
         last_used_at: snippet.last_used_at,
         updated_at: snippet.updated_at,
         deleted_at: None,
-    }
+    })
 }
 
 pub fn forward_to_row(fwd: &Forward, user_id: &str) -> RemoteForwardRow {
@@ -236,8 +257,9 @@ pub async fn push_all_local(
         }
     }
 
-    // Snippets
-    let snippets: Vec<RemoteSnippetRow> = {
+    // Snippets — encrypted with the user's sync key when one is set.
+    let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
+    let snippets_plain: Vec<RemoteSnippetRow> = {
         let conn = db.lock();
         let mut stmt = conn
             .prepare(
@@ -264,8 +286,15 @@ pub async fn push_all_local(
             .map_err(|e| ClientError::Json(e.to_string()))?;
         rows.filter_map(|r| r.ok()).collect()
     };
-    for row in &snippets {
-        if let Err(e) = client.upsert("snippets", row).await {
+    for mut row in snippets_plain {
+        match encrypt_snippet_content(&row.content, &row.id, sync_key.as_ref()) {
+            Ok(content) => row.content = content,
+            Err(e) => {
+                tracing::warn!(id = %row.id, error = %e, "push_all_local: snippet encrypt failed; skipping");
+                continue;
+            }
+        }
+        if let Err(e) = client.upsert("snippets", &row).await {
             tracing::warn!(id = %row.id, error = %e, "push_all_local: snippet upsert failed");
         }
     }
@@ -318,7 +347,10 @@ pub async fn push_credential(
     updated_at: i64,
 ) -> Result<(), ClientError> {
     let ciphertext = match sync_key {
-        Some(key) => encrypt(plaintext, key).map_err(|e| ClientError::Json(e.to_string()))?,
+        // Bind host_id as AAD so the server cannot move ciphertext between
+        // hosts and have us decrypt the wrong password into the wrong slot.
+        Some(key) => encrypt(plaintext, key, host_id.as_bytes())
+            .map_err(|e| ClientError::Json(e.to_string()))?,
         None => "ENCRYPTED:NO_KEY".to_string(),
     };
     let row = RemoteCredentialRow {
@@ -373,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn snippet_to_row_maps_fields() {
+    fn snippet_to_row_plaintext_when_no_key() {
         let s = Snippet {
             id: "s1".into(),
             name: "hello".into(),
@@ -383,9 +415,26 @@ mod tests {
             last_used_at: None,
             updated_at: 200,
         };
-        let row = snippet_to_row(&s, "user-uuid-123");
+        let row = snippet_to_row(&s, "user-uuid-123", None).unwrap();
         assert_eq!(row.id, "s1");
-        assert_eq!(row.user_id, "user-uuid-123");
-        assert_eq!(row.updated_at, 200);
+        assert_eq!(row.content, "echo hi", "without a sync key, content goes up plaintext");
+    }
+
+    #[test]
+    fn snippet_to_row_encrypts_when_key_present() {
+        use crate::sync::encrypt::{generate_key, is_encrypted};
+        let s = Snippet {
+            id: "s2".into(),
+            name: "hello".into(),
+            content: "secret-token-XYZ".into(),
+            tags: vec![],
+            created_at: 100,
+            last_used_at: None,
+            updated_at: 200,
+        };
+        let key = generate_key();
+        let row = snippet_to_row(&s, "u", Some(&key)).unwrap();
+        assert!(is_encrypted(&row.content), "snippet body must be enveloped, not plaintext");
+        assert!(!row.content.contains("secret-token-XYZ"));
     }
 }

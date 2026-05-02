@@ -517,7 +517,11 @@ pub fn snippets_create(
                 let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
                 if !user_id.is_empty() {
                     if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                        let row = crate::sync::push::snippet_to_row(&snippet_clone, &user_id);
+                        let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
+                        let row = match crate::sync::push::snippet_to_row(&snippet_clone, &user_id, sync_key.as_ref()) {
+                            Ok(r) => r,
+                            Err(e) => { tracing::warn!(error = %e, "snippet encrypt failed — skipping push"); return; }
+                        };
                         if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
                             tracing::warn!(error = %e, "sync push failed — queuing");
                             queue.enqueue(PendingOp::UpsertSnippet(row));
@@ -546,7 +550,11 @@ pub fn snippets_update(
                 let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
                 if !user_id.is_empty() {
                     if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                        let row = crate::sync::push::snippet_to_row(&snippet_clone, &user_id);
+                        let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
+                        let row = match crate::sync::push::snippet_to_row(&snippet_clone, &user_id, sync_key.as_ref()) {
+                            Ok(r) => r,
+                            Err(e) => { tracing::warn!(error = %e, "snippet encrypt failed — skipping push"); return; }
+                        };
                         if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
                             tracing::warn!(error = %e, "sync push failed — queuing");
                             queue.enqueue(PendingOp::UpsertSnippet(row));

@@ -136,7 +136,7 @@ impl Default for SyncManager {
 #[tauri::command]
 pub async fn sync_sign_in() -> Result<(), String> {
     let url = client::SUPABASE_URL.ok_or("Supabase not configured")?;
-    let oauth_url = auth::oauth_url(url);
+    let oauth_url = auth::oauth_url(url).map_err(|e| e.to_string())?;
     std::process::Command::new("open")
         .arg(&oauth_url)
         .spawn()
@@ -190,6 +190,13 @@ pub async fn sync_set_key(key_b58: String) -> Result<(), String> {
 }
 
 /// Called from the deep-link handler with the callback URL.
+///
+/// Anything that registers the `power-term://` scheme on the user's machine
+/// can deliver a callback here. To stop a hostile registrant from injecting
+/// somebody else's tokens — or replaying an old callback — we require the
+/// `state` parameter to match the value we stashed in `oauth_url`. Tokens
+/// are never logged, even on the failure path, because OAuth callback URLs
+/// carry long-lived `refresh_token`s in the fragment.
 pub fn handle_auth_callback(url: &str, app: &AppHandle, sync: &SyncManager) {
     let query = url
         .split_once('?')
@@ -198,14 +205,39 @@ pub fn handle_auth_callback(url: &str, app: &AppHandle, sync: &SyncManager) {
         .unwrap_or("");
     let mut access_token = None;
     let mut refresh_token = None;
+    let mut state = None;
     for pair in query.split('&') {
         if let Some((k, v)) = pair.split_once('=') {
-            if k == "access_token" { access_token = Some(v.to_string()); }
-            if k == "refresh_token" { refresh_token = Some(v.to_string()); }
+            match k {
+                "access_token" => access_token = Some(v.to_string()),
+                "refresh_token" => refresh_token = Some(v.to_string()),
+                "state" => state = Some(v.to_string()),
+                _ => {}
+            }
         }
     }
+
+    let expected_state = match auth::take_oauth_state() {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            tracing::warn!("deep-link callback received with no pending OAuth flow — rejecting");
+            return;
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "failed to read OAuth state from keychain");
+            return;
+        }
+    };
+    match state.as_deref() {
+        Some(s) if s == expected_state => {}
+        _ => {
+            tracing::warn!("deep-link callback state mismatch — rejecting (possible CSRF)");
+            return;
+        }
+    }
+
     let (Some(access), Some(refresh)) = (access_token, refresh_token) else {
-        tracing::warn!("deep-link callback missing tokens: {url}");
+        tracing::warn!("deep-link callback missing tokens (URL redacted to avoid leaking JWT)");
         return;
     };
     if let Err(e) = auth::store_access_token(&access) {

@@ -4,6 +4,7 @@ const SERVICE: &str = "com.band.power-term";
 const ACCOUNT_ACCESS: &str = "sync:access_token";
 const ACCOUNT_REFRESH: &str = "sync:refresh_token";
 const ACCOUNT_KEY: &str = "sync:key";
+const ACCOUNT_OAUTH_STATE: &str = "sync:oauth_state";
 
 pub fn store_access_token(token: &str) -> Result<(), SecretError> {
     crate::store::secrets::backend_set(SERVICE, ACCOUNT_ACCESS, token)
@@ -96,9 +97,32 @@ pub fn is_token_expired(token: &str) -> bool {
     exp < now
 }
 
-/// Build the Supabase GitHub OAuth URL.
-pub fn oauth_url(supabase_url: &str) -> String {
-    format!("{supabase_url}/auth/v1/authorize?provider=github&redirect_to=power-term://auth/callback")
+/// Build the Supabase GitHub OAuth URL with an anti-CSRF `state` parameter.
+/// The state is persisted to Keychain so we can validate it when the
+/// `power-term://auth/callback` deep-link comes back. Without this, any
+/// process that registers the scheme could deliver a forged callback and
+/// have its tokens accepted as ours.
+pub fn oauth_url(supabase_url: &str) -> Result<String, SecretError> {
+    let state = generate_oauth_state();
+    crate::store::secrets::backend_set(SERVICE, ACCOUNT_OAUTH_STATE, &state)?;
+    Ok(format!(
+        "{supabase_url}/auth/v1/authorize?provider=github&redirect_to=power-term://auth/callback&state={state}"
+    ))
+}
+
+/// Read and clear the pending OAuth `state`. Returns `None` if no flow is
+/// in progress; callers must reject the callback in that case.
+pub fn take_oauth_state() -> Result<Option<String>, SecretError> {
+    let state = crate::store::secrets::backend_get(SERVICE, ACCOUNT_OAUTH_STATE)?;
+    let _ = crate::store::secrets::backend_delete(SERVICE, ACCOUNT_OAUTH_STATE);
+    Ok(state)
+}
+
+fn generate_oauth_state() -> String {
+    use aes_gcm::aead::{rand_core::RngCore, OsRng};
+    let mut buf = [0u8; 24];
+    OsRng.fill_bytes(&mut buf);
+    bs58::encode(buf).into_string()
 }
 
 #[cfg(test)]
@@ -139,12 +163,27 @@ mod tests {
         assert!(!is_token_expired(&token));
     }
 
+    #[cfg(feature = "mock-keychain")]
     #[test]
-    fn oauth_url_contains_provider_and_redirect() {
-        let url = oauth_url("https://xyz.supabase.co");
+    fn oauth_url_contains_provider_redirect_and_state() {
+        let url = oauth_url("https://xyz.supabase.co").unwrap();
         assert!(url.contains("provider=github"));
         assert!(url.contains("power-term://auth/callback"));
         assert!(url.starts_with("https://xyz.supabase.co"));
+        assert!(url.contains("&state="));
+        // state is persisted so the callback can validate it
+        let state = take_oauth_state().unwrap();
+        assert!(state.is_some());
+        // and consumed on read
+        assert!(take_oauth_state().unwrap().is_none());
+    }
+
+    #[test]
+    fn generate_oauth_state_is_unique() {
+        let a = generate_oauth_state();
+        let b = generate_oauth_state();
+        assert_ne!(a, b);
+        assert!(a.len() >= 30, "state should be long enough to resist guessing");
     }
 
     #[cfg(feature = "mock-keychain")]
