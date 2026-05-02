@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/TitleBar';
 import { TabBar } from './components/TabBar';
 import { Terminal } from './components/Terminal';
@@ -39,25 +40,20 @@ const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 
 /**
- * Read the macOS user accent colour via the CSS `AccentColor` system
- * keyword. We probe a hidden element instead of writing the keyword into
- * a custom property because WKWebView's `color-mix()` implementation
- * doesn't pre-resolve system colours, so any derivation that should be
- * translucent purple ends up failing to compute.
- *
- * Returns an `rgb(...)` / `rgba(...)` string, or null if the keyword
- * resolved to something unusable (very old WebKit).
+ * Resolve the user's macOS system accent colour to a hex string. Goes
+ * through a Rust IPC because the CSS `AccentColor` keyword is not
+ * resolved inside `color-mix()` by WKWebView — the symptom is "I set
+ * Purple but the app shows Green" because the mixer falls back to a
+ * default. The Rust side reads `AppleAccentColor` from defaults, which
+ * is the same source AppKit's controlAccentColor uses.
  */
-function resolveSystemAccent(): string | null {
-  const probe = document.createElement('span');
-  probe.style.color = 'AccentColor';
-  probe.style.position = 'absolute';
-  probe.style.visibility = 'hidden';
-  probe.style.pointerEvents = 'none';
-  document.body.appendChild(probe);
-  const color = getComputedStyle(probe).color;
-  probe.remove();
-  return color && color.startsWith('rgb') ? color : null;
+async function resolveSystemAccent(): Promise<string | null> {
+  try {
+    const hex = await invoke<string>('system_accent_color');
+    return /^#[0-9a-f]{6}$/i.test(hex) ? hex : null;
+  } catch {
+    return null;
+  }
 }
 
 type TargetKind = 'shell' | 'sftp';
@@ -437,14 +433,10 @@ export function App() {
     const accent = settings?.accent_color ?? 'system';
     const root = document.documentElement;
     if (accent === 'system') {
-      // Resolve the `AccentColor` system keyword into a concrete rgb()
-      // value before assigning. Setting `--accent: AccentColor` directly
-      // breaks `color-mix(... var(--accent) ...)` in WebKit because the
-      // mixer can't pre-multiply a system colour. Probing via getComputedStyle
-      // returns the rendered colour, which mixes cleanly.
-      const resolved = resolveSystemAccent();
-      if (resolved) root.style.setProperty('--accent', resolved);
-      else root.style.removeProperty('--accent');
+      void resolveSystemAccent().then((resolved) => {
+        if (resolved) root.style.setProperty('--accent', resolved);
+        else root.style.removeProperty('--accent');
+      });
     } else if (/^#[0-9a-f]{6}$/i.test(accent)) {
       root.style.setProperty('--accent', accent);
     } else {
@@ -455,16 +447,18 @@ export function App() {
   // Re-probe whenever the OS appearance/accent might have changed.
   useEffect(() => {
     if (settings?.accent_color !== 'system' && settings?.accent_color != null) return;
-    const apply = () => {
-      const resolved = resolveSystemAccent();
+    const apply = async () => {
+      const resolved = await resolveSystemAccent();
       if (resolved) document.documentElement.style.setProperty('--accent', resolved);
     };
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    mq.addEventListener('change', apply);
-    window.addEventListener('focus', apply);
+    const onFocus = () => { void apply(); };
+    const onMq = () => { void apply(); };
+    mq.addEventListener('change', onMq);
+    window.addEventListener('focus', onFocus);
     return () => {
-      mq.removeEventListener('change', apply);
-      window.removeEventListener('focus', apply);
+      mq.removeEventListener('change', onMq);
+      window.removeEventListener('focus', onFocus);
     };
   }, [settings?.accent_color]);
 

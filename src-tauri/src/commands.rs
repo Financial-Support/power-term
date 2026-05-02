@@ -6,6 +6,47 @@ use base64::Engine;
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
 
+/// Resolve the user's macOS accent colour to a `#RRGGBB` literal so the
+/// renderer can drive every accent-derived shade through `color-mix()`.
+/// We can't rely on the CSS `AccentColor` keyword: WKWebView does not
+/// pre-resolve it inside `color-mix()`, so derived shades fall back to
+/// arbitrary defaults (the symptom is "I set Purple but the app is
+/// Green"). Reading `AppleAccentColor` from defaults is the same source
+/// AppKit uses for `NSColor.controlAccentColor`, so the mapping matches
+/// what the rest of the system shows.
+#[tauri::command]
+pub fn system_accent_color() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        let raw = std::process::Command::new("defaults")
+            .args(["read", "-g", "AppleAccentColor"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+
+        // Mapping mirrors AppKit's controlAccentColor for each
+        // `AppleAccentColor` integer. `Multicolor` (the macOS default
+        // when no explicit accent is chosen) leaves the key unset and
+        // resolves to Blue at the AppKit layer.
+        return match raw.as_deref() {
+            Some("-1") => "#98989D",
+            Some("0")  => "#FF4C51",
+            Some("1")  => "#F7821A",
+            Some("2")  => "#F7C800",
+            Some("3")  => "#62BF41",
+            Some("4")  => "#007AFF",
+            Some("5")  => "#9F4BD5",
+            Some("6")  => "#F74F9E",
+            _ => "#007AFF",
+        }.to_string();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "#3b82f6".to_string()
+    }
+}
+
 fn shell_with_fallback(opt: Option<String>) -> String {
     if let Some(s) = opt.filter(|s| !s.is_empty()) { return s; }
     if let Ok(env) = std::env::var("SHELL") { if !env.is_empty() { return env; } }
