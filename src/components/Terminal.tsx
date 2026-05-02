@@ -107,7 +107,7 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
         // keep it open when the channel died on a signal — network_error,
         // kill, etc. — so the user can read what went wrong.
         if (!p.signal && onAutoCloseRef.current) {
-          onAutoCloseRef.current(tab.ptyId);
+          onAutoCloseRef.current(tab.id);
           return;
         }
         const codeStr = p.code !== null ? p.code.toString() : 'null';
