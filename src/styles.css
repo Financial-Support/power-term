@@ -604,6 +604,14 @@ html, body, #root { height: 100%; margin: 0; }
   font-family: "SF Mono", Menlo, monospace;
 }
 .connecting-card .label { font-size: 11px; color: var(--fg-dim); }
+.connecting-cancel {
+  margin-top: 8px;
+  background: transparent; color: var(--fg-muted);
+  border: 1px solid var(--border-med); border-radius: 6px;
+  padding: 4px 14px; font-size: 12px; cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.connecting-cancel:hover { background: rgba(255,240,220,0.08); color: var(--fg); border-color: var(--fg-muted); }
 @keyframes ptm-spin { to { transform: rotate(360deg); } }
 
 /* ─── SFTP file browser ─────────────────────────────────────────────────── */

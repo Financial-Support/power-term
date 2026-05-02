@@ -212,7 +212,15 @@ export function App() {
       const result = targetKind === 'shell'
         ? await sshConnect({ target, auth, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, acceptFingerprint: acceptFp })
         : await sftpOpen({ host: target.host, port: target.port, user: target.user, auth, acceptFingerprint: acceptFp });
-      if (myToken !== flowToken.current) return;
+      if (myToken !== flowToken.current) {
+        // User cancelled while we were connecting. Reap the session if it
+        // succeeded so we don't leak a backend session no one is using.
+        if (result.status === 'connected') {
+          if (targetKind === 'shell') void sshKill(result.id);
+          else void sftpClose(result.id);
+        }
+        return;
+      }
       if (result.status === 'connected') {
         const tabId = addTab(result.id, titleOverride ?? `${target.user}@${target.host}`, targetKind === 'shell' ? 'ssh' : 'sftp');
         if (targetKind === 'sftp') void initSftpTab(tabId, result.id);
@@ -440,36 +448,59 @@ export function App() {
           }
         />
         <main className={`terminals layout-${layoutKind}`}>
-          {layoutSlots.map((tabId, i) => {
-            const tab = tabs.find((t) => t.id === tabId);
+          {/* All non-SFTP tabs always mounted at this stable parent so xterm
+              state survives slot reassignment. CSS `order` places each visible
+              terminal in its layout slot; non-slot tabs are display:none. */}
+          {tabs.filter((t) => t.kind !== 'sftp').map((t) => {
+            const slotIdx = layoutSlots.indexOf(t.id);
+            const inSlot = slotIdx >= 0;
             return (
               <div
-                key={tabId ?? `empty-${i}`}
-                className={`pane${i === activePaneIndex ? ' pane-active' : ''}`}
-                onClick={() => setActivePane(i)}
+                key={t.id}
+                className={`pane${inSlot && slotIdx === activePaneIndex ? ' pane-active' : ''}`}
+                style={inSlot ? { order: slotIdx } : { display: 'none' }}
+                onClick={() => { if (inSlot) setActivePane(slotIdx); }}
               >
-                {tab ? (
-                  tab.kind === 'sftp' ? (
-                    <div className="sftp-mount" style={{ width: '100%', height: '100%', display: 'flex' }}>
-                      <FileBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
-                    </div>
-                  ) : (
-                    <Terminal key={tab.id} tab={tab} visible={true} active={i === activePaneIndex} />
-                  )
-                ) : (
-                  <div className="pane-empty">
-                    <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
-                      +
-                    </button>
-                  </div>
-                )}
+                <Terminal tab={t} visible={inSlot} active={inSlot && slotIdx === activePaneIndex} onAutoClose={handleClose} />
               </div>
             );
           })}
-          {/* Keep non-slot tabs mounted so their PTYs stay alive */}
-          {tabs
-            .filter((t) => !layoutSlots.includes(t.id) && t.kind !== 'sftp')
-            .map((t) => <Terminal key={t.id} tab={t} visible={false} />)}
+          {/* SFTP browsers render only when in a slot. */}
+          {layoutSlots.map((tabId, i) => {
+            if (!tabId) return null;
+            const tab = tabs.find((t) => t.id === tabId);
+            if (!tab || tab.kind !== 'sftp') return null;
+            return (
+              <div
+                key={`sftp-${tab.id}`}
+                className={`pane${i === activePaneIndex ? ' pane-active' : ''}`}
+                style={{ order: i }}
+                onClick={() => setActivePane(i)}
+              >
+                <div className="sftp-mount" style={{ width: '100%', height: '100%', display: 'flex' }}>
+                  <FileBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
+                </div>
+              </div>
+            );
+          })}
+          {/* Empty-slot placeholders ("+ new") */}
+          {layoutSlots.map((tabId, i) => {
+            if (tabId) return null;
+            return (
+              <div
+                key={`empty-${i}`}
+                className={`pane${i === activePaneIndex ? ' pane-active' : ''}`}
+                style={{ order: i }}
+                onClick={() => setActivePane(i)}
+              >
+                <div className="pane-empty">
+                  <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
+                    +
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </main>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onSshConnect={onPaletteSshConnect} />
@@ -479,6 +510,11 @@ export function App() {
             <div className="spinner" />
             <div className="label">{flow.targetKind === 'sftp' ? 'Opening SFTP…' : 'Connecting…'}</div>
             <div className="target">{flow.target.user}@{flow.target.host}{flow.target.port !== 22 ? `:${flow.target.port}` : ''}</div>
+            <button
+              type="button"
+              className="connecting-cancel"
+              onClick={() => { flowToken.current++; setFlow({ phase: 'idle' }); }}
+            >Cancel</button>
           </div>
         </div>
       )}

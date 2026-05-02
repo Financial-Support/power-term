@@ -12,15 +12,17 @@ import { useSettingsStore } from '../state/settingsStore';
 import { useTheme } from '../hooks/useTheme';
 import { PRESET_THEMES } from '../themes';
 
-interface Props { tab: Tab; visible: boolean; active?: boolean }
+interface Props { tab: Tab; visible: boolean; active?: boolean; onAutoClose?: (id: string) => void }
 
-export function Terminal({ tab, visible, active }: Props) {
+export function Terminal({ tab, visible, active, onAutoClose }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const settings = useSettingsStore((s) => s.settings);
   const markExit = useSessionStore((s) => s.markExit);
   const resolvedTheme = useTheme();
+  const onAutoCloseRef = useRef(onAutoClose);
+  useEffect(() => { onAutoCloseRef.current = onAutoClose; }, [onAutoClose]);
 
   useEffect(() => {
     if (!containerRef.current || !settings) return;
@@ -100,6 +102,13 @@ export function Terminal({ tab, visible, active }: Props) {
       unsubOutput = await onPtyOutput(tab.ptyId, (bytes) => term.write(bytes));
       unsubExit = await onPtyExit(tab.ptyId, (p) => {
         markExit(tab.ptyId, p.code);
+        // Clean exit (e.g. user typed `exit` or Ctrl-D): auto-close the tab.
+        // Anything else (non-zero status, signal, dropped network) keeps the
+        // tab so the user can read what happened.
+        if (p.code === 0 && !p.signal && onAutoCloseRef.current) {
+          onAutoCloseRef.current(tab.ptyId);
+          return;
+        }
         const codeStr = p.code !== null ? p.code.toString() : 'null';
         const sigStr = p.signal ? ` signal=${p.signal}` : '';
         term.write(`\r\n\x1b[33m[process exited (code ${codeStr}${sigStr})]\x1b[0m\r\n`);
