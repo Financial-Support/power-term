@@ -1050,26 +1050,54 @@ html, body, #root { height: 100%; margin: 0; }
 .sync-spinner { display: inline-block; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.sync-tab { display: flex; flex-direction: column; gap: 12px; }
-.sync-tab-desc { color: var(--fg-muted); font-size: 13px; margin: 0; }
-.sync-user-row { display: flex; align-items: center; justify-content: space-between; }
-.sync-user-email { font-weight: 500; }
-.sync-last-synced { font-size: 12px; color: var(--fg-muted); margin: 0; }
-.sync-key-section h3 { margin: 0 0 8px; font-size: 13px; }
-.sync-key-display { display: flex; align-items: center; gap: 8px; }
+.sync-tab { display: flex; flex-direction: column; gap: 14px; }
+.sync-tab-desc { color: var(--fg-muted); font-size: 12px; line-height: 1.5; margin: 0; }
+.sync-tab-sublabel {
+  display: block;
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin: 0 0 6px;
+}
+
+.sync-row-between {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px;
+}
+.sync-account { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sync-user-email {
+  font-weight: 600; font-size: 13px; color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sync-last-synced { font-size: 11px; color: var(--fg-muted); }
+.sync-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.sync-divider {
+  height: 1px;
+  border: 0;
+  background: var(--border);
+  margin: 2px 0;
+}
+
+.sync-key-section { display: flex; flex-direction: column; gap: 10px; }
+.sync-key-section h3 { margin: 0; font-size: 13px; font-weight: 600; }
+
+.sync-key-display { display: flex; align-items: center; gap: 6px; }
 .sync-key-display code {
   flex: 1;
   font-family: "SF Mono", Menlo, monospace;
-  font-size: 13px; letter-spacing: 0.05em;
+  font-size: 12px; letter-spacing: 0.05em;
   padding: 6px 10px;
   background: rgba(255,240,220,0.04);
   border: 1px solid var(--border-med);
   border-radius: 7px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
 }
-.sync-key-notice { color: var(--fg-muted); font-size: 13px; margin: 0; }
-.sync-key-input-row { display: flex; gap: 8px; }
-.sync-key-input-row input { flex: 1; }
+.sync-key-notice { color: var(--fg-muted); font-size: 12px; margin: 0; line-height: 1.5; }
+
+.sync-key-input-block { display: flex; flex-direction: column; }
+.sync-key-input-row { display: flex; gap: 6px; }
+.sync-key-input-row input { flex: 1; min-width: 0; }
 
 /* Unify all buttons inside the Sync tab with the modal-actions look used
    on the Appearance / Terminal tabs so the dialog feels coherent. */

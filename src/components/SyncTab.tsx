@@ -65,37 +65,43 @@ export function SyncTab() {
 
   return (
     <div className="sync-tab">
-      <div className="sync-user-row">
-        <span className="sync-user-email">{user.email ?? user.id}</span>
-        <button type="button" onClick={() => void signOut()} className="sync-sign-out">
-          Sign out
-        </button>
+      <div className="sync-row-between">
+        <div className="sync-account">
+          <div className="sync-user-email">{user.email ?? user.id}</div>
+          {syncState.last_synced != null && (
+            <div className="sync-last-synced">
+              Last synced: {new Date(syncState.last_synced).toLocaleString()}
+            </div>
+          )}
+        </div>
+        <div className="sync-row-actions">
+          <button
+            type="button"
+            className="primary"
+            onClick={() => void handlePull()}
+            disabled={pulling}
+          >
+            {pulling ? 'Syncing…' : 'Sync now'}
+          </button>
+          <button type="button" onClick={() => void signOut()}>
+            Sign out
+          </button>
+        </div>
       </div>
 
-      {syncState.last_synced != null && (
-        <p className="sync-last-synced">
-          Last synced: {new Date(syncState.last_synced).toLocaleString()}
-        </p>
-      )}
+      {syncState.error && <p className="form-error">{syncState.error}</p>}
 
-      <button
-        type="button"
-        onClick={() => void handlePull()}
-        disabled={pulling}
-        className="sync-pull-btn"
-      >
-        {pulling ? 'Syncing…' : 'Sync now'}
-      </button>
-
-      {syncState.error && (
-        <p className="form-error">{syncState.error}</p>
-      )}
+      <div className="sync-divider" role="separator" />
 
       <div className="sync-key-section">
         <h3>Sync key</h3>
+        <p className="sync-tab-desc">
+          Encrypts your saved credentials before upload. Use the same key on every device.
+        </p>
+
         {hasKey ? (
           <div className="sync-key-display">
-            <code>{keyVisible ? syncKey : '••••••••••••••••'}</code>
+            <code>{keyVisible ? syncKey : '•'.repeat(20)}</code>
             <button type="button" onClick={() => setKeyVisible((v) => !v)}>
               {keyVisible ? 'Hide' : 'Show'}
             </button>
@@ -108,24 +114,30 @@ export function SyncTab() {
           </div>
         ) : (
           <p className="sync-key-notice">
-            Credentials not available — enter sync key from another device.
+            No sync key on this device — paste one from another device below to decrypt your credentials.
           </p>
         )}
 
-        <div className="sync-key-input-row">
-          <input
-            type="text"
-            placeholder="Enter sync key from another device"
-            value={keyInput}
-            onChange={(e) => setKeyInput(e.target.value)}
-          />
-          <button
-            type="button"
-            onClick={() => void handleSetKey()}
-            disabled={!keyInput.trim() || keyLoading}
-          >
-            Save key
-          </button>
+        <div className="sync-key-input-block">
+          <label htmlFor="sm-sync-key-input" className="sync-tab-sublabel">
+            {hasKey ? 'Replace with key from another device' : 'Set key from another device'}
+          </label>
+          <div className="sync-key-input-row">
+            <input
+              id="sm-sync-key-input"
+              type="text"
+              placeholder="Paste base58 sync key…"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => void handleSetKey()}
+              disabled={!keyInput.trim() || keyLoading}
+            >
+              Save key
+            </button>
+          </div>
         </div>
         {keyError && <p className="form-error">{keyError}</p>}
       </div>
