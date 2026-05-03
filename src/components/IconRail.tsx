@@ -1,4 +1,6 @@
 // src/components/IconRail.tsx
+import type { ReactNode } from 'react';
+
 export type SidebarSection = 'hosts' | 'snippets' | 'forwards';
 
 interface Props {
@@ -6,85 +8,109 @@ interface Props {
   onSection: (s: SidebarSection) => void;
   onSettings: () => void;
   onSync: () => void;
-  sidebarOpen: boolean;
-  onToggleSidebar: () => void;
+  expanded: boolean;
+  onToggle: () => void;
 }
 
 export function IconRail({
-  activeSection, onSection, onSettings, onSync, sidebarOpen, onToggleSidebar,
+  activeSection, onSection, onSettings, onSync, expanded, onToggle,
 }: Props) {
-  // Clicking a section icon while the sidebar is collapsed should also expand
-  // it — otherwise the click feels broken (state changed, panel still hidden).
-  const pickSection = (s: SidebarSection) => {
-    onSection(s);
-    if (!sidebarOpen) onToggleSidebar();
-  };
   return (
-    <div className="icon-rail" aria-label="navigation rail">
-      <button
-        type="button"
-        className="rail-icon rail-icon-toggle"
-        aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-        title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-        aria-expanded={sidebarOpen}
-        onClick={onToggleSidebar}
-      >
-        <IconChevron open={sidebarOpen} />
-      </button>
-      <button
-        type="button"
-        className={`rail-icon${activeSection === 'hosts' && sidebarOpen ? ' active' : ''}`}
-        aria-label="Hosts"
+    <div className={`icon-rail${expanded ? ' expanded' : ''}`} aria-label="navigation rail">
+      <RailButton
+        className="rail-icon-toggle"
+        ariaLabel={expanded ? 'Collapse menu' : 'Expand menu'}
+        title={expanded ? 'Collapse menu' : 'Expand menu'}
+        onClick={onToggle}
+        expanded={expanded}
+        ariaExpanded={expanded}
+        icon={<IconChevron open={expanded} />}
+        label="Menu"
+      />
+      <RailButton
+        ariaLabel="Hosts"
         title="Hosts"
-        onClick={() => pickSection('hosts')}
-      >
-        <IconHosts />
-      </button>
-      <button
-        type="button"
-        className={`rail-icon${activeSection === 'snippets' && sidebarOpen ? ' active' : ''}`}
-        aria-label="Snippets"
+        onClick={() => onSection('hosts')}
+        active={activeSection === 'hosts'}
+        expanded={expanded}
+        icon={<IconHosts />}
+        label="Hosts"
+      />
+      <RailButton
+        ariaLabel="Snippets"
         title="Snippets"
-        onClick={() => pickSection('snippets')}
-      >
-        <IconSnippets />
-      </button>
-      <button
-        type="button"
-        className={`rail-icon${activeSection === 'forwards' && sidebarOpen ? ' active' : ''}`}
-        aria-label="Port Forwards"
+        onClick={() => onSection('snippets')}
+        active={activeSection === 'snippets'}
+        expanded={expanded}
+        icon={<IconSnippets />}
+        label="Snippets"
+      />
+      <RailButton
+        ariaLabel="Port Forwards"
         title="Port Forwards"
-        onClick={() => pickSection('forwards')}
-      >
-        <IconForwards />
-      </button>
+        onClick={() => onSection('forwards')}
+        active={activeSection === 'forwards'}
+        expanded={expanded}
+        icon={<IconForwards />}
+        label="Forwards"
+      />
 
       <div className="rail-spacer" />
 
-      <button
-        type="button"
-        className="rail-icon rail-icon-bottom"
-        aria-label="Sync"
+      <RailButton
+        className="rail-icon-bottom"
+        ariaLabel="Sync"
         title="Sync"
         onClick={onSync}
-      >
-        <IconSync />
-      </button>
-      <button
-        type="button"
-        className="rail-icon rail-icon-bottom"
-        aria-label="Settings"
+        expanded={expanded}
+        icon={<IconSync />}
+        label="Sync"
+      />
+      <RailButton
+        className="rail-icon-bottom"
+        ariaLabel="Settings"
         title="Settings (⌘,)"
         onClick={onSettings}
-      >
-        <IconSettings />
-      </button>
+        expanded={expanded}
+        icon={<IconSettings />}
+        label="Settings"
+      />
     </div>
   );
 }
 
-/** Chevron-left when the panel is open (clicking it collapses); chevron-right
- * when it's collapsed (clicking expands). One asset, rotated via CSS. */
+interface RailButtonProps {
+  icon: ReactNode;
+  label: string;
+  expanded: boolean;
+  onClick: () => void;
+  ariaLabel: string;
+  title: string;
+  active?: boolean;
+  className?: string;
+  ariaExpanded?: boolean;
+}
+
+function RailButton({
+  icon, label, expanded, onClick, ariaLabel, title, active, className, ariaExpanded,
+}: RailButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`rail-icon${active ? ' active' : ''}${className ? ' ' + className : ''}`}
+      aria-label={ariaLabel}
+      title={expanded ? undefined : title}
+      aria-expanded={ariaExpanded}
+      onClick={onClick}
+    >
+      <span className="rail-icon-glyph">{icon}</span>
+      {expanded && <span className="rail-icon-label">{label}</span>}
+    </button>
+  );
+}
+
+/** Chevron-left when expanded (clicking it collapses); chevron-right when
+ * collapsed (clicking expands). One asset, rotated via CSS. */
 function IconChevron({ open }: { open: boolean }) {
   return (
     <svg

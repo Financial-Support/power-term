@@ -213,14 +213,21 @@ html, body, #root { height: 100%; margin: 0; }
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 10px 0;
+  align-items: stretch;
+  padding: 10px 8px;
   gap: 3px;
   user-select: none;
+  transition: width 0.15s ease, flex-basis 0.15s ease;
+}
+/* Expanded state: rail widens to fit text labels. The buttons left-align
+   their icon + label rather than centring a single glyph. */
+.icon-rail.expanded {
+  width: 160px;
+  flex: 0 0 160px;
+  align-items: stretch;
 }
 .rail-icon {
-  width: 40px;
-  height: 40px;
+  height: 38px;
   border-radius: 9px;
   border: none;
   background: transparent;
@@ -229,8 +236,27 @@ html, body, #root { height: 100%; margin: 0; }
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
+  padding: 0;
+  font: inherit;
   transition: background 0.1s, color 0.1s;
   flex-shrink: 0;
+  text-align: left;
+}
+.icon-rail.expanded .rail-icon {
+  justify-content: flex-start;
+  padding: 0 10px;
+}
+.rail-icon-glyph {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; flex-shrink: 0;
+}
+.rail-icon-label {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rail-icon:hover { background: var(--bg-hover); color: var(--fg); }
 .rail-icon.active {
@@ -240,8 +266,8 @@ html, body, #root { height: 100%; margin: 0; }
 .rail-spacer { flex: 1; }
 .rail-icon-bottom { margin-top: 0; }
 .rail-icon-toggle {
-  /* Slightly smaller and dimmer than the section icons so it reads as a
-     control rather than a destination. */
+  /* Slightly dimmer than the section icons so it reads as a control
+     rather than a destination. */
   color: var(--fg-dim);
   margin-bottom: 6px;
 }
