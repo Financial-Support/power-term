@@ -18,6 +18,8 @@ interface Props {
   /** Called when a remote drag is dropped onto this local pane. */
   onRemoteDrop: (payload: DragPayload, targetCwd: string) => Promise<void> | void;
   showHidden: boolean;
+  /** Bumping this triggers a re-list of the current cwd without resetting it. */
+  reloadKey?: number;
   /** "Copy to remote" menu entry for files; receives the absolute local path. */
   onCopyToRemote?: (localPath: string, name: string) => Promise<void> | void;
 }
@@ -28,7 +30,7 @@ interface Props {
  * command instead of SFTP. Ships drag-source on each row plus a drop-target
  * on the list so the dual SFTP layout can copy in either direction.
  */
-export function LocalBrowser({ id, onRemoteDrop, showHidden, onCopyToRemote }: Props) {
+export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyToRemote }: Props) {
   const [cwd, setCwd] = useState<string | null>(null);
   const [entries, setEntries] = useState<LocalEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,6 +63,12 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, onCopyToRemote }: P
   };
 
   useEffect(() => { if (cwd) void reload(cwd); }, [cwd]);
+  // External reload trigger (e.g. after a download landed in cwd). Skip
+  // the initial render so we don't double-fire alongside the cwd effect.
+  useEffect(() => {
+    if (cwd && reloadKey !== undefined && reloadKey > 0) void reload(cwd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey]);
 
   const sorted = useMemo(() => {
     const filtered = showHidden ? entries : entries.filter((e) => !e.name.startsWith('.'));

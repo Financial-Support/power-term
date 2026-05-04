@@ -69,9 +69,9 @@ export function SftpDualBrowser({ tabId, onClose }: Props) {
     <div ref={containerRef} className="sftp-dual">
       <div className="sftp-dual-pane" style={{ flex: split }}>
         <LocalBrowser
-          key={bumpKey}
           id={`local-${tabId}`}
           showHidden={tab.showHidden}
+          reloadKey={bumpKey}
           onRemoteDrop={handleRemoteToLocal}
           onCopyToRemote={copyLocalToRemoteCwd}
         />
