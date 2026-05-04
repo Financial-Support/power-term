@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { useEffect, useMemo, useState } from 'react';
 import { FileRow } from './FileRow';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { useSftpStore } from '../state/sftpStore';
-import { useSessionStore } from '../state/sessionStore';
 import { sftpDownload, sftpMkdir, sftpRemoveDir, sftpRemoveFile, sftpRename, sftpUpload } from '../lib/ipc';
 import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
 import type { SftpEntry } from '../types';
@@ -34,26 +32,7 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
   const [mkdirDraft, setMkdirDraft] = useState('');
   const [dropOver, setDropOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
-  const [intraDropOver, setIntraDropOver] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: SftpEntry } | null>(null);
-  // True while an HTML5 drag started inside the webview is in flight.
-  // Tauri's OS-level drag-drop handler fires for these too (with empty
-  // `paths`), which would set dropOver and show the wrong overlay AND
-  // can swallow the HTML5 drop at the AppKit responder chain. Suppress
-  // the Tauri handler while a webview-internal drag is active.
-  const html5DragActive = useRef(false);
-  useEffect(() => {
-    const onStart = () => { html5DragActive.current = true; };
-    const onEnd = () => { html5DragActive.current = false; };
-    document.addEventListener('dragstart', onStart);
-    document.addEventListener('dragend', onEnd);
-    document.addEventListener('drop', onEnd);
-    return () => {
-      document.removeEventListener('dragstart', onStart);
-      document.removeEventListener('dragend', onEnd);
-      document.removeEventListener('drop', onEnd);
-    };
-  }, []);
 
   // Sync local breadcrumb input when cwd changes externally (after navigate).
   useEffect(() => {
@@ -65,47 +44,6 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab?.cwd]);
-
-  // Drag-drop from Finder → upload to current cwd. Tauri delivers drop events
-  // window-globally, so each FileBrowser instance gates on `activeTabId` to
-  // avoid double-uploads when multiple SFTP tabs are mounted.
-  useEffect(() => {
-    if (!tab) return;
-    let unlisten: (() => void) | null = null;
-    let cancelled = false;
-    void getCurrentWebview().onDragDropEvent((event) => {
-      // Skip the OS-level handler while an HTML5 drag from inside the
-      // webview is in flight; that path is handled by onIntraDrop below.
-      if (html5DragActive.current) return;
-      const { activeTabId } = useSessionStore.getState();
-      if (activeTabId !== tabId) return;
-      const p = event.payload;
-      if (p.type === 'over')      setDropOver(true);
-      else if (p.type === 'leave') setDropOver(false);
-      else if (p.type === 'drop') {
-        setDropOver(false);
-        const paths = p.paths;
-        if (!paths.length) return;
-        setUploadProgress({ done: 0, total: paths.length });
-        void (async () => {
-          let done = 0;
-          for (const local of paths) {
-            const base = local.split('/').pop() ?? 'upload';
-            try {
-              await sftpUpload(tab.sftpId, local, joinPath(tab.cwd, base));
-            } catch (err) {
-              setError(tabId, `upload "${base}" failed: ${String(err)}`);
-            }
-            done++;
-            setUploadProgress({ done, total: paths.length });
-          }
-          setUploadProgress(null);
-          void reload(tabId);
-        })();
-      }
-    }).then((fn) => { if (cancelled) fn(); else unlisten = fn; });
-    return () => { cancelled = true; if (unlisten) unlisten(); };
-  }, [tabId, tab?.cwd, tab?.sftpId, reload, setError, tab]);
 
   const sorted = useMemo(() => {
     if (!tab) return [] as SftpEntry[];
@@ -208,31 +146,66 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     void reload(tabId);
   };
 
-  // HTML5 drag-drop from the local pane (intra-webview). Distinct from the
-  // Tauri OS-level drop above which fires for Finder drags.
+  // HTML5 drag-drop. Two source kinds reach this handler:
+  //   1. The local pane (intra-webview) sets DUAL_DRAG_MIME with a JSON
+  //      payload pointing at an absolute local file path.
+  //   2. Finder drags expose file paths via text/uri-list as file:// URLs.
   //
-  // NB: don't gate this on dataTransfer.types — WebKit hides custom MIME
-  // types during dragover's protected-data-store mode, so the check
-  // silently fails and preventDefault is never called, which means the
-  // element never becomes a valid drop target. Validate the MIME in drop.
+  // Don't gate dragover on dataTransfer.types — WebKit hides custom MIME
+  // types during dragover's protected mode, so the check silently fails
+  // and preventDefault is never called. Validate at drop time instead.
   const onIntraDragOver = (e: React.DragEvent) => {
-    if (!onLocalDrop) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
-    if (!intraDropOver) setIntraDropOver(true);
+    if (!dropOver) setDropOver(true);
   };
   const onIntraDrop = async (e: React.DragEvent) => {
-    if (!onLocalDrop) return;
     e.preventDefault();
-    setIntraDropOver(false);
-    const raw = e.dataTransfer.getData(DUAL_DRAG_MIME);
-    if (!raw) return;
-    try {
-      const payload = JSON.parse(raw);
-      if (payload.kind !== 'local') return;
-      await onLocalDrop(payload, tab.cwd, tab.sftpId);
-      void reload(tabId);
-    } catch (err) { reportOpError('drop', err); }
+    setDropOver(false);
+
+    // Internal local→remote drag (only when dual-pane wires onLocalDrop).
+    if (onLocalDrop) {
+      const raw = e.dataTransfer.getData(DUAL_DRAG_MIME);
+      if (raw) {
+        try {
+          const payload = JSON.parse(raw);
+          if (payload.kind === 'local') {
+            await onLocalDrop(payload, tab.cwd, tab.sftpId);
+            void reload(tabId);
+          }
+        } catch (err) { reportOpError('drop', err); }
+        return;
+      }
+    }
+
+    // Finder drop: parse file:// URLs from text/uri-list and upload.
+    const uriList = e.dataTransfer.getData('text/uri-list');
+    if (!uriList) return;
+    const localPaths = uriList
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter((s) => s && !s.startsWith('#'))
+      .map((u) => {
+        try { return decodeURIComponent(new URL(u).pathname); }
+        catch { return null; }
+      })
+      .filter((p): p is string => !!p);
+    if (!localPaths.length) return;
+
+    setUploadProgress({ done: 0, total: localPaths.length });
+    let done = 0;
+    for (const local of localPaths) {
+      const base = local.split('/').pop() ?? 'upload';
+      try {
+        await sftpUpload(tab.sftpId, local, joinPath(tab.cwd, base));
+      } catch (err) {
+        setError(tabId, `upload "${base}" failed: ${String(err)}`);
+      }
+      done++;
+      setUploadProgress({ done, total: localPaths.length });
+    }
+    setUploadProgress(null);
+    void reload(tabId);
   };
 
   const onRowDragStartLocal = (e: React.DragEvent, entry: SftpEntry) => {
@@ -269,9 +242,9 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
 
   return (
     <div
-      className={`file-browser${dropOver || intraDropOver ? ' drop-over' : ''}`}
+      className={`file-browser${dropOver ? ' drop-over' : ''}`}
       onDragOver={onIntraDragOver}
-      onDragLeave={() => setIntraDropOver(false)}
+      onDragLeave={() => setDropOver(false)}
       onDrop={(e) => void onIntraDrop(e)}
     >
       <div className="fb-toolbar">
@@ -316,7 +289,7 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
           Uploading {uploadProgress.done} / {uploadProgress.total}…
         </div>
       )}
-      {(dropOver || intraDropOver) && (
+      {dropOver && (
         <div className="fb-drop-overlay">
           <div className="fb-drop-card">
             <div className="fb-drop-icon">⬇</div>
