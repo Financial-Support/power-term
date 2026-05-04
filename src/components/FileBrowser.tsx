@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { FileRow } from './FileRow';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
@@ -36,6 +36,24 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [intraDropOver, setIntraDropOver] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: SftpEntry } | null>(null);
+  // True while an HTML5 drag started inside the webview is in flight.
+  // Tauri's OS-level drag-drop handler fires for these too (with empty
+  // `paths`), which would set dropOver and show the wrong overlay AND
+  // can swallow the HTML5 drop at the AppKit responder chain. Suppress
+  // the Tauri handler while a webview-internal drag is active.
+  const html5DragActive = useRef(false);
+  useEffect(() => {
+    const onStart = () => { html5DragActive.current = true; };
+    const onEnd = () => { html5DragActive.current = false; };
+    document.addEventListener('dragstart', onStart);
+    document.addEventListener('dragend', onEnd);
+    document.addEventListener('drop', onEnd);
+    return () => {
+      document.removeEventListener('dragstart', onStart);
+      document.removeEventListener('dragend', onEnd);
+      document.removeEventListener('drop', onEnd);
+    };
+  }, []);
 
   // Sync local breadcrumb input when cwd changes externally (after navigate).
   useEffect(() => {
@@ -56,6 +74,9 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     let unlisten: (() => void) | null = null;
     let cancelled = false;
     void getCurrentWebview().onDragDropEvent((event) => {
+      // Skip the OS-level handler while an HTML5 drag from inside the
+      // webview is in flight; that path is handled by onIntraDrop below.
+      if (html5DragActive.current) return;
       const { activeTabId } = useSessionStore.getState();
       if (activeTabId !== tabId) return;
       const p = event.payload;
@@ -295,7 +316,7 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
           Uploading {uploadProgress.done} / {uploadProgress.total}…
         </div>
       )}
-      {dropOver && (
+      {(dropOver || intraDropOver) && (
         <div className="fb-drop-overlay">
           <div className="fb-drop-card">
             <div className="fb-drop-icon">⬇</div>
