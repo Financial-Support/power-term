@@ -108,8 +108,10 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, onCopyToRemote }: P
     e.dataTransfer.effectAllowed = 'copy';
   };
 
+  // Don't gate on dataTransfer.types — WebKit hides custom MIME types in
+  // dragover's protected mode, so the check silently fails and the pane
+  // never becomes a drop target. The MIME check happens in onDrop instead.
   const onDragOver = (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     if (!dropOver) setDropOver(true);

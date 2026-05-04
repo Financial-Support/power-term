@@ -189,9 +189,13 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
 
   // HTML5 drag-drop from the local pane (intra-webview). Distinct from the
   // Tauri OS-level drop above which fires for Finder drags.
+  //
+  // NB: don't gate this on dataTransfer.types — WebKit hides custom MIME
+  // types during dragover's protected-data-store mode, so the check
+  // silently fails and preventDefault is never called, which means the
+  // element never becomes a valid drop target. Validate the MIME in drop.
   const onIntraDragOver = (e: React.DragEvent) => {
     if (!onLocalDrop) return;
-    if (!e.dataTransfer.types.includes(DUAL_DRAG_MIME)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     if (!intraDropOver) setIntraDropOver(true);
