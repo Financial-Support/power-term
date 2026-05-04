@@ -81,10 +81,25 @@ fn main() {
                 .paste()
                 .select_all()
                 .build()?;
+            let window_submenu = SubmenuBuilder::new(app, "Window")
+                .minimize()
+                .maximize()
+                .separator()
+                .fullscreen()
+                .separator()
+                .close_window()
+                .build()?;
+            let help_github_item = MenuItemBuilder::with_id("help_github", "Power Term on GitHub")
+                .build(app)?;
+            let help_submenu = SubmenuBuilder::new(app, "Help")
+                .item(&help_github_item)
+                .build()?;
             let menu = MenuBuilder::new(app)
                 .item(&app_submenu)
                 .item(&edit_submenu)
                 .item(&view_submenu)
+                .item(&window_submenu)
+                .item(&help_submenu)
                 .build()?;
             app.set_menu(menu)?;
             app.on_menu_event(|app_handle, event| {
@@ -93,6 +108,11 @@ fn main() {
                     "zoom_in"       => { let _ = app_handle.emit("menu:zoom-in", ()); }
                     "zoom_out"      => { let _ = app_handle.emit("menu:zoom-out", ()); }
                     "zoom_reset"    => { let _ = app_handle.emit("menu:zoom-reset", ()); }
+                    "help_github"   => {
+                        let _ = std::process::Command::new("open")
+                            .arg("https://github.com/bango97/homebrew-power-term")
+                            .spawn();
+                    }
                     _ => {}
                 }
             });
