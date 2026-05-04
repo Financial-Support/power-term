@@ -68,6 +68,14 @@ npm run test           # run unit tests once
 npm run test:watch     # watch mode
 ```
 
+## Releasing
+
+```bash
+scripts/release.sh 0.2.0
+```
+
+Bumps the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`; builds DMGs for both arches; tags and pushes; uploads the release to `bango97/homebrew-power-term`; updates the cask formula. Requires `gh auth login` and both `aarch64-apple-darwin` / `x86_64-apple-darwin` rustup targets.
+
 ## License
 
 MIT
