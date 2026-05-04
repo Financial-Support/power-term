@@ -1,6 +1,6 @@
 [package]
 name = "power-term"
-version = "0.1.0"
+version = "0.1.1"
 description = "A modern terminal app"
 authors = ["band"]
 edition = "2021"
