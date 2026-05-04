@@ -7,8 +7,11 @@ A modern terminal built with Tauri + React + xterm.js.
 ### macOS (Homebrew Cask)
 
 ```bash
+brew tap bango97/power-term
 brew install --cask power-term
 ```
+
+The app installs to `/Applications/power-term.app`. The cask runs `xattr -cr` automatically as a postflight step — see below for context.
 
 > **Heads-up**: power-term is **not code-signed or notarized** by Apple (we don't pay the $99/year Developer Program fee). macOS Gatekeeper will block the app on first launch with a *"power-term is damaged and can't be opened"* or *"cannot verify developer"* error. This is expected — see workaround below.
 
@@ -43,7 +46,7 @@ sudo dpkg -i power-term-*.deb
 
 ### Windows
 
-Run the `.msi` installer from [Releases](https://github.com/band/power-term/releases).
+Run the `.msi` installer from [Releases](https://github.com/Financial-Support/power-term/releases).
 
 ## Build from source
 
