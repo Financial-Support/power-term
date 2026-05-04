@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useHostStore } from '../state/hostStore';
+import { useSessionStore } from '../state/sessionStore';
 import type { Host, HostInput } from '../types';
 import type { SidebarSection } from './IconRail';
 
@@ -10,6 +11,7 @@ interface Props {
   onConnect: (host: Host) => void;
   onOpenSftp: (host: Host) => void;
   onAddHost: () => void;
+  onImportSshConfig: () => void;
   onEditHost: (host: Host) => void;
   onDeleteHost: (host: Host) => void;
   snippetsSlot: ReactNode;
@@ -27,12 +29,21 @@ const HOST_DRAG_MIME = 'application/x-power-term-host-id';
 
 export function SidebarPanel({
   section,
-  onConnect, onOpenSftp, onAddHost, onEditHost, onDeleteHost,
+  onConnect, onOpenSftp, onAddHost, onImportSshConfig, onEditHost, onDeleteHost,
   snippetsSlot, forwardsSlot,
 }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const error = useHostStore((s) => s.error);
   const updateHost = useHostStore((s) => s.update);
+  const tabs = useSessionStore((s) => s.tabs);
+
+  const connectedHostIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tabs) {
+      if (t.hostId && t.exitCode == null) set.add(t.hostId);
+    }
+    return set;
+  }, [tabs]);
 
   const [filter, setFilter] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -122,14 +133,20 @@ export function SidebarPanel({
       {section === 'hosts' && (
         <div className="sp-section">
           <div className="sp-search-row">
-            <input
-              className="sp-search"
-              type="text"
-              placeholder="Filter hosts…"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              aria-label="filter hosts"
-            />
+            <div className="sp-search-wrap">
+              <span className="sp-search-icon" aria-hidden>
+                <SearchIcon />
+              </span>
+              <input
+                className="sp-search"
+                type="text"
+                placeholder="Filter hosts…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                aria-label="filter hosts"
+              />
+              <kbd className="sp-search-kbd" aria-hidden>⌘K</kbd>
+            </div>
           </div>
           {error && <p className="sp-error">{error}</p>}
           <div className="sp-list">
@@ -190,10 +207,12 @@ export function SidebarPanel({
                   )}
                   {!isCollapsed && (
                     <ul className={`sp-host-list${showGroupHeader ? ' nested' : ''}`}>
-                      {g.hosts.map((host) => (
+                      {g.hosts.map((host) => {
+                        const isConnected = connectedHostIds.has(host.id);
+                        return (
                         <li
                           key={host.id}
-                          className={`sp-host${draggingHostId === host.id ? ' dragging' : ''}`}
+                          className={`sp-host${draggingHostId === host.id ? ' dragging' : ''}${isConnected ? ' connected' : ''}`}
                           draggable
                           onDragStart={(e) => handleDragStart(e, host)}
                           onDragEnd={handleDragEnd}
@@ -203,9 +222,18 @@ export function SidebarPanel({
                             className="sp-host-name"
                             onClick={() => onConnect(host)}
                           >
-                            <span className="sp-host-dot" />
+                            <span
+                              className={`sp-host-dot${isConnected ? ' online' : ''}`}
+                              aria-label={isConnected ? 'connected' : 'idle'}
+                            />
                             {host.name}
                           </button>
+                          {host.tags.find((t) => t.startsWith('proxyjump:')) && (
+                            <span
+                              className="sp-host-jump"
+                              title={'Jumps via ' + host.tags.find((t) => t.startsWith('proxyjump:'))!.slice('proxyjump:'.length)}
+                            >↳</span>
+                          )}
                           <span className="sp-host-port">{host.port !== 22 ? host.port : ''}</span>
                           <span className="sp-host-actions">
                             <button type="button" aria-label={`sftp ${host.name}`} onClick={() => onOpenSftp(host)}>📂</button>
@@ -213,7 +241,8 @@ export function SidebarPanel({
                             <button type="button" aria-label={`delete ${host.name}`} onClick={() => onDeleteHost(host)}>×</button>
                           </span>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -223,6 +252,14 @@ export function SidebarPanel({
           <div className="sp-footer">
             <button type="button" className="sp-add-btn" onClick={onAddHost}>
               <span>+</span> Add Host
+            </button>
+            <button
+              type="button"
+              className="sp-import-btn"
+              onClick={onImportSshConfig}
+              title="Parse ~/.ssh/config and pick which hosts to import"
+            >
+              Import ~/.ssh/config
             </button>
           </div>
         </div>
@@ -252,6 +289,15 @@ function hostToInput(host: Host, override: Partial<HostInput>): HostInput {
     auth_method: host.auth_method, key_path: host.key_path, notes: host.notes,
     ...override,
   };
+}
+
+function SearchIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M9.2 9.2l3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function CaretIcon() {

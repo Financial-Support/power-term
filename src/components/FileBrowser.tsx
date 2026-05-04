@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { FileRow } from './FileRow';
+import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { useSftpStore } from '../state/sftpStore';
+import { useSessionStore } from '../state/sessionStore';
 import { sftpDownload, sftpMkdir, sftpRemoveDir, sftpRemoveFile, sftpRename, sftpUpload } from '../lib/ipc';
 import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
 import type { SftpEntry } from '../types';
@@ -8,9 +11,18 @@ import type { SftpEntry } from '../types';
 interface Props {
   tabId: string;
   onClose: () => void;
+  /** When set, this pane participates in dual-pane drag/drop. The host
+   *  component handles cross-pane copies; we only fire callbacks. */
+  onRowDragStart?: (e: React.DragEvent, payload: { kind: 'remote'; sftpId: string; path: string; name: string }) => void;
+  onLocalDrop?: (payload: { kind: 'local'; path: string; name: string }, targetCwd: string, sftpId: string) => Promise<void> | void;
+  /** When dual-pane mode is on, "Copy to local" appears in the row context
+   *  menu and calls this with the entry's full remote path. */
+  onCopyToLocal?: (remotePath: string, name: string) => Promise<void> | void;
 }
 
-export function FileBrowser({ tabId }: Props) {
+const DUAL_DRAG_MIME = 'application/x-power-term-file';
+
+export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal }: Props) {
   const tab = useSftpStore((s) => s.tabs[tabId]);
   const navigate = useSftpStore((s) => s.navigate);
   const reload = useSftpStore((s) => s.reload);
@@ -20,6 +32,10 @@ export function FileBrowser({ tabId }: Props) {
   const [pathDraft, setPathDraft] = useState(tab?.cwd ?? '');
   const [mkdirOpen, setMkdirOpen] = useState(false);
   const [mkdirDraft, setMkdirDraft] = useState('');
+  const [dropOver, setDropOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [intraDropOver, setIntraDropOver] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: SftpEntry } | null>(null);
 
   // Sync local breadcrumb input when cwd changes externally (after navigate).
   useEffect(() => {
@@ -31,6 +47,44 @@ export function FileBrowser({ tabId }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab?.cwd]);
+
+  // Drag-drop from Finder → upload to current cwd. Tauri delivers drop events
+  // window-globally, so each FileBrowser instance gates on `activeTabId` to
+  // avoid double-uploads when multiple SFTP tabs are mounted.
+  useEffect(() => {
+    if (!tab) return;
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void getCurrentWebview().onDragDropEvent((event) => {
+      const { activeTabId } = useSessionStore.getState();
+      if (activeTabId !== tabId) return;
+      const p = event.payload;
+      if (p.type === 'over')      setDropOver(true);
+      else if (p.type === 'leave') setDropOver(false);
+      else if (p.type === 'drop') {
+        setDropOver(false);
+        const paths = p.paths;
+        if (!paths.length) return;
+        setUploadProgress({ done: 0, total: paths.length });
+        void (async () => {
+          let done = 0;
+          for (const local of paths) {
+            const base = local.split('/').pop() ?? 'upload';
+            try {
+              await sftpUpload(tab.sftpId, local, joinPath(tab.cwd, base));
+            } catch (err) {
+              setError(tabId, `upload "${base}" failed: ${String(err)}`);
+            }
+            done++;
+            setUploadProgress({ done, total: paths.length });
+          }
+          setUploadProgress(null);
+          void reload(tabId);
+        })();
+      }
+    }).then((fn) => { if (cancelled) fn(); else unlisten = fn; });
+    return () => { cancelled = true; if (unlisten) unlisten(); };
+  }, [tabId, tab?.cwd, tab?.sftpId, reload, setError, tab]);
 
   const sorted = useMemo(() => {
     if (!tab) return [] as SftpEntry[];
@@ -133,8 +187,68 @@ export function FileBrowser({ tabId }: Props) {
     void reload(tabId);
   };
 
+  // HTML5 drag-drop from the local pane (intra-webview). Distinct from the
+  // Tauri OS-level drop above which fires for Finder drags.
+  const onIntraDragOver = (e: React.DragEvent) => {
+    if (!onLocalDrop) return;
+    if (!e.dataTransfer.types.includes(DUAL_DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!intraDropOver) setIntraDropOver(true);
+  };
+  const onIntraDrop = async (e: React.DragEvent) => {
+    if (!onLocalDrop) return;
+    e.preventDefault();
+    setIntraDropOver(false);
+    const raw = e.dataTransfer.getData(DUAL_DRAG_MIME);
+    if (!raw) return;
+    try {
+      const payload = JSON.parse(raw);
+      if (payload.kind !== 'local') return;
+      await onLocalDrop(payload, tab.cwd, tab.sftpId);
+      void reload(tabId);
+    } catch (err) { reportOpError('drop', err); }
+  };
+
+  const onRowDragStartLocal = (e: React.DragEvent, entry: SftpEntry) => {
+    if (!onRowDragStart) return;
+    onRowDragStart(e, {
+      kind: 'remote',
+      sftpId: tab.sftpId,
+      path: joinPath(tab.cwd, entry.name),
+      name: entry.name,
+    });
+  };
+
+  const buildCtxItems = (entry: SftpEntry): MenuEntry[] => {
+    const isDir = entry.kind === 'dir';
+    const remotePath = joinPath(tab.cwd, entry.name);
+    const items: MenuEntry[] = [];
+    if (isDir) {
+      items.push({ label: 'Open', icon: '▸', onClick: () => cdInto(entry.name) });
+    } else {
+      if (onCopyToLocal) items.push({
+        label: 'Copy to local',
+        icon: '⇠',
+        onClick: () => void onCopyToLocal(remotePath, entry.name),
+      });
+      items.push({ label: 'Download…', icon: '⬇', onClick: () => void onDownload(entry) });
+    }
+    items.push({ separator: true });
+    items.push({ label: 'Rename', icon: '✎', onClick: () => void onRename(entry) });
+    items.push({ label: 'Copy path', icon: '❏', onClick: () => void navigator.clipboard.writeText(remotePath) });
+    items.push({ separator: true });
+    items.push({ label: 'Delete', icon: '×', danger: true, onClick: () => void onDelete(entry) });
+    return items;
+  };
+
   return (
-    <div className="file-browser">
+    <div
+      className={`file-browser${dropOver || intraDropOver ? ' drop-over' : ''}`}
+      onDragOver={onIntraDragOver}
+      onDragLeave={() => setIntraDropOver(false)}
+      onDrop={(e) => void onIntraDrop(e)}
+    >
       <div className="fb-toolbar">
         <button type="button" aria-label="parent dir" className="fb-up" disabled={tab.loading} onClick={cdParent}>◀</button>
         <input
@@ -172,6 +286,19 @@ export function FileBrowser({ tabId }: Props) {
         <button type="button" className="fb-col fb-col-mod" onClick={() => toggleSort(tabId, 'modified')}>Modified</button>
         <span className="fb-col fb-col-actions" />
       </div>
+      {uploadProgress && (
+        <div className="fb-upload-progress">
+          Uploading {uploadProgress.done} / {uploadProgress.total}…
+        </div>
+      )}
+      {dropOver && (
+        <div className="fb-drop-overlay">
+          <div className="fb-drop-card">
+            <div className="fb-drop-icon">⬇</div>
+            <div className="fb-drop-text">Drop to upload to <code>{tab.cwd}</code></div>
+          </div>
+        </div>
+      )}
       <div className="fb-list">
         {tab.cwd !== '/' && (
           <button type="button" className="file-row pseudo-up" onClick={cdParent}>
@@ -188,9 +315,19 @@ export function FileBrowser({ tabId }: Props) {
             onDownload={(e) => void onDownload(e)}
             onRename={(e) => void onRename(e)}
             onDelete={(e) => void onDelete(e)}
+            onDragStart={onRowDragStart ? onRowDragStartLocal : undefined}
+            onContextMenu={(e, entry) => setCtxMenu({ x: e.clientX, y: e.clientY, entry })}
           />
         ))}
       </div>
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          items={buildCtxItems(ctxMenu.entry)}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/TitleBar';
 import { TabBar } from './components/TabBar';
 import { Terminal } from './components/Terminal';
-import { FileBrowser } from './components/FileBrowser';
+import { SftpDualBrowser } from './components/SftpDualBrowser';
 import { CommandPalette } from './components/CommandPalette';
 import { HostFingerprintPrompt } from './components/HostFingerprintPrompt';
 import { AuthPrompt } from './components/AuthPrompt';
 import { IconRail, type SidebarSection } from './components/IconRail';
+import { WelcomePane } from './components/WelcomePane';
+import { Splitter } from './components/Splitter';
+import { SshConfigImportModal } from './components/SshConfigImportModal';
+import { AICommandBar } from './components/AICommandBar';
 import { SidebarPanel } from './components/SidebarPanel';
 import { HostFormModal, type HostFormSaveArgs } from './components/HostFormModal';
 import { ConfirmModal } from './components/ConfirmModal';
@@ -91,6 +94,10 @@ export function App() {
   const activePaneIndex = useSessionStore((s) => s.activePaneIndex);
   const setLayout = useSessionStore((s) => s.setLayout);
   const setActivePane = useSessionStore((s) => s.setActivePane);
+  const splits = useSessionStore((s) => s.splits);
+  const setSplit = useSessionStore((s) => s.setSplit);
+  const broadcast = useSessionStore((s) => s.broadcast);
+  const terminalsRef = useRef<HTMLElement>(null);
 
   const loadHosts = useHostStore((s) => s.load);
   const createHost = useHostStore((s) => s.create);
@@ -134,6 +141,8 @@ export function App() {
   const [forwardForm, setForwardForm] = useState<ForwardFormMode>({ kind: 'closed' });
   const [confirmDeleteForward, setConfirmDeleteForward] = useState<Forward | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sshImportOpen, setSshImportOpen] = useState(false);
+  const [aiBarOpen, setAiBarOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<'appearance' | 'terminal' | 'sync'>('appearance');
   const flowToken = useRef(0);
   const { zoomIn, zoomOut, zoomReset } = useZoom();
@@ -218,9 +227,8 @@ export function App() {
     } catch (e) { console.warn('kill failed', e); }
     if (tab.kind === 'sftp') closeSftpTabState(tab.id);
     closeTab(id);
-    if (useSessionStore.getState().tabs.length === 0) {
-      void getCurrentWindow().close();
-    }
+    // Last tab closed → fall through to the WelcomePane (no auto-quit).
+    // Use ⌘Q or the window close button to actually exit.
   }, [closeTab, closeSftpTabState]);
 
   const driveConnect = useCallback(async (
@@ -247,7 +255,7 @@ export function App() {
         return;
       }
       if (result.status === 'connected') {
-        const tabId = addTab(result.id, titleOverride ?? `${target.user}@${target.host}`, targetKind === 'shell' ? 'ssh' : 'sftp');
+        const tabId = addTab(result.id, titleOverride ?? `${target.user}@${target.host}`, targetKind === 'shell' ? 'ssh' : 'sftp', touchHostId);
         if (targetKind === 'sftp') void initSftpTab(tabId, result.id);
         if (touchHostId) void touchHost(touchHostId);
         if (touchHostId) {
@@ -290,6 +298,17 @@ export function App() {
   };
 
   const connectFromHost = useCallback(async (host: Host) => {
+    // ProxyJump scaffolding: hosts imported with a `proxyjump:<name>` tag
+    // need backend SSH chaining that isn't wired yet. Until that lands,
+    // tell the user clearly so they can fall back to ~/.ssh/config.
+    const jumpTag = host.tags.find((t) => t.startsWith('proxyjump:'));
+    if (jumpTag) {
+      const via = jumpTag.slice('proxyjump:'.length);
+      const msg = `"${host.name}" requires ProxyJump via "${via}". The backend SSH chain is not yet wired in Power Term — please connect via your shell ~/.ssh/config until this lands.`;
+      console.warn(msg);
+      alert(msg);
+      return;
+    }
     const target: SshTarget = { user: host.username, host: host.hostname, port: host.port };
     const auth = await buildAuthFromHost(host);
     if ('phase' in auth) {
@@ -384,6 +403,19 @@ export function App() {
         if (settingsOpen) return;
         e.preventDefault();
         setPaletteOpen(true);
+      }
+      // ⌘⇧B toggles broadcast input. Avoids ⌘B which xterm treats as
+      // a navigation/selection key in many shells (tmux too).
+      if (e.metaKey && e.shiftKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        const { broadcast: cur, setBroadcast: setB } = useSessionStore.getState();
+        setB(!cur);
+      }
+      // ⌘L opens the AI command bar.
+      if (e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l') {
+        if (settingsOpen || paletteOpen) return;
+        e.preventDefault();
+        setAiBarOpen(true);
       }
     };
     window.addEventListener('keydown', handler);
@@ -488,6 +520,7 @@ export function App() {
           onConnect={(h) => void connectFromHost(h)}
           onOpenSftp={(h) => void openSftpFromHost(h)}
           onAddHost={() => setForm({ kind: 'create' })}
+          onImportSshConfig={() => setSshImportOpen(true)}
           onEditHost={(h) => setForm({ kind: 'edit', host: h })}
           onDeleteHost={(h) => setConfirmDelete(h)}
           snippetsSlot={
@@ -506,7 +539,11 @@ export function App() {
             />
           }
         />
-        <main className={`terminals layout-${layoutKind}`}>
+        <main
+          ref={terminalsRef}
+          className={`terminals layout-${layoutKind}${broadcast ? ' broadcast-on' : ''}`}
+          style={terminalsGridStyle(layoutKind, splits)}
+        >
           {/* All non-SFTP tabs always mounted at this stable parent so xterm
               state survives slot reassignment. CSS `order` places each visible
               terminal in its layout slot; non-slot tabs are display:none. */}
@@ -537,14 +574,18 @@ export function App() {
                 onClick={() => setActivePane(i)}
               >
                 <div className="sftp-mount" style={{ width: '100%', height: '100%', display: 'flex' }}>
-                  <FileBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
+                  <SftpDualBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
                 </div>
               </div>
             );
           })}
-          {/* Empty-slot placeholders ("+ new") */}
+          {/* Empty-slot placeholders. With zero tabs total we render a full
+              Welcome pane with quick actions + recent hosts; otherwise it's
+              an empty slot in a multi-pane layout, so a compact "+ new"
+              placeholder is enough. */}
           {layoutSlots.map((tabId, i) => {
             if (tabId) return null;
+            const isWelcome = tabs.length === 0;
             return (
               <div
                 key={`empty-${i}`}
@@ -552,19 +593,53 @@ export function App() {
                 style={{ order: i }}
                 onClick={() => setActivePane(i)}
               >
-                <div className="pane-empty">
-                  <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
-                    +
-                  </button>
-                  <div className="pane-empty-hints">
-                    <div className="pane-empty-hint"><kbd>⌘T</kbd><span>New local tab</span></div>
-                    <div className="pane-empty-hint"><kbd>⌘K</kbd><span>Find host or snippet</span></div>
-                    <div className="pane-empty-hint"><kbd>⌘,</kbd><span>Settings</span></div>
+                {isWelcome ? (
+                  <WelcomePane
+                    onNewLocal={() => { setActivePane(i); void newLocalTab(); }}
+                    onOpenPalette={() => setPaletteOpen(true)}
+                    onOpenSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
+                    onConnectHost={(h) => { setActivePane(i); void connectFromHost(h); }}
+                  />
+                ) : (
+                  <div className="pane-empty">
+                    <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
+                      +
+                    </button>
+                    <div className="pane-empty-hints">
+                      <div className="pane-empty-hint"><kbd>⌘T</kbd><span>New local tab</span></div>
+                      <div className="pane-empty-hint"><kbd>⌘K</kbd><span>Find host or snippet</span></div>
+                      <div className="pane-empty-hint"><kbd>⌘,</kbd><span>Settings</span></div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             );
           })}
+          {/* Drag handles between panes (overlaid; do not affect grid). */}
+          {layoutKind === '2col' && (
+            <Splitter orientation="vertical" value={splits.col2} parentRef={terminalsRef}
+              onChange={(v) => setSplit({ col2: v })} />
+          )}
+          {layoutKind === '2row' && (
+            <Splitter orientation="horizontal" value={splits.row2} parentRef={terminalsRef}
+              onChange={(v) => setSplit({ row2: v })} />
+          )}
+          {layoutKind === '3col' && (
+            <>
+              <Splitter orientation="vertical" value={splits.col3[0]} parentRef={terminalsRef}
+                onChange={(v) => setSplit({ col3: [Math.min(v, splits.col3[1] - 0.05), splits.col3[1]] })} />
+              <Splitter orientation="vertical" value={splits.col3[1]} parentRef={terminalsRef}
+                onChange={(v) => setSplit({ col3: [splits.col3[0], Math.max(v, splits.col3[0] + 0.05)] })} />
+            </>
+          )}
+          {layoutKind === '2x2' && (
+            <>
+              <Splitter orientation="vertical" value={splits.gridCol} parentRef={terminalsRef}
+                onChange={(v) => setSplit({ gridCol: v })} />
+              <Splitter orientation="horizontal" value={splits.gridRow} parentRef={terminalsRef}
+                onChange={(v) => setSplit({ gridRow: v })} />
+            </>
+          )}
         </main>
       </div>
       <CommandPalette
@@ -666,14 +741,41 @@ export function App() {
         />
       )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} initialTab={settingsInitialTab} />}
+      {sshImportOpen && <SshConfigImportModal onClose={() => setSshImportOpen(false)} />}
+      <AICommandBar open={aiBarOpen} onClose={() => setAiBarOpen(false)} />
     </div>
   );
 }
 
+function terminalsGridStyle(
+  layoutKind: LayoutKind,
+  splits: { col2: number; row2: number; col3: [number, number]; gridCol: number; gridRow: number },
+): React.CSSProperties {
+  // Convert 0..1 boundary fractions to grid template percentages.
+  // We bypass the static `1fr 1fr` rules in styles.css by inlining
+  // grid-template-columns/rows here whenever a split is active.
+  const pct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  switch (layoutKind) {
+    case '2col':
+      return { gridTemplateColumns: `${pct(splits.col2)} ${pct(1 - splits.col2)}` };
+    case '2row':
+      return { gridTemplateRows: `${pct(splits.row2)} ${pct(1 - splits.row2)}` };
+    case '3col':
+      return { gridTemplateColumns: `${pct(splits.col3[0])} ${pct(splits.col3[1] - splits.col3[0])} ${pct(1 - splits.col3[1])}` };
+    case '2x2':
+      return {
+        gridTemplateColumns: `${pct(splits.gridCol)} ${pct(1 - splits.gridCol)}`,
+        gridTemplateRows: `${pct(splits.gridRow)} ${pct(1 - splits.gridRow)}`,
+      };
+    default:
+      return {};
+  }
+}
+
 function defaultLocalTitle(_shell: string | null): string {
-  // Fixed label so all local PTY tabs read "local"; the shell binary
+  // Fixed label so all local PTY tabs read "Local"; the shell binary
   // (zsh, bash, fish, …) is implementation detail. SSH tabs already
-  // show user@host or the saved host name as their title, so "local"
+  // show user@host or the saved host name as their title, so "Local"
   // distinguishes the local-PTY tabs at a glance.
-  return 'local';
+  return 'Local';
 }

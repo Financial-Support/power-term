@@ -139,6 +139,22 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     })();
 
     const onData = term.onData((data) => {
+      // Broadcast: when toggled on, route input from the focused pane to
+      // every other visible pane (skip SFTP). Always include self so the
+      // origin pane echoes its own keystrokes the same as before.
+      const { broadcast, tabs: allTabs, layoutSlots } = useSessionStore.getState();
+      if (broadcast) {
+        const seen = new Set<string>();
+        for (const id of layoutSlots) {
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          const t = allTabs.find((x) => x.id === id);
+          if (!t || t.kind === 'sftp') continue;
+          if (t.kind === 'ssh') void sshWrite(t.ptyId, data);
+          else void ptyWrite(t.ptyId, data);
+        }
+        return;
+      }
       if (tab.kind === 'ssh') void sshWrite(tab.ptyId, data);
       else void ptyWrite(tab.ptyId, data);
     });

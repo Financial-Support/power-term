@@ -5,13 +5,35 @@ import { LAYOUT_SLOT_COUNTS as COUNTS } from '../types';
 let counter = 0;
 const newId = () => `tab-${++counter}-${Math.random().toString(36).slice(2, 8)}`;
 
+/** Split fractions per layout. Values are 0..1 boundaries between panes.
+ * - col2/row2: single boundary at fraction (default 0.5)
+ * - col3:     two boundaries [a, b] with 0 < a < b < 1 (default [1/3, 2/3])
+ * - gridCol/gridRow: 2x2 layout's vertical and horizontal boundaries */
+export interface SplitState {
+  col2: number;
+  row2: number;
+  col3: [number, number];
+  gridCol: number;
+  gridRow: number;
+}
+
+const DEFAULT_SPLITS: SplitState = {
+  col2: 0.5,
+  row2: 0.5,
+  col3: [1 / 3, 2 / 3],
+  gridCol: 0.5,
+  gridRow: 0.5,
+};
+
 interface State {
   tabs: Tab[];
   activeTabId: string | null;
   layoutKind: LayoutKind;
   layoutSlots: (string | null)[];
   activePaneIndex: number;
-  addTab: (ptyId: string, title: string, kind?: TabKind) => string;
+  splits: SplitState;
+  broadcast: boolean;
+  addTab: (ptyId: string, title: string, kind?: TabKind, hostId?: string) => string;
   closeTab: (id: string) => void;
   setActive: (id: string) => void;
   rename: (id: string, title: string) => void;
@@ -19,6 +41,9 @@ interface State {
   setLayout: (kind: LayoutKind) => void;
   setActivePane: (index: number) => void;
   assignSlot: (index: number, tabId: string) => void;
+  setSplit: (patch: Partial<SplitState>) => void;
+  resetSplits: () => void;
+  setBroadcast: (on: boolean) => void;
 }
 
 export const useSessionStore = create<State>((set, get) => ({
@@ -27,9 +52,11 @@ export const useSessionStore = create<State>((set, get) => ({
   layoutKind: 'solo',
   layoutSlots: [],
   activePaneIndex: 0,
+  splits: DEFAULT_SPLITS,
+  broadcast: false,
 
-  addTab: (ptyId, title, kind = 'local') => {
-    const tab: Tab = { id: newId(), ptyId, title, kind };
+  addTab: (ptyId, title, kind = 'local', hostId) => {
+    const tab: Tab = { id: newId(), ptyId, title, kind, hostId };
     set((s) => {
       const slots = [...s.layoutSlots];
       while (slots.length <= s.activePaneIndex) slots.push(null);
@@ -106,4 +133,8 @@ export const useSessionStore = create<State>((set, get) => ({
       return { layoutSlots: slots, activeTabId };
     });
   },
+
+  setSplit: (patch) => set((s) => ({ splits: { ...s.splits, ...patch } })),
+  resetSplits: () => set({ splits: DEFAULT_SPLITS }),
+  setBroadcast: (on) => set({ broadcast: on }),
 }));

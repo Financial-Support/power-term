@@ -18,6 +18,12 @@ vi.mock('../lib/dialog', () => ({
   pickLocalSavePath: vi.fn(),
 }));
 
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({
+    onDragDropEvent: vi.fn().mockResolvedValue(() => {}),
+  }),
+}));
+
 import { sftpList, sftpMkdir } from '../lib/ipc';
 import { FileBrowser } from './FileBrowser';
 import { useSftpStore } from '../state/sftpStore';

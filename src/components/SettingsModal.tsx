@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../state/settingsStore';
 import { THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from '../themes';
 import { SyncTab } from './SyncTab';
+import { AISettingsTab } from './AISettingsTab';
 import type { CursorStyle, SettingsPatch, Theme } from '../types';
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
   initialTab?: Tab;
 }
 
-type Tab = 'appearance' | 'terminal' | 'sync';
+type Tab = 'appearance' | 'terminal' | 'sync' | 'ai';
 
 export function SettingsModal({ onClose, initialTab }: Props) {
   const settings = useSettingsStore((s) => s.settings);
@@ -81,6 +82,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
             onClick={() => setActiveTab('terminal')}
           >Terminal</button>
           <button role="tab" aria-selected={activeTab === 'sync'} onClick={() => setActiveTab('sync')}>Sync</button>
+          <button role="tab" aria-selected={activeTab === 'ai'} onClick={() => setActiveTab('ai')}>AI</button>
         </div>
 
         {activeTab === 'appearance' && (
@@ -180,9 +182,11 @@ export function SettingsModal({ onClose, initialTab }: Props) {
           </div>
         )}
 
+        {activeTab === 'ai' && <AISettingsTab />}
+
         {localError && <p className="form-error">{localError}</p>}
 
-        {activeTab !== 'sync' && (
+        {activeTab !== 'sync' && activeTab !== 'ai' && (
           <div className="modal-actions">
             <button type="button" onClick={onClose}>Cancel</button>
             <button

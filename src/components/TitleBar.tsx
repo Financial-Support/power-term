@@ -68,8 +68,33 @@ const LAYOUT_ICONS: { kind: LayoutKind; label: string }[] = [
 
 export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props) {
   const layoutKind = useSessionStore((s) => s.layoutKind);
+  const broadcast = useSessionStore((s) => s.broadcast);
+  const setBroadcast = useSessionStore((s) => s.setBroadcast);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Track macOS native fullscreen so we can collapse the 78px spacer that
+  // otherwise leaves a hole where the (now-hidden) traffic lights used to be.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    const refresh = async () => {
+      try {
+        const fs = await win.isFullscreen();
+        if (!cancelled) setIsFullscreen(fs);
+      } catch { /* ignore */ }
+    };
+
+    void refresh();
+    void win.onResized(() => { void refresh(); }).then((fn) => {
+      if (cancelled) fn(); else unlisten = fn;
+    });
+
+    return () => { cancelled = true; if (unlisten) unlisten(); };
+  }, []);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -103,11 +128,25 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
   };
 
   return (
-    <div className="titlebar" onMouseDown={handleMouseDown}>
+    <div className={`titlebar${isFullscreen ? ' titlebar-fullscreen' : ''}`} onMouseDown={handleMouseDown}>
       <div className="titlebar-drag-left" />
+      <div className="brand" aria-label="Power Term" data-no-drag>
+        <BrandMark />
+        <span className="brand-wordmark">Power<span className="brand-wordmark-gap"> </span>Term</span>
+      </div>
       {children}
       <div className="titlebar-drag-right" />
       <SyncStatus onErrorClick={onOpenSyncSettings} />
+      <button
+        type="button"
+        className={`broadcast-btn${broadcast ? ' active' : ''}`}
+        data-no-drag
+        aria-pressed={broadcast}
+        title={broadcast ? 'Broadcast input ON — typing fans out to every visible pane' : 'Broadcast input to all visible panes'}
+        onClick={() => setBroadcast(!broadcast)}
+      >
+        <BroadcastIcon />
+      </button>
       <div className="layout-picker-wrap" data-no-drag ref={wrapRef}>
         <button
           type="button"
@@ -138,5 +177,32 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
         )}
       </div>
     </div>
+  );
+}
+
+function BroadcastIcon() {
+  // Sized + viewBox-matched to LayoutSvg (18×18) so the two title-bar
+  // buttons read as a balanced pair.
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <circle cx="9" cy="9" r="1.6" fill="currentColor" />
+      <path d="M6.4 6.4a3.7 3.7 0 0 0 0 5.2M11.6 6.4a3.7 3.7 0 0 1 0 5.2"
+            stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M4.2 4.2a6.7 6.7 0 0 0 0 9.6M13.8 4.2a6.7 6.7 0 0 1 0 9.6"
+            stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"
+            strokeOpacity="0.55" />
+    </svg>
+  );
+}
+
+/** A stylised lightning bolt enclosed in a rounded square — doubles as the
+ * app icon. Uses currentColor so it picks up the accent in the title bar. */
+function BrandMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+      <rect x="1" y="1" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.4" strokeOpacity="0.9" />
+      <path d="M11.2 4 L6.2 11.2 H10 L8.8 16 L13.8 8.8 H10 Z"
+            fill="currentColor" />
+    </svg>
   );
 }

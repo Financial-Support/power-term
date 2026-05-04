@@ -27,6 +27,7 @@ export interface Tab {
   title: string;
   kind: TabKind;
   exitCode?: number | null;
+  hostId?: string;
 }
 
 export type LayoutKind = 'solo' | '2col' | '2row' | '3col' | '2x2';

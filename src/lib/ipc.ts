@@ -109,6 +109,39 @@ export async function hostsTouch(id: string): Promise<void> {
   await invoke('hosts_touch', { id });
 }
 
+export interface SshConfigEntry {
+  name: string;
+  hostname: string;
+  port: number;
+  user: string;
+  key_path: string | null;
+  proxy_jump: string | null;
+}
+
+export async function sshConfigRead(): Promise<SshConfigEntry[]> {
+  return invoke<SshConfigEntry[]>('ssh_config_read');
+}
+
+export interface LocalEntry {
+  name: string;
+  /** "file" | "dir" | "symlink" | "other" */
+  kind: string;
+  size: number;
+  modified_ms: number | null;
+}
+
+export async function localList(path: string): Promise<LocalEntry[]> {
+  return invoke<LocalEntry[]>('local_list', { path });
+}
+
+export async function localHome(): Promise<string> {
+  return invoke<string>('local_home');
+}
+
+export async function localReveal(path: string): Promise<void> {
+  await invoke('local_reveal', { path });
+}
+
 export async function secretSet(hostId: string, secret: string): Promise<void> {
   await invoke('secret_set', { hostId, secret });
 }

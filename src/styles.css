@@ -22,12 +22,14 @@ html, body, #root { height: 100%; margin: 0; }
 /* ─── Warm-charcoal palette (single theme — dark) ───────────────────────
    All components use these variables; avoid hard-coding colours.          */
 .app {
-  /* surfaces */
-  --bg:            #161412;
-  --bg-sidebar:    #131210;
-  --bg-panel:      #181614;
-  --bg-terminal:   #100e0c;
-  --bg-elevated:   #221f1c;
+  /* surfaces — three-layer hierarchy: rail darkest → panel mid → terminal
+     deepest, with the main bg sitting between panel and terminal. Larger
+     gaps than before so the panes read as distinct without heavy borders. */
+  --bg:            #16110d;
+  --bg-sidebar:    #0e0a08;
+  --bg-panel:      #1c1612;
+  --bg-terminal:   #100c0a;
+  --bg-elevated:   #251f1b;
   --bg-hover:      rgba(255,240,220,0.06);
   --bg-soft:       rgba(255,240,220,0.05);  /* input / inline-code surfaces */
   --bg-active:     var(--accent-bg);
@@ -37,9 +39,10 @@ html, body, #root { height: 100%; margin: 0; }
   --fg-muted:      rgba(255,240,220,0.45);
   --fg-dim:        rgba(255,240,220,0.22);
 
-  /* borders */
-  --border:        rgba(255,240,220,0.07);
-  --border-med:    rgba(255,240,220,0.12);
+  /* borders — slightly stronger than before so the rail/panel/terminal
+     seams read clearly. */
+  --border:        rgba(255,240,220,0.10);
+  --border-med:    rgba(255,240,220,0.16);
 
   /* accent vars defined on :root so they can be overridden from JS via
      documentElement.style.setProperty('--accent', …). */
@@ -95,8 +98,43 @@ html, body, #root { height: 100%; margin: 0; }
 .titlebar-drag-left {
   width: 78px;
   flex: 0 0 78px;
+  transition: flex-basis 0.15s ease, width 0.15s ease;
+}
+/* In macOS native fullscreen, the traffic lights slide off-screen so the
+   reserved 78px spacer becomes wasted space — collapse it so the brand
+   block sits flush to the window edge. */
+.titlebar-fullscreen .titlebar-drag-left {
+  width: 0;
+  flex: 0 0 0;
 }
 .titlebar-drag-right { flex: 0 0 8px; }
+
+/* ─── Brand block ─────────────────────────────────────────────────────────
+   Sits between the macOS traffic-light spacer and the tab strip; doubles
+   as the app's primary identity surface in the chrome. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px 0 4px;
+  margin-right: 6px;
+  height: 100%;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.brand-wordmark {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--fg);
+  white-space: nowrap;
+  user-select: none;
+}
+.brand-wordmark-gap {
+  display: inline-block;
+  width: 4px;
+}
 
 .tabbar {
   display: flex;
@@ -299,22 +337,61 @@ html, body, #root { height: 100%; margin: 0; }
 .sp-search-row {
   padding: 10px 10px 5px;
 }
+.sp-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.sp-search-icon {
+  position: absolute;
+  left: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-dim);
+  pointer-events: none;
+  transition: color 0.1s;
+}
+.sp-search-wrap:focus-within .sp-search-icon { color: var(--accent-text); }
 .sp-search {
   width: 100%;
   box-sizing: border-box;
   height: 32px;
-  padding: 0 10px;
+  padding: 0 42px 0 28px;
   background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--fg);
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   outline: none;
-  transition: border-color 0.1s;
+  transition: border-color 0.1s, box-shadow 0.1s;
 }
 .sp-search::placeholder { color: var(--fg-dim); }
-.sp-search:focus { border-color: var(--accent-ring); }
+.sp-search:focus {
+  border-color: var(--accent-ring);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.sp-search-kbd {
+  position: absolute;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  min-width: 26px;
+  padding: 0 5px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-med);
+  border-radius: 4px;
+  pointer-events: none;
+  user-select: none;
+}
+.sp-search-wrap:focus-within .sp-search-kbd { opacity: 0; }
 
 .sp-error { color: var(--danger); padding: 0 12px; font-size: 13px; }
 .sp-empty { padding: 12px 15px; font-size: 13px; color: var(--fg-dim); }
@@ -405,10 +482,21 @@ html, body, #root { height: 100%; margin: 0; }
   border-radius: 6px;
   padding: 0 5px 0 0;
   cursor: grab;
+  position: relative;
   transition: background 0.08s;
 }
 .sp-host:hover { background: var(--bg-hover); }
 .sp-host.dragging { opacity: 0.4; }
+/* When a tab is open against this host, mark the row with a thin accent
+   bar on the left edge — same affordance used by IDEs for "active file". */
+.sp-host.connected::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+}
 .sp-host-dot {
   display: inline-block;
   width: 6px; height: 6px;
@@ -416,6 +504,11 @@ html, body, #root { height: 100%; margin: 0; }
   background: var(--fg-dim);
   flex-shrink: 0;
   margin: 0 8px 0 10px;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.sp-host-dot.online {
+  background: var(--online);
+  box-shadow: 0 0 0 2px rgba(34,197,94,0.18), 0 0 6px var(--online-glow);
 }
 .sp-host-name {
   flex: 1;
@@ -436,13 +529,26 @@ html, body, #root { height: 100%; margin: 0; }
   display: flex;
   align-items: center;
   gap: 0;
+  border-radius: 4px;
+  outline: none;
 }
+.sp-host-name:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+.sp-host.connected .sp-host-name { color: var(--accent-text); }
 .sp-host-port {
   font-size: 12px;
   color: var(--fg-dim);
   margin-right: 3px;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+.sp-host-jump {
+  font-size: 11px;
+  color: var(--accent-text);
+  margin-right: 3px;
+  flex-shrink: 0;
+  cursor: help;
 }
 .sp-host-actions { display: none; gap: 1px; }
 .sp-host:hover .sp-host-actions { display: flex; }
@@ -477,6 +583,246 @@ html, body, #root { height: 100%; margin: 0; }
   transition: background 0.1s, color 0.1s;
 }
 .sp-add-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.sp-import-btn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px dashed var(--border-med);
+  border-radius: 6px;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+}
+.sp-import-btn:hover { color: var(--fg-muted); border-color: var(--fg-dim); }
+
+/* ─── ssh config import modal ───────────────────────────────────────────── */
+.ssh-import-modal { width: 560px; }
+.ssh-import-toolbar {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 8px;
+}
+.ssh-import-summary {
+  font-size: 12px; color: var(--fg-muted);
+  flex: 1;
+}
+.ssh-import-tool {
+  background: transparent;
+  border: 1px solid var(--border-med);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.ssh-import-tool:hover { background: var(--bg-hover); color: var(--fg); }
+.ssh-import-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 380px;
+  overflow-y: auto;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.ssh-import-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.ssh-import-row + .ssh-import-row { border-top: 1px solid var(--border); }
+.ssh-import-row:hover { background: var(--bg-hover); }
+.ssh-import-row.duplicate { opacity: 0.55; }
+.ssh-import-check input { accent-color: var(--accent); }
+.ssh-import-fields { flex: 1; min-width: 0; }
+.ssh-import-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  display: flex; align-items: center; gap: 8px;
+}
+.ssh-import-dup {
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  background: var(--bg-elevated);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.ssh-import-detail {
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  font-family: "SF Mono", Menlo, monospace;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ssh-import-pj { color: var(--accent-text); }
+.ssh-import-key { color: var(--fg-dim); }
+.ssh-import-result { color: var(--fg); font-size: 13px; }
+
+/* ─── AI settings tab ───────────────────────────────────────────────────── */
+.ai-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ai-settings-blurb {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.55;
+}
+.ai-settings-blurb kbd {
+  background: var(--bg-soft);
+  border: 1px solid var(--border-med);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+.ai-settings-status {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin: 0;
+}
+
+/* ─── AI command bar overlay ────────────────────────────────────────────── */
+.ai-bar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  z-index: 250;
+  animation: ai-bar-fade 0.12s ease-out;
+}
+@keyframes ai-bar-fade { from { opacity: 0; } to { opacity: 1; } }
+.ai-bar {
+  width: 580px;
+  max-width: 92vw;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-med);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6),
+              0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-bar-header {
+  display: flex; align-items: center; gap: 10px;
+}
+.ai-bar-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent);
+  color: var(--bg-terminal);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.ai-bar-title { font-size: 12.5px; color: var(--fg-muted); }
+.ai-bar-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-med);
+  border-radius: 9px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.1s, box-shadow 0.1s;
+}
+.ai-bar-input:focus {
+  border-color: var(--accent-ring);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.ai-bar-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.ai-bar-hint { font-size: 11px; color: var(--fg-dim); }
+.ai-bar-row .primary {
+  background: var(--accent);
+  border: none;
+  color: var(--bg-terminal);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.1s, opacity 0.1s;
+}
+.ai-bar-row .primary:hover:not(:disabled) { background: var(--accent-text); }
+.ai-bar-row .primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-bar-error {
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.ai-bar-result {
+  display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.ai-bar-cmd {
+  margin: 0;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 12px;
+  overflow-x: auto;
+}
+.ai-bar-cmd code {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-bar-actions {
+  display: flex; gap: 6px; justify-content: flex-end;
+}
+.ai-bar-actions button {
+  background: transparent;
+  border: 1px solid var(--border-med);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ai-bar-actions button:hover { background: var(--bg-hover); }
+.ai-bar-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-terminal);
+}
+.ai-bar-actions button.primary:hover { background: var(--accent-text); }
 
 /* ─── Terminal grid ─────────────────────────────────────────────────────── */
 .terminals {
@@ -485,11 +831,32 @@ html, body, #root { height: 100%; margin: 0; }
   position: relative;
   background: var(--bg-terminal);
 }
+.terminals { position: relative; }
 .terminals.layout-solo  { display: block; }
 .terminals.layout-2col  { display: grid; grid-template-columns: 1fr 1fr; }
 .terminals.layout-2row  { display: grid; grid-template-rows: 1fr 1fr; }
 .terminals.layout-3col  { display: grid; grid-template-columns: 1fr 1fr 1fr; }
 .terminals.layout-2x2   { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+/* ─── Split handles ─────────────────────────────────────────────────────── */
+.splitter {
+  position: absolute;
+  z-index: 4;
+  background: transparent;
+  transition: background 0.1s;
+}
+.splitter-vertical {
+  cursor: col-resize;
+  width: 8px !important;
+}
+.splitter-horizontal {
+  cursor: row-resize;
+  height: 8px !important;
+}
+.splitter:hover, .splitter:focus-visible, .splitter:active {
+  background: var(--accent-ring);
+  outline: none;
+}
 
 .pane {
   position: relative;
@@ -612,6 +979,173 @@ html, body, #root { height: 100%; margin: 0; }
   color: var(--fg-muted);
   font-family: "SF Mono", Menlo, monospace;
   font-size: 11px;
+}
+
+/* ─── Welcome pane (no-tabs state) ──────────────────────────────────────── */
+.welcome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background:
+    radial-gradient(80% 60% at 50% 20%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%),
+    var(--bg-terminal);
+  overflow-y: auto;
+  padding: 40px 24px;
+  box-sizing: border-box;
+}
+.welcome-inner {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+}
+.welcome-mark {
+  align-self: center;
+  color: var(--accent);
+  filter: drop-shadow(0 4px 16px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+.welcome-title {
+  align-self: center;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.welcome-subtitle {
+  align-self: center;
+  margin: -10px 0 6px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.welcome-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, transform 0.05s;
+}
+.welcome-action:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-med);
+}
+.welcome-action:active { transform: translateY(1px); }
+.welcome-action:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 1px;
+}
+.welcome-action-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  width: 60px;
+}
+.welcome-action-kbd kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px;
+  padding: 0 5px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-med);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  color: var(--fg-muted);
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+.welcome-action-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.welcome-action-title {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 500;
+}
+.welcome-action-desc {
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+
+.welcome-recents {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.welcome-recents-heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  padding: 0 4px 4px;
+}
+.welcome-recents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.welcome-recent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s, border-color 0.08s;
+}
+.welcome-recent:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.welcome-recent:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 1px;
+}
+.welcome-recent-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--fg-dim);
+  flex-shrink: 0;
+}
+.welcome-recent-name {
+  font-size: 13px;
+  color: var(--fg);
+  flex-shrink: 0;
+}
+.welcome-recent-target {
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  font-family: "SF Mono", Menlo, monospace;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ─── Modals & palette ──────────────────────────────────────────────────── */
@@ -972,6 +1506,175 @@ html, body, #root { height: 100%; margin: 0; }
 .file-browser {
   display: flex; flex-direction: column; flex: 1; min-height: 0;
   background: var(--bg-terminal); color: var(--fg);
+  position: relative;
+}
+.file-browser.drop-over {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.fb-drop-overlay {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+}
+.fb-drop-card {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 24px 32px;
+  background: var(--bg-elevated);
+  border: 2px dashed var(--accent);
+  border-radius: 14px;
+  color: var(--fg);
+}
+.fb-drop-icon {
+  font-size: 32px;
+  color: var(--accent);
+}
+.fb-drop-text { font-size: 13px; }
+.fb-drop-text code {
+  background: var(--bg-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+.fb-upload-progress {
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--accent-text);
+  background: var(--accent-bg);
+  border-bottom: 1px solid var(--accent-ring);
+}
+
+/* ─── Dual SFTP browser ─────────────────────────────────────────────────── */
+.sftp-dual {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  position: relative;            /* anchor for absolute Splitter overlay */
+  background: var(--bg-terminal);
+}
+.sftp-dual-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.sftp-dual-pane > .file-browser {
+  height: 100%;
+  border-radius: 0;
+}
+.sftp-dual-pane:first-of-type > .file-browser {
+  border-right: 1px solid var(--border);
+}
+
+/* Local pane styling — mirrors .file-browser look but flagged so we can tint
+   the toolbar slightly (left = local) for at-a-glance orientation. */
+.local-browser .fb-toolbar {
+  background: linear-gradient(0deg,
+    color-mix(in srgb, var(--accent) 4%, transparent),
+    transparent);
+}
+.fb-pane-label {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  padding: 0 4px;
+}
+.file-row.local-row {
+  padding: 4px 10px;
+  cursor: default;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+}
+.file-row.local-row:hover {
+  background: var(--bg-hover);
+}
+.file-row.local-row.is-dir { cursor: pointer; }
+.file-row.local-row .file-row-name {
+  display: flex; align-items: center; gap: 6px;
+  min-width: 0;
+}
+.file-row.local-row .file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-row.local-row .file-row-size,
+.file-row.local-row .file-row-mod {
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Context menu ──────────────────────────────────────────────────────── */
+.ctx-menu {
+  position: fixed;
+  z-index: 300;
+  min-width: 200px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-med);
+  border-radius: 8px;
+  padding: 5px;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  animation: ctx-fade 0.08s ease-out;
+}
+@keyframes ctx-fade { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.06s, color 0.06s;
+}
+.ctx-item:hover:not(:disabled) {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+.ctx-item:disabled { color: var(--fg-dim); cursor: not-allowed; }
+.ctx-item.danger { color: var(--danger); }
+.ctx-item.danger:hover:not(:disabled) {
+  background: rgba(239,68,68,0.12);
+  color: var(--danger);
+}
+.ctx-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+.ctx-item:hover .ctx-icon { color: inherit; }
+.ctx-item.danger .ctx-icon { color: inherit; }
+.ctx-label { flex: 1; }
+.ctx-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
 }
 .fb-toolbar {
   display: flex; align-items: center; gap: 6px; padding: 6px 8px;
@@ -1150,6 +1853,31 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .modal-settings { min-width: 380px; }
 .form-error { color: #f87171; font-size: 12px; margin: 8px 0 0; }
+
+/* ─── Broadcast toggle ──────────────────────────────────────────────────── */
+.broadcast-btn {
+  background: none; border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  width: 28px; height: 28px;
+  padding: 0; border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  align-self: center;            /* titlebar uses align-items: stretch */
+  margin-right: 2px;             /* small breathing room before layout picker */
+  transition: background 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+.broadcast-btn:hover { color: var(--fg); background: var(--bg-hover); }
+.broadcast-btn.active {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+/* When broadcast is on, every visible pane gets a subtle accent ring so the
+   user can't miss that input is fanning out — friendly fire prevention. */
+.terminals.broadcast-on .pane {
+  outline: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: -1px;
+}
 
 /* ─── Layout picker ─────────────────────────────────────────────────────── */
 .layout-picker-wrap {

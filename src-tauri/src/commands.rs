@@ -815,3 +815,207 @@ pub fn forward_stop(
 ) -> Result<ForwardStatus, String> {
     Ok(manager.stop(app, &id))
 }
+
+#[derive(Debug, Serialize)]
+pub struct LocalEntry {
+    pub name: String,
+    /// One of "file" | "dir" | "symlink" | "other".
+    pub kind: String,
+    pub size: u64,
+    pub modified_ms: Option<i64>,
+}
+
+/// List local filesystem entries at `path`. Used by the dual SFTP browser's
+/// left pane to mirror the remote pane's UX. Hidden files (dotfiles) are
+/// returned — the renderer applies its own filter to match the SFTP side.
+#[tauri::command]
+pub fn local_list(path: String) -> Result<Vec<LocalEntry>, String> {
+    let p = std::path::Path::new(&path);
+    let read = std::fs::read_dir(p).map_err(|e| format!("read_dir {path}: {e}"))?;
+    let mut out = Vec::new();
+    for entry in read.flatten() {
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            // Permission errors on individual entries shouldn't kill the listing
+            // — surface what we can and skip the rest. Matches `ls -la`.
+            Err(_) => continue,
+        };
+        let kind = if meta.is_dir() { "dir" }
+            else if meta.file_type().is_symlink() { "symlink" }
+            else if meta.is_file() { "file" } else { "other" };
+        let modified_ms = meta.modified().ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as i64);
+        out.push(LocalEntry {
+            name: entry.file_name().to_string_lossy().to_string(),
+            kind: kind.into(),
+            size: meta.len(),
+            modified_ms,
+        });
+    }
+    Ok(out)
+}
+
+/// Resolve `~` so the renderer can boot the local pane at the user's home.
+#[tauri::command]
+pub fn local_home() -> Result<String, String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "no home dir".to_string())
+}
+
+/// Reveal the given local path in macOS Finder (or the platform equivalent).
+/// `open -R` highlights the file inside the parent folder; falls back to
+/// plain `open` for directories so the folder itself opens, not its parent.
+#[tauri::command]
+pub fn local_reveal(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let p = std::path::Path::new(&path);
+        let mut cmd = std::process::Command::new("open");
+        if p.is_dir() { cmd.arg(&path); } else { cmd.arg("-R").arg(&path); }
+        cmd.status().map_err(|e| format!("open: {e}"))?;
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        Err("reveal not supported on this platform".into())
+    }
+}
+
+/// Parsed entry from `~/.ssh/config`. We surface the fields the host model
+/// can map onto; everything else (LocalForward, Ciphers, etc.) is ignored.
+#[derive(Debug, Serialize)]
+pub struct SshConfigEntry {
+    pub name: String,
+    pub hostname: String,
+    pub port: u16,
+    pub user: String,
+    pub key_path: Option<String>,
+    pub proxy_jump: Option<String>,
+}
+
+/// Read and parse the user's ssh client config. Returns concrete Host blocks
+/// only — wildcards (`Host *`, `Host *.example`) are skipped because their
+/// settings are templates, not connectable targets. `Include` directives are
+/// followed one level deep (good enough for `~/.ssh/config.d/*` patterns
+/// that most teams use; nested includes are out of scope).
+#[tauri::command]
+pub fn ssh_config_read() -> Result<Vec<SshConfigEntry>, String> {
+    let home = dirs::home_dir().ok_or_else(|| "no home dir".to_string())?;
+    let path = home.join(".ssh").join("config");
+    if !path.exists() {
+        return Ok(vec![]);
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("read ssh config: {e}"))?;
+    Ok(parse_ssh_config(&text, &home))
+}
+
+fn parse_ssh_config(text: &str, home: &std::path::Path) -> Vec<SshConfigEntry> {
+    use std::collections::HashMap;
+    let mut blocks: Vec<HashMap<String, String>> = Vec::new();
+    let mut current: Option<HashMap<String, String>> = None;
+
+    let push = |cur: &mut Option<HashMap<String, String>>, blocks: &mut Vec<HashMap<String, String>>| {
+        if let Some(b) = cur.take() { blocks.push(b); }
+    };
+
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') { continue; }
+        let mut split = line.splitn(2, |c: char| c.is_whitespace() || c == '=');
+        let key = split.next().unwrap_or("").trim().to_lowercase();
+        let val = split.next().unwrap_or("").trim().trim_matches('"').to_string();
+        if key == "host" {
+            push(&mut current, &mut blocks);
+            // A "Host" line can list multiple patterns; take the first that
+            // is not a wildcard. If all are wildcards, skip the block.
+            let first_concrete = val.split_whitespace()
+                .find(|p| !p.contains('*') && !p.contains('?'));
+            if let Some(name) = first_concrete {
+                let mut m = HashMap::new();
+                m.insert("name".into(), name.to_string());
+                current = Some(m);
+            }
+        } else if key == "include" {
+            // Best-effort: expand ~ and read each matched file. We do NOT
+            // glob — most teams point at a single file via Include.
+            let p = if let Some(stripped) = val.strip_prefix("~/") {
+                home.join(stripped)
+            } else if val.starts_with('/') {
+                std::path::PathBuf::from(&val)
+            } else {
+                home.join(".ssh").join(&val)
+            };
+            if let Ok(t) = std::fs::read_to_string(&p) {
+                let mut nested = parse_ssh_config(&t, home);
+                push(&mut current, &mut blocks);
+                for e in nested.drain(..) {
+                    let mut m = HashMap::new();
+                    m.insert("name".into(), e.name);
+                    m.insert("hostname".into(), e.hostname);
+                    m.insert("port".into(), e.port.to_string());
+                    m.insert("user".into(), e.user);
+                    if let Some(k) = e.key_path { m.insert("identityfile".into(), k); }
+                    if let Some(pj) = e.proxy_jump { m.insert("proxyjump".into(), pj); }
+                    blocks.push(m);
+                }
+            }
+        } else if let Some(m) = current.as_mut() {
+            m.insert(key, val);
+        }
+    }
+    push(&mut current, &mut blocks);
+
+    blocks.into_iter().filter_map(|b| {
+        let name = b.get("name")?.clone();
+        let hostname = b.get("hostname").cloned().unwrap_or_else(|| name.clone());
+        let port = b.get("port").and_then(|s| s.parse().ok()).unwrap_or(22);
+        let user = b.get("user").cloned().unwrap_or_else(|| {
+            std::env::var("USER").unwrap_or_default()
+        });
+        let key_path = b.get("identityfile").map(|p| {
+            if let Some(stripped) = p.strip_prefix("~/") {
+                home.join(stripped).to_string_lossy().to_string()
+            } else {
+                p.clone()
+            }
+        });
+        let proxy_jump = b.get("proxyjump").cloned();
+        Some(SshConfigEntry { name, hostname, port, user, key_path, proxy_jump })
+    }).collect()
+}
+
+#[cfg(test)]
+mod ssh_config_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn parses_basic_block() {
+        let cfg = "Host bastion\n  HostName bastion.example.com\n  User ops\n  Port 2222\n  IdentityFile ~/.ssh/id_ed25519\n";
+        let entries = parse_ssh_config(cfg, &PathBuf::from("/Users/test"));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "bastion");
+        assert_eq!(entries[0].hostname, "bastion.example.com");
+        assert_eq!(entries[0].user, "ops");
+        assert_eq!(entries[0].port, 2222);
+        assert_eq!(entries[0].key_path.as_deref(), Some("/Users/test/.ssh/id_ed25519"));
+    }
+
+    #[test]
+    fn skips_wildcard_blocks() {
+        let cfg = "Host *\n  ServerAliveInterval 60\n\nHost web1\n  HostName 10.0.0.1\n";
+        let entries = parse_ssh_config(cfg, &PathBuf::from("/h"));
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "web1");
+    }
+
+    #[test]
+    fn captures_proxyjump() {
+        let cfg = "Host db\n  HostName db.internal\n  ProxyJump bastion\n  User dba\n";
+        let entries = parse_ssh_config(cfg, &PathBuf::from("/h"));
+        assert_eq!(entries[0].proxy_jump.as_deref(), Some("bastion"));
+    }
+}
