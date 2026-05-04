@@ -69,8 +69,21 @@ fn main() {
                 .separator()
                 .item(&zoom_reset_item)
                 .build()?;
+            // macOS: Edit submenu must exist for Cut/Copy/Paste/SelectAll
+            // shortcuts to be wired into the responder chain. Without it,
+            // cmd+V doesn't reach inputs in the webview.
+            let edit_submenu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
             let menu = MenuBuilder::new(app)
                 .item(&app_submenu)
+                .item(&edit_submenu)
                 .item(&view_submenu)
                 .build()?;
             app.set_menu(menu)?;
