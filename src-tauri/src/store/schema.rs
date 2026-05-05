@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-pub const CURRENT_VERSION: u32 = 4;
+pub const CURRENT_VERSION: u32 = 5;
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     let mut version: u32 = conn
@@ -20,6 +20,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             1 => migration_v2(conn)?,
             2 => migration_v3(conn)?,
             3 => migration_v4(conn)?,
+            4 => migration_v5(conn)?,
             other => {
                 return Err(rusqlite::Error::SqliteFailure(
                     rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
@@ -100,6 +101,22 @@ fn migration_v4(conn: &Connection) -> Result<()> {
         ALTER TABLE hosts    ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE snippets ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE forwards ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migration_v5(conn: &Connection) -> Result<()> {
+    // Side table for tag → color metadata. Tag membership lives on
+    // hosts.tags_json (free-form strings); this only stores the chosen
+    // color for each known tag name. Missing rows fall back to a
+    // deterministic default color computed in the UI.
+    conn.execute_batch(
+        r#"
+        CREATE TABLE tag_colors (
+            name  TEXT PRIMARY KEY NOT NULL,
+            color TEXT NOT NULL
+        );
         "#,
     )?;
     Ok(())

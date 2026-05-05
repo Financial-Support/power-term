@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSettingsStore } from '../state/settingsStore';
+import { useHostStore } from '../state/hostStore';
+import { defaultColor, useTagStore } from '../state/tagStore';
 import { THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from '../themes';
 import { SyncTab } from './SyncTab';
 import { AISettingsTab } from './AISettingsTab';
+import { TagChip } from './TagChip';
 import type { CursorStyle, SettingsPatch, Theme } from '../types';
 
 interface Props {
@@ -10,7 +13,7 @@ interface Props {
   initialTab?: Tab;
 }
 
-type Tab = 'appearance' | 'terminal' | 'sync' | 'ai';
+type Tab = 'appearance' | 'terminal' | 'tags' | 'sync' | 'ai';
 
 export function SettingsModal({ onClose, initialTab }: Props) {
   const settings = useSettingsStore((s) => s.settings);
@@ -81,6 +84,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
             aria-selected={activeTab === 'terminal'}
             onClick={() => setActiveTab('terminal')}
           >Terminal</button>
+          <button role="tab" aria-selected={activeTab === 'tags'} onClick={() => setActiveTab('tags')}>Tags</button>
           <button role="tab" aria-selected={activeTab === 'sync'} onClick={() => setActiveTab('sync')}>Sync</button>
           <button role="tab" aria-selected={activeTab === 'ai'} onClick={() => setActiveTab('ai')}>AI</button>
         </div>
@@ -176,6 +180,8 @@ export function SettingsModal({ onClose, initialTab }: Props) {
           </div>
         )}
 
+        {activeTab === 'tags' && <TagsTab />}
+
         {activeTab === 'sync' && (
           <div className="sync-tab-panel">
             <SyncTab />
@@ -186,7 +192,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
 
         {localError && <p className="form-error">{localError}</p>}
 
-        {activeTab !== 'sync' && activeTab !== 'ai' && (
+        {activeTab !== 'sync' && activeTab !== 'ai' && activeTab !== 'tags' && (
           <div className="modal-actions">
             <button type="button" onClick={onClose}>Cancel</button>
             <button
@@ -248,6 +254,80 @@ function AccentPicker({ value, onChange }: { value: string; onChange: (v: string
           onChange={(e) => onChange(e.target.value)}
         />
       </label>
+    </div>
+  );
+}
+
+/**
+ * Tag color manager. Discovers tag names from the existing hosts (so the
+ * user never has to "create" a tag — it just appears here once any host
+ * uses it) and lets them assign a per-tag color. Internal `kind:value`
+ * tags such as `proxyjump:gateway` are filtered out; they're treated as
+ * markers, not user-facing labels.
+ */
+function TagsTab() {
+  const hosts = useHostStore((s) => s.hosts);
+  const colors = useTagStore((s) => s.colors);
+  const setColor = useTagStore((s) => s.setColor);
+  const clearColor = useTagStore((s) => s.clearColor);
+
+  const tagNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const h of hosts) {
+      for (const t of h.tags) {
+        if (t && !t.includes(':')) set.add(t);
+      }
+    }
+    // Also surface any tags that have a color set but aren't on any host
+    // anymore — so the user can clean up the color row.
+    for (const k of Object.keys(colors)) set.add(k);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [hosts, colors]);
+
+  if (tagNames.length === 0) {
+    return (
+      <div className="tags-tab-panel">
+        <p className="form-hint">No tags yet. Add a tag to a host (Edit host → Tags) to manage its color here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tags-tab-panel">
+      <p className="form-hint">
+        Tag colors are stored locally and used to render the chip beside each host. Tags without a custom color use a hash of the name.
+      </p>
+      <ul className="tags-list">
+        {tagNames.map((name) => {
+          const stored = colors[name];
+          const effective = stored ?? defaultColor(name);
+          const usageCount = hosts.filter((h) => h.tags.includes(name)).length;
+          return (
+            <li key={name} className="tags-row">
+              <TagChip name={name} className="tags-row-preview" />
+              <span className="tags-row-name">{name}</span>
+              <span className="tags-row-usage">
+                {usageCount > 0 ? `${usageCount} host${usageCount === 1 ? '' : 's'}` : 'unused'}
+              </span>
+              <input
+                type="color"
+                aria-label={`color for tag ${name}`}
+                value={effective}
+                onChange={(e) => void setColor(name, e.target.value)}
+              />
+              {stored && (
+                <button
+                  type="button"
+                  className="tags-row-clear"
+                  aria-label={`reset ${name} color to default`}
+                  title="Reset to auto color"
+                  onClick={() => void clearColor(name)}
+                >↺</button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

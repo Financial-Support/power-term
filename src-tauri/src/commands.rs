@@ -281,7 +281,7 @@ pub fn known_hosts_get(host: String, port: u16) -> Result<KnownHostsLookup, Stri
     Ok(KnownHostsLookup { fingerprint: None, key_type: None })
 }
 
-use crate::store::{self, Host, HostInput, HostStore, Snippet, SnippetInput, SnippetStore};
+use crate::store::{self, Host, HostInput, HostStore, Snippet, SnippetInput, SnippetStore, TagColor, TagColorStore};
 
 #[tauri::command]
 pub fn hosts_list(store: tauri::State<'_, HostStore>) -> Result<Vec<Host>, String> {
@@ -643,6 +643,30 @@ pub fn snippets_touch(
     id: String,
 ) -> Result<(), String> {
     store.touch(&id).map_err(|e| e.to_string())
+}
+
+// ─── Tag colors ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn tag_colors_list(store: tauri::State<'_, TagColorStore>) -> Result<Vec<TagColor>, String> {
+    store.list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn tag_color_set(
+    store: tauri::State<'_, TagColorStore>,
+    name: String,
+    color: String,
+) -> Result<TagColor, String> {
+    store.upsert(&name, &color).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn tag_color_delete(
+    store: tauri::State<'_, TagColorStore>,
+    name: String,
+) -> Result<(), String> {
+    store.delete(&name).map_err(|e| e.to_string())
 }
 
 // ─── Port Forwarding ────────────────────────────────────────────────────────

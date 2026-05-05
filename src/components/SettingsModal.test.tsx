@@ -78,11 +78,12 @@ describe('SettingsModal', () => {
     expect(screen.getByLabelText(/scrollback/i)).toBeInTheDocument();
   });
 
-  it('renders Sync and AI tabs alongside Appearance and Terminal', () => {
+  it('renders Tags / Sync / AI tabs alongside Appearance and Terminal', () => {
     render(<SettingsModal onClose={() => {}} />);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(4);
-    expect(tabs[2]).toHaveTextContent('Sync');
-    expect(tabs[3]).toHaveTextContent('AI');
+    expect(tabs).toHaveLength(5);
+    expect(tabs[2]).toHaveTextContent('Tags');
+    expect(tabs[3]).toHaveTextContent('Sync');
+    expect(tabs[4]).toHaveTextContent('AI');
   });
 });

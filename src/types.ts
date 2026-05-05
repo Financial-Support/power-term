@@ -111,6 +111,12 @@ export type SftpOpenResult =
 
 export type SortKey = 'name' | 'size' | 'modified';
 
+export interface TagColor {
+  name: string;
+  /** `#RRGGBB` literal validated server-side. */
+  color: string;
+}
+
 export interface Snippet {
   id: string;
   name: string;

@@ -5,7 +5,7 @@ use power_term::settings::SettingsStore;
 use power_term::sftp::SftpManager;
 use power_term::ssh::SshManager;
 use power_term::ssh::forward_manager::ForwardManager;
-use power_term::store::{Db, ForwardStore, HostStore, SnippetStore};
+use power_term::store::{Db, ForwardStore, HostStore, SnippetStore, TagColorStore};
 use power_term::sync::SyncManager;
 use std::sync::Arc;
 use tauri::{Emitter, Listener, Manager};
@@ -21,6 +21,7 @@ fn main() {
     let host_store = HostStore::new(db.clone());
     let snippet_store = SnippetStore::new(db.clone());
     let forward_store = ForwardStore::new(db.clone());
+    let tag_color_store = TagColorStore::new(db.clone());
     let sync_manager = SyncManager::new();
 
     tauri::Builder::default()
@@ -33,6 +34,7 @@ fn main() {
         .manage(host_store)
         .manage(snippet_store)
         .manage(forward_store)
+        .manage(tag_color_store)
         .manage(ForwardManager::new())
         .manage(db)
         .manage(sync_manager)
@@ -178,6 +180,9 @@ fn main() {
             power_term::commands::snippets_update,
             power_term::commands::snippets_delete,
             power_term::commands::snippets_touch,
+            power_term::commands::tag_colors_list,
+            power_term::commands::tag_color_set,
+            power_term::commands::tag_color_delete,
             power_term::commands::sftp_open,
             power_term::commands::sftp_close,
             power_term::commands::sftp_list,

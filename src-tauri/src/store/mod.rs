@@ -4,11 +4,13 @@ pub mod host;
 pub mod schema;
 pub mod secrets;
 pub mod snippets;
+pub mod tags;
 
 pub use db::Db;
 pub use forwards::{Forward, ForwardInput, ForwardStore};
 pub use host::{Host, HostInput, HostStore};
 pub use snippets::{Snippet, SnippetInput, SnippetStore};
+pub use tags::{TagColor, TagColorStore};
 
 #[derive(thiserror::Error, Debug)]
 pub enum StoreError {

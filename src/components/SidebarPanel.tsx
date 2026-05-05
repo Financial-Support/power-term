@@ -5,6 +5,7 @@ import { useHostStore } from '../state/hostStore';
 import { useSessionStore } from '../state/sessionStore';
 import type { Host, HostInput } from '../types';
 import type { SidebarSection } from './IconRail';
+import { TagChip } from './TagChip';
 
 interface Props {
   section: SidebarSection;
@@ -234,6 +235,11 @@ export function SidebarPanel({
                               title={'Jumps via ' + host.tags.find((t) => t.startsWith('proxyjump:'))!.slice('proxyjump:'.length)}
                             >↳</span>
                           )}
+                          {host.tags
+                            .filter((t) => !t.includes(':'))
+                            .map((t) => (
+                              <TagChip key={t} name={t} className="sp-host-tag" />
+                            ))}
                           <span className="sp-host-port">{host.port !== 22 ? host.port : ''}</span>
                           <span className="sp-host-actions">
                             <button type="button" aria-label={`sftp ${host.name}`} onClick={() => onOpenSftp(host)}>📂</button>

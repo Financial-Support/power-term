@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -220,6 +220,18 @@ export async function snippetsDelete(id: string): Promise<void> {
 
 export async function snippetsTouch(id: string): Promise<void> {
   await invoke('snippets_touch', { id });
+}
+
+// ─── Tag colors ─────────────────────────────────────────────────────────────
+
+export async function tagColorsList(): Promise<TagColor[]> {
+  return invoke<TagColor[]>('tag_colors_list');
+}
+export async function tagColorSet(name: string, color: string): Promise<TagColor> {
+  return invoke<TagColor>('tag_color_set', { name, color });
+}
+export async function tagColorDelete(name: string): Promise<void> {
+  await invoke('tag_color_delete', { name });
 }
 
 // ─── Port Forwarding ────────────────────────────────────────────────────────

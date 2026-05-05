@@ -27,6 +27,7 @@ import { onForwardStatusForId } from './lib/forwardEvents';
 import { useSessionStore } from './state/sessionStore';
 import { useSettingsStore } from './state/settingsStore';
 import { useHostStore } from './state/hostStore';
+import { useTagStore } from './state/tagStore';
 import { useSftpStore } from './state/sftpStore';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useZoom } from './hooks/useZoom';
@@ -177,9 +178,12 @@ export function App() {
     return () => { u1?.(); u2?.(); u3?.(); u4?.(); u5?.(); u6?.(); };
   }, [zoomIn, zoomOut, zoomReset]);
 
+  const loadTags = useTagStore((s) => s.load);
+
   useEffect(() => { void loadSettings(); }, [loadSettings]);
   useEffect(() => { void loadHosts(); }, [loadHosts]);
   useEffect(() => { void loadSnippets(); }, [loadSnippets]);
+  useEffect(() => { void loadTags(); }, [loadTags]);
   useEffect(() => {
     void loadForwards();
     void loadForwardStatuses();
