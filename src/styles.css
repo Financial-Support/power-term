@@ -57,6 +57,35 @@ html, body, #root { height: 100%; margin: 0; }
   height: 100%;
   background: var(--bg);
   color: var(--fg);
+
+  /* Native-app feel: chrome (tabs, labels, list rows, sidebar items) is
+     not text-selectable. Right-clicking a row should open a context menu,
+     not start a text selection. Content surfaces (inputs, terminals, code
+     blocks, textareas) opt back in with user-select: text below. */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Re-enable text selection for places where the user is actually editing
+   or reading content. Keep this list narrow — anything not here inherits
+   the no-select default from .app. */
+.app input,
+.app textarea,
+.app pre,
+.app code,
+.app [contenteditable="true"],
+.app .xterm,
+.app .xterm-screen,
+.app [data-selectable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: auto;
+}
+
+.app input,
+.app textarea {
+  cursor: text;
 }
 
 /* Light theme — warm off-white counterpart of the warm-charcoal default.
