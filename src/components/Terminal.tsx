@@ -56,7 +56,10 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
 
     // Cmd+C: if there is a selection, copy to clipboard and swallow.
     // If no selection, fall through (xterm sends ETX / SIGINT).
-    // Cmd+V: read clipboard text and paste into the PTY.
+    // Cmd+V is intentionally NOT handled here — xterm registers its own
+    // `paste` listener on the textarea (Terminal.ts: addDisposableDomListener
+    // (this.textarea, 'paste', …)). Catching the keydown and calling
+    // term.paste() in addition pasted the clipboard twice on every Cmd+V.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown' || !e.metaKey) return true;
       if (e.key === 'c') {
@@ -66,12 +69,6 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
           return false;
         }
         return true;
-      }
-      if (e.key === 'v') {
-        void navigator.clipboard.readText().then((text) => {
-          if (text) term.paste(text);
-        });
-        return false;
       }
       if (e.key === 'f') {
         // Open in-terminal search overlay. Focus is moved to the input by
