@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileRow } from './FileRow';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
+import { ConfirmModal } from './ConfirmModal';
 import { useSftpStore } from '../state/sftpStore';
 import { sftpDownload, sftpMkdir, sftpRemoveDir, sftpRemoveFile, sftpRename, sftpUpload } from '../lib/ipc';
 import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
@@ -33,6 +34,8 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
   const [dropOver, setDropOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: SftpEntry } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<SftpEntry | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Sync local breadcrumb input when cwd changes externally (after navigate).
   useEffect(() => {
@@ -98,15 +101,28 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     void reload(tabId);
   };
 
-  const onDelete = async (entry: SftpEntry) => {
-    const fullPath = joinPath(tab.cwd, entry.name);
-    if (!confirm(`Delete ${entry.kind} "${entry.name}"?`)) return;
+  const onDelete = (entry: SftpEntry) => {
+    // Defer the actual SFTP call to the modal's confirm action so the
+    // user always gets the same explicit confirm UX whether they hit the
+    // row × button, the context menu, or any future entry point.
+    setConfirmDelete(entry);
+  };
+
+  const performDelete = async (entry: SftpEntry) => {
+    setDeleting(true);
     setError(tabId, null);
+    const fullPath = joinPath(tab.cwd, entry.name);
     try {
       if (entry.kind === 'dir') await sftpRemoveDir(tab.sftpId, fullPath);
       else await sftpRemoveFile(tab.sftpId, fullPath);
-    } catch (err) { reportOpError('delete', err); }
-    void reload(tabId);
+      setConfirmDelete(null);
+    } catch (err) {
+      reportOpError('delete', err);
+      setConfirmDelete(null);
+    } finally {
+      setDeleting(false);
+      void reload(tabId);
+    }
   };
 
   const onRename = async (entry: SftpEntry) => {
@@ -327,6 +343,20 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
           y={ctxMenu.y}
           items={buildCtxItems(ctxMenu.entry)}
           onClose={() => setCtxMenu(null)}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          title={confirmDelete.kind === 'dir' ? 'Delete folder?' : 'Delete file?'}
+          message={
+            confirmDelete.kind === 'dir'
+              ? `Recursively delete folder "${confirmDelete.name}" and all its contents from ${tab.cwd}? This cannot be undone.`
+              : `Delete file "${confirmDelete.name}" from ${tab.cwd}? This cannot be undone.`
+          }
+          confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+          destructive
+          onConfirm={() => { if (!deleting) void performDelete(confirmDelete); }}
+          onCancel={() => { if (!deleting) setConfirmDelete(null); }}
         />
       )}
     </div>

@@ -150,11 +150,39 @@ impl SftpSession {
             .map_err(map_sftp_err)
     }
 
+    /// Recursively remove a remote directory tree. SFTP RMDIR only succeeds
+    /// on empty directories, so we walk the tree post-order via an iterative
+    /// stack, removing each file and symlink we encounter and rmdir-ing each
+    /// directory once all its children are gone. Empty directories take the
+    /// same code path and just trigger a single rmdir at the end.
     pub async fn remove_dir(&self, path: &str) -> Result<(), SftpError> {
-        let sftp = self.sftp.lock().await;
-        sftp.remove_dir(path.to_string())
-            .await
-            .map_err(map_sftp_err)
+        // Each frame is (path, expanded?). When first popped we list
+        // children and push them; we then re-push the dir with expanded=true
+        // so on the next visit (after all children are processed) we issue
+        // the actual rmdir.
+        let mut stack: Vec<(String, bool)> = vec![(path.to_string(), false)];
+        while let Some((dir, expanded)) = stack.pop() {
+            if expanded {
+                let sftp = self.sftp.lock().await;
+                sftp.remove_dir(dir).await.map_err(map_sftp_err)?;
+                continue;
+            }
+            stack.push((dir.clone(), true));
+            let entries = self.list(&dir).await?;
+            for e in entries {
+                let child = format!("{}/{}", dir.trim_end_matches('/'), e.name);
+                match e.kind.as_str() {
+                    "dir" => stack.push((child, false)),
+                    _ => {
+                        // file, symlink, other — SFTP REMOVE handles all
+                        // non-directory entries uniformly.
+                        let sftp = self.sftp.lock().await;
+                        sftp.remove_file(child).await.map_err(map_sftp_err)?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub async fn rename(&self, from: &str, to: &str) -> Result<(), SftpError> {
