@@ -205,34 +205,44 @@ pub fn handle_auth_callback(url: &str, app: &AppHandle, sync: &SyncManager) {
 
     let _ = app.emit("sync:auth-debug", format!("callback received ({} chars)", url.len()));
 
-    let query = url
-        .split_once('?')
-        .map(|(_, q)| q)
-        .or_else(|| url.split_once('#').map(|(_, q)| q))
-        .unwrap_or("");
-    if query.is_empty() {
-        emit_err("callback URL has no query or fragment");
-        return;
-    }
+    // Supabase only forwards tokens in the URL fragment, not the query.
+    // We put our anti-CSRF `state` in the redirect_to query before sending
+    // to authorize, so the final callback URL has state in `?state=...`
+    // AND tokens in `#access_token=...&refresh_token=...`. Read both.
+    let parsed = match url::Url::parse(url) {
+        Ok(u) => u,
+        Err(e) => {
+            emit_err(&format!("could not parse callback URL: {e}"));
+            return;
+        }
+    };
 
     let mut access_token = None;
     let mut refresh_token = None;
     let mut state = None;
-    let mut keys_seen: Vec<&str> = Vec::new();
-    for pair in query.split('&') {
-        if let Some((k, v)) = pair.split_once('=') {
-            keys_seen.push(k);
-            match k {
-                "access_token" => access_token = Some(v.to_string()),
-                "refresh_token" => refresh_token = Some(v.to_string()),
-                "state" => state = Some(v.to_string()),
-                _ => {}
+    let mut keys_seen: Vec<String> = Vec::new();
+    let mut absorb = |k: &str, v: &str| {
+        keys_seen.push(k.to_string());
+        match k {
+            "access_token" => access_token = Some(v.to_string()),
+            "refresh_token" => refresh_token = Some(v.to_string()),
+            "state" => state = Some(v.to_string()),
+            _ => {}
+        }
+    };
+    for (k, v) in parsed.query_pairs() {
+        absorb(&k, &v);
+    }
+    if let Some(frag) = parsed.fragment() {
+        for pair in frag.split('&') {
+            if let Some((k, v)) = pair.split_once('=') {
+                absorb(k, v);
             }
         }
     }
     let _ = app.emit(
         "sync:auth-debug",
-        format!("parsed query keys: {}", keys_seen.join(",")),
+        format!("parsed callback keys: {}", keys_seen.join(",")),
     );
 
     let expected_state = match auth::take_oauth_state() {

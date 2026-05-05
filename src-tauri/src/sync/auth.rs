@@ -102,11 +102,22 @@ pub fn is_token_expired(token: &str) -> bool {
 /// `power-term://auth/callback` deep-link comes back. Without this, any
 /// process that registers the scheme could deliver a forged callback and
 /// have its tokens accepted as ours.
+///
+/// Supabase doesn't round-trip the `state` query parameter we send to
+/// `/auth/v1/authorize` — it only forwards `access_token`/`refresh_token`
+/// in the URL fragment of `redirect_to`. So we embed our state inside
+/// the redirect URL itself: `power-term://auth/callback?state=<X>`.
+/// After Supabase appends `#access_token=...&refresh_token=...`, the
+/// final callback carries both pieces and the parser reads each from
+/// its own URL section.
 pub fn oauth_url(supabase_url: &str) -> Result<String, SecretError> {
     let state = generate_oauth_state();
     crate::store::secrets::backend_set(SERVICE, ACCOUNT_OAUTH_STATE, &state)?;
+    let redirect_to = format!("power-term://auth/callback?state={state}");
+    let redirect_to_encoded: String =
+        url::form_urlencoded::byte_serialize(redirect_to.as_bytes()).collect();
     Ok(format!(
-        "{supabase_url}/auth/v1/authorize?provider=github&redirect_to=power-term://auth/callback&state={state}"
+        "{supabase_url}/auth/v1/authorize?provider=github&redirect_to={redirect_to_encoded}"
     ))
 }
 
@@ -166,11 +177,14 @@ mod tests {
     #[cfg(feature = "mock-keychain")]
     #[test]
     fn oauth_url_contains_provider_redirect_and_state() {
-        let url = oauth_url("https://xyz.supabase.co").unwrap();
-        assert!(url.contains("provider=github"));
-        assert!(url.contains("power-term://auth/callback"));
-        assert!(url.starts_with("https://xyz.supabase.co"));
-        assert!(url.contains("&state="));
+        let raw = oauth_url("https://xyz.supabase.co").unwrap();
+        assert!(raw.starts_with("https://xyz.supabase.co"));
+        let parsed = url::Url::parse(&raw).unwrap();
+        let pairs: std::collections::HashMap<_, _> = parsed.query_pairs().into_owned().collect();
+        assert_eq!(pairs.get("provider").map(String::as_str), Some("github"));
+        // redirect_to is URL-encoded; query_pairs gives us the decoded value.
+        let redirect_to = pairs.get("redirect_to").expect("redirect_to present");
+        assert!(redirect_to.starts_with("power-term://auth/callback?state="));
         // state is persisted so the callback can validate it
         let state = take_oauth_state().unwrap();
         assert!(state.is_some());
