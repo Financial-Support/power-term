@@ -52,6 +52,17 @@ pub struct RemoteForward {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteSshKey {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub content: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteCredential {
     pub id: String,
     pub ciphertext: String,
@@ -75,7 +86,83 @@ pub async fn pull_all(
     pull_hosts(client, db).await?;
     pull_snippets(client, db, sync_key).await?;
     pull_forwards(client, db).await?;
+    pull_ssh_keys(client, db, sync_key).await?;
     pull_credentials(client, db, sync_key).await?;
+    Ok(())
+}
+
+async fn pull_ssh_keys(
+    client: &SupabaseClient,
+    db: &Arc<Db>,
+    sync_key: Option<&[u8; 32]>,
+) -> Result<(), PullError> {
+    let rows: Vec<RemoteSshKey> = match client.select("ssh_keys", "select=*").await {
+        Ok(rs) => rs,
+        // The remote schema may not have been provisioned yet — log
+        // once and let the rest of the pull continue rather than
+        // erroring out the whole sync.
+        Err(e) if e.is_table_missing() => {
+            tracing::warn!(
+                "ssh_keys table missing on Supabase — skipping pull until it's provisioned"
+            );
+            return Ok(());
+        }
+        Err(e) => return Err(PullError::Client(e)),
+    };
+    let conn = db.lock();
+    for row in rows {
+        if row.deleted_at.is_some() {
+            conn.execute("DELETE FROM ssh_keys WHERE id=?1", params![row.id])?;
+            continue;
+        }
+        // Captured key bytes are stored encrypted on the server when a
+        // sync key is configured. Decrypt here, falling back gracefully
+        // if the key isn't available — the row is still kept (path /
+        // metadata is useful) but with empty content so the local auth
+        // path falls back to reading the file from disk.
+        let content = if row.content.is_empty() {
+            String::new()
+        } else if is_encrypted(&row.content) {
+            match sync_key {
+                None => {
+                    tracing::warn!(id = %row.id, "encrypted ssh key pulled but no sync key — keeping metadata only");
+                    String::new()
+                }
+                Some(key) => match decrypt(&row.content, key, row.id.as_bytes()) {
+                    Ok(plain) => plain,
+                    Err(e) => {
+                        tracing::warn!(id = %row.id, error = %e, "ssh key decrypt failed");
+                        String::new()
+                    }
+                },
+            }
+        } else {
+            row.content.clone()
+        };
+        let local_updated: Option<i64> = conn
+            .query_row(
+                "SELECT updated_at FROM ssh_keys WHERE id=?1",
+                params![row.id],
+                |r| r.get(0),
+            )
+            .ok();
+        match local_updated {
+            None => {
+                conn.execute(
+                    "INSERT OR IGNORE INTO ssh_keys (id, name, path, content, created_at, updated_at) \
+                     VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![row.id, row.name, row.path, content, row.created_at, row.updated_at],
+                )?;
+            }
+            Some(local_ts) if row.updated_at > local_ts => {
+                conn.execute(
+                    "UPDATE ssh_keys SET name=?2, path=?3, content=?4, updated_at=?5 WHERE id=?1",
+                    params![row.id, row.name, row.path, content, row.updated_at],
+                )?;
+            }
+            _ => {}
+        }
+    }
     Ok(())
 }
 

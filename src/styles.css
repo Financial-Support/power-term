@@ -2191,6 +2191,80 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .db-row-actions button:hover { color: var(--fg); background: var(--bg-hover); }
 
+/* ─── Keys panel (in IconRail "Keys") ─────────────────────────────────── */
+.keys-panel { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.keys-panel-header {
+  display: flex; align-items: center;
+  padding: 8px 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.keys-panel-toggle {
+  flex: 1; text-align: left; padding: 0 4px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  background: transparent; border: 0; color: var(--fg-dim); cursor: pointer;
+  display: flex; align-items: center; gap: 3px;
+}
+.keys-panel-title { color: var(--fg-dim); }
+.keys-panel-add {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--fg-dim); padding: 2px 6px; font-size: 14px;
+  border-radius: 4px;
+}
+.keys-panel-add:hover { color: var(--fg); background: var(--bg-hover); }
+.keys-panel-empty { padding: 10px 12px; font-size: 11px; color: var(--fg-dim); }
+.keys-panel-list { list-style: none; margin: 0; padding: 0 4px 8px; overflow-y: auto; flex: 1; }
+.keys-panel-row {
+  display: flex; align-items: center; padding: 0 2px 0 4px; border-radius: 5px; gap: 4px;
+  transition: background 0.08s;
+}
+.keys-panel-row:hover { background: var(--bg-hover); }
+.keys-panel-row-name {
+  flex: 1; display: flex; align-items: center; gap: 6px;
+  background: transparent; border: 0; padding: 4px 4px;
+  cursor: pointer; color: var(--fg); text-align: left;
+  font-family: inherit; font-size: 12px;
+  overflow: hidden;
+}
+.keys-panel-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 18px;
+  font-size: 11px; flex-shrink: 0;
+  filter: grayscale(0.6);
+}
+.keys-panel-pill.has-content { filter: none; }
+.keys-panel-row-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keys-panel-row-usage {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--fg-dim); flex-shrink: 0;
+  min-width: 18px; text-align: right;
+}
+.keys-panel-row-actions { display: none; gap: 1px; }
+.keys-panel-row:hover .keys-panel-row-actions,
+.keys-panel-row:focus-within .keys-panel-row-actions { display: flex; }
+.keys-panel-row-actions button {
+  background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
+  color: var(--fg-muted); font-size: 11px; border-radius: 3px;
+}
+.keys-panel-row-actions button:hover { color: var(--fg); background: var(--bg-hover); }
+
+.key-content-status {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0; flex-wrap: wrap;
+  font-size: 11px;
+}
+.key-content-reading { color: var(--fg-dim); }
+.key-content-error { color: var(--danger); }
+.key-content-ok { color: var(--online); }
+.key-content-warn { color: var(--accent-text); }
+.key-recapture {
+  margin-left: auto;
+  font-size: 11px; padding: 3px 10px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--fg); border-radius: 4px; cursor: pointer;
+}
+.key-recapture:hover:not(:disabled) { background: var(--bg-hover); }
+.key-recapture:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .db-browser {
   display: flex; flex-direction: column;
   width: 100%; height: 100%;

@@ -1,4 +1,4 @@
-use crate::store::{Db, Forward, Host, Snippet};
+use crate::store::{Db, Forward, Host, Snippet, SshKey};
 use crate::settings::Settings;
 use crate::sync::client::{ClientError, SupabaseClient};
 use crate::sync::encrypt::encrypt;
@@ -75,6 +75,21 @@ pub struct RemoteSettingsRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteSshKeyRow {
+    pub id: String,
+    pub user_id: String,
+    pub name: String,
+    pub path: String,
+    /// AES-256-GCM ciphertext when sync_key is set; plaintext otherwise.
+    /// Empty string means "no captured contents to sync" — preserves the
+    /// fall-back-to-disk semantics on the receiving device.
+    pub content: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteCredentialRow {
     pub id: String,
     pub user_id: String,
@@ -94,6 +109,8 @@ pub enum PendingOp {
     UpsertSettings(RemoteSettingsRow),
     UpsertCredential(RemoteCredentialRow),
     DeleteCredential { id: String, updated_at: i64 },
+    UpsertSshKey(RemoteSshKeyRow),
+    DeleteSshKey { id: String, updated_at: i64 },
 }
 
 #[derive(Debug, Default)]
@@ -197,7 +214,41 @@ pub async fn push_op(client: &SupabaseClient, op: &PendingOp) -> Result<(), Clie
         PendingOp::DeleteCredential { id, updated_at } => {
             client.upsert("credentials", &serde_json::json!({ "id": id, "deleted_at": updated_at })).await
         }
+        PendingOp::UpsertSshKey(row) => client.upsert("ssh_keys", row).await,
+        PendingOp::DeleteSshKey { id, updated_at } => {
+            client.upsert("ssh_keys", &serde_json::json!({ "id": id, "deleted_at": updated_at })).await
+        }
     }
+}
+
+/// Encrypt a key's captured content with the user's sync key, using the
+/// row id as AAD so the server can't relabel one key's ciphertext as
+/// another's. Empty content stays empty so the receiver knows there's
+/// nothing to materialize.
+pub fn ssh_key_to_row(
+    key: &SshKey,
+    user_id: &str,
+    sync_key: Option<&[u8; 32]>,
+) -> Result<RemoteSshKeyRow, ClientError> {
+    let content = if key.content.is_empty() {
+        String::new()
+    } else {
+        match sync_key {
+            Some(k) => encrypt(&key.content, k, key.id.as_bytes())
+                .map_err(|e| ClientError::Json(e.to_string()))?,
+            None => key.content.clone(),
+        }
+    };
+    Ok(RemoteSshKeyRow {
+        id: key.id.clone(),
+        user_id: user_id.to_string(),
+        name: key.name.clone(),
+        path: key.path.clone(),
+        content,
+        created_at: key.created_at,
+        updated_at: key.updated_at,
+        deleted_at: None,
+    })
 }
 
 pub async fn flush_queue(client: &SupabaseClient, queue: &Arc<PushQueue>) {
@@ -332,6 +383,42 @@ pub async fn push_all_local(
     for row in &forwards {
         if let Err(e) = client.upsert("forwards", row).await {
             tracing::warn!(id = %row.id, error = %e, "push_all_local: forward upsert failed");
+        }
+    }
+
+    // SSH keys — content encrypted with the sync key when one is set so
+    // the captured private-key bytes are never readable on the server.
+    let ssh_keys: Vec<SshKey> = {
+        let conn = db.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, path, content, created_at, updated_at FROM ssh_keys",
+            )
+            .map_err(|e| ClientError::Json(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(SshKey {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    path: r.get(2)?,
+                    content: r.get(3)?,
+                    created_at: r.get(4)?,
+                    updated_at: r.get(5)?,
+                })
+            })
+            .map_err(|e| ClientError::Json(e.to_string()))?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+    for k in &ssh_keys {
+        let row = match ssh_key_to_row(k, user_id, sync_key.as_ref()) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(id = %k.id, error = %e, "push_all_local: ssh_key encrypt failed; skipping");
+                continue;
+            }
+        };
+        if let Err(e) = client.upsert("ssh_keys", &row).await {
+            tracing::warn!(id = %k.id, error = %e, "push_all_local: ssh_key upsert failed");
         }
     }
 

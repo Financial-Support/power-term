@@ -20,6 +20,7 @@ interface Props {
   snippetsSlot: ReactNode;
   forwardsSlot: ReactNode;
   databasesSlot: ReactNode;
+  keysSlot: ReactNode;
 }
 
 interface Group {
@@ -34,7 +35,7 @@ const HOST_DRAG_MIME = 'application/x-power-term-host-id';
 export function SidebarPanel({
   section,
   onConnect, onOpenSftp, onAddHost, onImportSshConfig, onEditHost, onDeleteHost, onDuplicateHost,
-  snippetsSlot, forwardsSlot, databasesSlot,
+  snippetsSlot, forwardsSlot, databasesSlot, keysSlot,
 }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const error = useHostStore((s) => s.error);
@@ -297,6 +298,13 @@ export function SidebarPanel({
       {section === 'databases' && (
         <div className="sp-section sp-section-slot">
           {databasesSlot}
+        </div>
+      )}
+
+      {/* Keys section */}
+      {section === 'keys' && (
+        <div className="sp-section sp-section-slot">
+          {keysSlot}
         </div>
       )}
 

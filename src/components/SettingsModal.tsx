@@ -1,22 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { homeDir } from '@tauri-apps/api/path';
 import { useSettingsStore } from '../state/settingsStore';
 import { useHostStore } from '../state/hostStore';
-import { useSshKeyStore } from '../state/sshKeyStore';
 import { defaultColor, useTagStore } from '../state/tagStore';
 import { THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from '../themes';
 import { SyncTab } from './SyncTab';
 import { AISettingsTab } from './AISettingsTab';
 import { TagChip } from './TagChip';
-import type { CursorStyle, SettingsPatch, SshKey, Theme } from '../types';
+import type { CursorStyle, SettingsPatch, Theme } from '../types';
 
 interface Props {
   onClose: () => void;
   initialTab?: Tab;
 }
 
-type Tab = 'appearance' | 'terminal' | 'tags' | 'keys' | 'sync' | 'ai';
+type Tab = 'appearance' | 'terminal' | 'tags' | 'sync' | 'ai';
 
 export function SettingsModal({ onClose, initialTab }: Props) {
   const settings = useSettingsStore((s) => s.settings);
@@ -88,7 +85,6 @@ export function SettingsModal({ onClose, initialTab }: Props) {
             onClick={() => setActiveTab('terminal')}
           >Terminal</button>
           <button role="tab" aria-selected={activeTab === 'tags'} onClick={() => setActiveTab('tags')}>Tags</button>
-          <button role="tab" aria-selected={activeTab === 'keys'} onClick={() => setActiveTab('keys')}>Keys</button>
           <button role="tab" aria-selected={activeTab === 'sync'} onClick={() => setActiveTab('sync')}>Sync</button>
           <button role="tab" aria-selected={activeTab === 'ai'} onClick={() => setActiveTab('ai')}>AI</button>
         </div>
@@ -186,8 +182,6 @@ export function SettingsModal({ onClose, initialTab }: Props) {
 
         {activeTab === 'tags' && <TagsTab />}
 
-        {activeTab === 'keys' && <KeysTab />}
-
         {activeTab === 'sync' && (
           <div className="sync-tab-panel">
             <SyncTab />
@@ -198,7 +192,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
 
         {localError && <p className="form-error">{localError}</p>}
 
-        {activeTab !== 'sync' && activeTab !== 'ai' && activeTab !== 'tags' && activeTab !== 'keys' && (
+        {activeTab !== 'sync' && activeTab !== 'ai' && activeTab !== 'tags' && (
           <div className="modal-actions">
             <button type="button" onClick={onClose}>Cancel</button>
             <button
@@ -449,184 +443,6 @@ function TagsTab() {
   );
 }
 
-/**
- * SSH key registry. Users curate a list of (name, path) pairs that
- * HostFormModal then surfaces as a dropdown, so they don't have to
- * paste / browse for the same key every time they save a host.
- *
- * Path is unique per row (DB constraint), so adding the same file twice
- * surfaces a friendly "already exists" error from the backend.
- */
-function KeysTab() {
-  const keys = useSshKeyStore((s) => s.keys);
-  const error = useSshKeyStore((s) => s.error);
-  const load = useSshKeyStore((s) => s.load);
-  const create = useSshKeyStore((s) => s.create);
-  const updateKey = useSshKeyStore((s) => s.update);
-  const deleteKey = useSshKeyStore((s) => s.delete);
-  const hosts = useHostStore((s) => s.hosts);
-
-  const [newName, setNewName] = useState('');
-  const [newPath, setNewPath] = useState('');
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editPath, setEditPath] = useState('');
-
-  useEffect(() => { void load(); }, [load]);
-
-  // Surface usage info per key so the user knows which hosts will lose
-  // their key reference if they delete it. We match by `path` since the
-  // host model stores the absolute path, not the key id.
-  const usageByPath = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const h of hosts) {
-      if (h.auth_method === 'key' && h.key_path) {
-        m.set(h.key_path, (m.get(h.key_path) ?? 0) + 1);
-      }
-    }
-    return m;
-  }, [hosts]);
-
-  const browseKey = async (setter: (p: string) => void) => {
-    let defaultPath: string | undefined;
-    try {
-      const home = await homeDir();
-      defaultPath = `${home.replace(/\/$/, '')}/.ssh`;
-    } catch { /* fallback to dialog default */ }
-    const picked = await openDialog({
-      multiple: false,
-      directory: false,
-      title: 'Select private key',
-      defaultPath,
-    });
-    if (typeof picked === 'string' && picked.length > 0) setter(picked);
-  };
-
-  const handleCreate = async () => {
-    if (!newName.trim() || !newPath.trim()) {
-      setCreateError('Both name and path are required.');
-      return;
-    }
-    const k = await create({ name: newName.trim(), path: newPath.trim() });
-    if (k) {
-      setNewName('');
-      setNewPath('');
-      setCreateError(null);
-    } else {
-      setCreateError(useSshKeyStore.getState().error ?? 'Failed to add key.');
-    }
-  };
-
-  const startEdit = (k: SshKey) => {
-    setEditingId(k.id);
-    setEditName(k.name);
-    setEditPath(k.path);
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditName('');
-    setEditPath('');
-  };
-
-  const commitEdit = async (id: string) => {
-    if (!editName.trim() || !editPath.trim()) { cancelEdit(); return; }
-    const k = await updateKey(id, { name: editName.trim(), path: editPath.trim() });
-    if (k) cancelEdit();
-  };
-
-  const handleDelete = async (k: SshKey) => {
-    const usage = usageByPath.get(k.path) ?? 0;
-    const msg = usage > 0
-      ? `Delete key "${k.name}"? ${usage} host${usage === 1 ? '' : 's'} reference this key path and will need to be edited.`
-      : `Delete key "${k.name}"?`;
-    if (!confirm(msg)) return;
-    await deleteKey(k.id);
-  };
-
-  return (
-    <div className="keys-tab-panel">
-      <p className="form-hint">
-        Saved private keys appear in the host form's auth dropdown. The path is what gets used for SSH; the name is just a label.
-      </p>
-
-      <div className="keys-create-row">
-        <input
-          className="keys-create-name"
-          placeholder="Label (e.g. Personal)"
-          value={newName}
-          onChange={(e) => { setNewName(e.target.value); setCreateError(null); }}
-        />
-        <input
-          className="keys-create-path"
-          placeholder="/Users/you/.ssh/id_ed25519"
-          value={newPath}
-          onChange={(e) => { setNewPath(e.target.value); setCreateError(null); }}
-        />
-        <button type="button" onClick={() => void browseKey(setNewPath)}>Browse…</button>
-        <button type="button" className="primary" onClick={() => void handleCreate()}>Add</button>
-      </div>
-      {createError && <p className="form-error">{createError}</p>}
-      {error && !createError && <p className="form-error">{error}</p>}
-
-      {keys.length === 0 ? (
-        <p className="form-hint">No keys saved yet.</p>
-      ) : (
-        <ul className="keys-list">
-          {keys.map((k) => {
-            const isEditing = editingId === k.id;
-            const usage = usageByPath.get(k.path) ?? 0;
-            return (
-              <li key={k.id} className="keys-row">
-                {isEditing ? (
-                  <>
-                    <input
-                      className="keys-row-name-input"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      autoFocus
-                    />
-                    <input
-                      className="keys-row-path-input"
-                      value={editPath}
-                      onChange={(e) => setEditPath(e.target.value)}
-                    />
-                    <button type="button" onClick={() => void browseKey(setEditPath)}>Browse</button>
-                    <button type="button" onClick={() => void commitEdit(k.id)}>Save</button>
-                    <button type="button" onClick={cancelEdit}>Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <span className="keys-row-name">{k.name}</span>
-                    <span className="keys-row-path" title={k.path}>{k.path}</span>
-                    <span className="keys-row-usage">
-                      {usage > 0 ? `${usage} host${usage === 1 ? '' : 's'}` : 'unused'}
-                    </span>
-                    <button
-                      type="button"
-                      className="keys-row-action"
-                      aria-label={`edit ${k.name}`}
-                      title="Edit"
-                      onClick={() => startEdit(k)}
-                    >✎</button>
-                    <button
-                      type="button"
-                      className="keys-row-action keys-row-delete"
-                      aria-label={`delete ${k.name}`}
-                      title="Delete key"
-                      onClick={() => void handleDelete(k)}
-                    >🗑</button>
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 /** Mini glyph that mirrors what xterm.js renders for each cursor option,
  * so the user can pick by shape rather than by name. */

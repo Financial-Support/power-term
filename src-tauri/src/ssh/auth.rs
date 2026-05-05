@@ -5,7 +5,13 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone)]
 pub enum Auth {
     Password { password: String },
+    /// Read the key bytes from disk at handshake time. Used when no
+    /// captured copy exists in the ssh_keys registry.
     KeyFile { path: PathBuf, passphrase: Option<String> },
+    /// Decode the given key bytes directly — bypasses the file system
+    /// so a missing / moved private key doesn't break SSH as long as
+    /// we captured the contents when the registry row was created.
+    KeyContent { content: String, passphrase: Option<String> },
     Agent,
 }
 
@@ -13,7 +19,7 @@ impl Auth {
     pub fn tag(&self) -> &'static str {
         match self {
             Auth::Password { .. } => "password",
-            Auth::KeyFile { .. } => "publickey",
+            Auth::KeyFile { .. } | Auth::KeyContent { .. } => "publickey",
             Auth::Agent => "agent",
         }
     }
@@ -25,6 +31,11 @@ pub fn load_key_from_file(path: &Path, passphrase: Option<&str>) -> Result<KeyPa
     let text = std::str::from_utf8(&bytes)
         .map_err(|_| SshError::Any("key file is not valid UTF-8".into()))?;
     russh_keys::decode_secret_key(text, passphrase)
+        .map_err(|e| SshError::Any(format!("decode key: {e}")))
+}
+
+pub fn load_key_from_content(content: &str, passphrase: Option<&str>) -> Result<KeyPair, SshError> {
+    russh_keys::decode_secret_key(content, passphrase)
         .map_err(|e| SshError::Any(format!("decode key: {e}")))
 }
 

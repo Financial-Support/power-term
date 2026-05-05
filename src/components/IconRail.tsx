@@ -1,7 +1,7 @@
 // src/components/IconRail.tsx
 import type { ReactNode } from 'react';
 
-export type SidebarSection = 'hosts' | 'snippets' | 'forwards' | 'databases';
+export type SidebarSection = 'hosts' | 'snippets' | 'forwards' | 'databases' | 'keys';
 
 interface Props {
   activeSection: SidebarSection;
@@ -62,6 +62,15 @@ export function IconRail({
         expanded={expanded}
         icon={<IconDatabase />}
         label="Databases"
+      />
+      <RailButton
+        ariaLabel="SSH keys"
+        title="SSH keys"
+        onClick={() => onSection('keys')}
+        active={activeSection === 'keys'}
+        expanded={expanded}
+        icon={<IconKey />}
+        label="Keys"
       />
 
       <div className="rail-spacer" />
@@ -155,6 +164,15 @@ function IconForwards() {
     <svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden>
       <path d="M2 8h12M10 5l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="4" cy="8" r="1.3" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconKey() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <circle cx="5" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M7.5 8H14M11.5 8v2.5M14 8v2.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   );
 }

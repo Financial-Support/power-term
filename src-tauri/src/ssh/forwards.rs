@@ -300,6 +300,17 @@ async fn start_remote(
                 .await
                 .map_err(|e| ForwardError::Any(format!("auth publickey: {e}")))?
         }
+        Auth::KeyContent { content, passphrase } => {
+            let key = crate::ssh::auth::load_key_from_content(&content, passphrase.as_deref())
+                .map_err(|e| match e {
+                    crate::ssh::SshError::Any(s) => ForwardError::Any(s),
+                    other => ForwardError::Any(other.to_string()),
+                })?;
+            session
+                .authenticate_publickey(target.user.clone(), Arc::new(key))
+                .await
+                .map_err(|e| ForwardError::Any(format!("auth publickey: {e}")))?
+        }
         Auth::Agent => authenticate_agent_via(&mut session, target.user.clone()).await?,
     };
     if !authed {

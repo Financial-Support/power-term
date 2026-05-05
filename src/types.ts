@@ -172,6 +172,8 @@ export interface SshKey {
   id: string;
   name: string;
   path: string;
+  /** Captured file contents — empty when fall-back-to-disk mode is in effect. */
+  content: string;
   created_at: number;
   updated_at: number;
 }
@@ -179,6 +181,7 @@ export interface SshKey {
 export interface SshKeyInput {
   name: string;
   path: string;
+  content: string;
 }
 
 export type DbEngine = 'mysql' | 'postgres';

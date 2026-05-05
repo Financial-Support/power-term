@@ -16,6 +16,16 @@ pub enum ClientError {
     Json(String),
 }
 
+impl ClientError {
+    /// True when the server responded with PostgREST's "table not found"
+    /// shape (404 + `PGRST205`). Sync code uses this to skip queueing
+    /// rows whose Supabase table the user hasn't provisioned yet — the
+    /// retry would never succeed without a server-side schema change.
+    pub fn is_table_missing(&self) -> bool {
+        matches!(self, ClientError::Api { status: 404, body } if body.contains("PGRST205"))
+    }
+}
+
 pub struct SupabaseClient {
     client: Client,
     base_url: String,

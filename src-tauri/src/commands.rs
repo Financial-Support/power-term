@@ -179,6 +179,7 @@ impl From<AuthRequest> for Auth {
 pub async fn ssh_connect(
     app: tauri::AppHandle,
     manager: tauri::State<'_, SshManager>,
+    ssh_key_store: tauri::State<'_, SshKeyStore>,
     settings: tauri::State<'_, crate::settings::SettingsStore>,
     target: SshTargetArg,
     auth: AuthRequest,
@@ -196,7 +197,15 @@ pub async fn ssh_connect(
         AuthRequest::Key { .. } => "publickey",
     }.to_string();
 
-    match manager.connect(app, target.clone(), auth.into(), cols, rows, connect_timeout, keepalive, accept_fingerprint).await {
+    // Substitute captured key bytes from the registry when the user picked
+    // a path that's been registered. Falls through to the From impl
+    // (file read at handshake time) for ad-hoc paths or unregistered keys.
+    let resolved_auth: Auth = match auth {
+        AuthRequest::Key { path, passphrase } => resolve_key_auth(&ssh_key_store, &path, passphrase),
+        other => other.into(),
+    };
+
+    match manager.connect(app, target.clone(), resolved_auth, cols, rows, connect_timeout, keepalive, accept_fingerprint).await {
         Ok(id) => Ok(SshConnectResult::Connected { id }),
         Err(SshError::UnknownFingerprint { fingerprint, host, key_type }) =>
             Ok(SshConnectResult::NeedsFingerprint { fingerprint, host, key_type }),
@@ -413,9 +422,11 @@ pub enum SftpOpenResult {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn sftp_open(
     manager: tauri::State<'_, SftpManager>,
+    ssh_key_store: tauri::State<'_, SshKeyStore>,
     settings: tauri::State<'_, crate::settings::SettingsStore>,
     host: String,
     port: u16,
@@ -433,7 +444,12 @@ pub async fn sftp_open(
         AuthRequest::Key { .. } => "publickey",
     }.to_string();
 
-    match manager.open(target, auth.into(), connect_timeout, keepalive, accept_fingerprint).await {
+    let resolved_auth: Auth = match auth {
+        AuthRequest::Key { path, passphrase } => resolve_key_auth(&ssh_key_store, &path, passphrase),
+        other => other.into(),
+    };
+
+    match manager.open(target, resolved_auth, connect_timeout, keepalive, accept_fingerprint).await {
         Ok(id) => Ok(SftpOpenResult::Connected { id }),
         Err(SftpError::UnknownFingerprint { fingerprint, host, key_type }) =>
             Ok(SftpOpenResult::NeedsFingerprint { fingerprint, host, key_type }),
@@ -796,12 +812,14 @@ pub fn forwards_status_all(
     manager: tauri::State<'_, ForwardManager>,
 ) -> Result<Vec<ForwardStatus>, String> { Ok(manager.statuses()) }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn forward_start(
     app: tauri::AppHandle,
     manager: tauri::State<'_, ForwardManager>,
     forward_store: tauri::State<'_, ForwardStore>,
     host_store: tauri::State<'_, HostStore>,
+    ssh_key_store: tauri::State<'_, SshKeyStore>,
     settings: tauri::State<'_, crate::settings::SettingsStore>,
     id: String,
 ) -> Result<ForwardStatus, String> {
@@ -816,10 +834,7 @@ pub async fn forward_start(
                 .filter(|p| !p.trim().is_empty())
                 .ok_or_else(|| "key auth requires a key_path".to_string())?;
             let passphrase = crate::store::secrets::get(&host.id).ok().flatten();
-            crate::ssh::auth::Auth::KeyFile {
-                path: std::path::PathBuf::from(path),
-                passphrase,
-            }
+            resolve_key_auth(&ssh_key_store, &path, passphrase)
         }
         _ => {
             let password = crate::store::secrets::get(&host.id).ok().flatten()
@@ -903,6 +918,15 @@ pub fn local_home() -> Result<String, String> {
     dirs::home_dir()
         .map(|p| p.to_string_lossy().to_string())
         .ok_or_else(|| "no home dir".to_string())
+}
+
+/// Read a local file as UTF-8 text. Used by KeyFormModal to capture
+/// private key contents into the registry so SSH still authenticates
+/// when the file is later moved or deleted. Errors include the path
+/// in the message so the renderer can show the user what failed.
+#[tauri::command]
+pub fn local_read_text(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))
 }
 
 /// Reveal the given local path in macOS Finder (or the platform equivalent).
@@ -1033,6 +1057,30 @@ fn parse_ssh_config(text: &str, home: &std::path::Path) -> Vec<SshConfigEntry> {
 use crate::db::{DbManager, DbSession};
 use crate::store::{DbConnection, DbConnectionInput, DbConnectionStore, SshKey, SshKeyInput, SshKeyStore};
 
+/// Build the publickey-flavoured `Auth` for the given key path. If the
+/// `ssh_keys` registry has captured contents for that path, prefer the
+/// stored bytes so a missing / moved file on disk still authenticates;
+/// otherwise fall back to a file read at handshake time. Common to
+/// every callsite that resolves SSH auth from a saved Host.
+fn resolve_key_auth(
+    ssh_key_store: &SshKeyStore,
+    path: &str,
+    passphrase: Option<String>,
+) -> crate::ssh::auth::Auth {
+    if let Ok(Some(k)) = ssh_key_store.get_by_path(path) {
+        if !k.content.is_empty() {
+            return crate::ssh::auth::Auth::KeyContent {
+                content: k.content,
+                passphrase,
+            };
+        }
+    }
+    crate::ssh::auth::Auth::KeyFile {
+        path: PathBuf::from(path),
+        passphrase,
+    }
+}
+
 // ─── SSH key registry ───────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -1043,26 +1091,90 @@ pub fn ssh_keys_list(store: tauri::State<'_, SshKeyStore>) -> Result<Vec<SshKey>
 #[tauri::command]
 pub fn ssh_keys_create(
     store: tauri::State<'_, SshKeyStore>,
+    sync: tauri::State<'_, SyncManager>,
     input: SshKeyInput,
 ) -> Result<SshKey, String> {
-    store.create(&input).map_err(|e| e.to_string())
+    let key = store.create(&input).map_err(|e| e.to_string())?;
+    push_ssh_key_async(sync.queue(), key.clone());
+    Ok(key)
 }
 
 #[tauri::command]
 pub fn ssh_keys_update(
     store: tauri::State<'_, SshKeyStore>,
+    sync: tauri::State<'_, SyncManager>,
     id: String,
     input: SshKeyInput,
 ) -> Result<SshKey, String> {
-    store.update(&id, &input).map_err(|e| e.to_string())
+    let key = store.update(&id, &input).map_err(|e| e.to_string())?;
+    push_ssh_key_async(sync.queue(), key.clone());
+    Ok(key)
 }
 
 #[tauri::command]
 pub fn ssh_keys_delete(
     store: tauri::State<'_, SshKeyStore>,
+    sync: tauri::State<'_, SyncManager>,
     id: String,
 ) -> Result<(), String> {
-    store.delete(&id).map_err(|e| e.to_string())
+    store.delete(&id).map_err(|e| e.to_string())?;
+    let queue = sync.queue();
+    let id_clone = id.clone();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    tauri::async_runtime::spawn(async move {
+        if let Ok(token) = crate::sync::client::get_valid_token().await {
+            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                let op = PendingOp::DeleteSshKey { id: id_clone.clone(), updated_at: now };
+                if let Err(e) = crate::sync::push::push_op(&client, &op).await {
+                    if e.is_table_missing() {
+                        tracing::warn!("ssh_keys table missing on Supabase — skipping delete sync");
+                    } else {
+                        tracing::warn!(error = %e, "ssh_key delete push failed — queuing");
+                        queue.enqueue(op);
+                    }
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
+/// Background helper: encrypt + push a single ssh_key row, fall back to
+/// the offline queue on failure. Mirrors the snippet pattern so sync
+/// stays consistent across entities.
+fn push_ssh_key_async(queue: std::sync::Arc<crate::sync::push::PushQueue>, key: SshKey) {
+    tauri::async_runtime::spawn(async move {
+        if let Ok(token) = crate::sync::client::get_valid_token().await {
+            let user_id = crate::sync::auth::user_from_jwt(&token)
+                .map(|u| u.id)
+                .unwrap_or_default();
+            if user_id.is_empty() { return; }
+            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
+                let row = match crate::sync::push::ssh_key_to_row(&key, &user_id, sync_key.as_ref()) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "ssh_key encrypt failed — skipping push");
+                        return;
+                    }
+                };
+                if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSshKey(row.clone())).await {
+                    if e.is_table_missing() {
+                        tracing::warn!(
+                            "ssh_keys table missing on Supabase — provision it before sync will work \
+                             (see release notes / docs for the SQL)"
+                        );
+                    } else {
+                        tracing::warn!(error = %e, "ssh_key push failed — queuing");
+                        queue.enqueue(PendingOp::UpsertSshKey(row));
+                    }
+                }
+            }
+        }
+    });
 }
 
 #[tauri::command]
@@ -1108,6 +1220,7 @@ pub async fn db_session_open(
     db_manager: tauri::State<'_, DbManager>,
     db_store: tauri::State<'_, DbConnectionStore>,
     host_store: tauri::State<'_, HostStore>,
+    ssh_key_store: tauri::State<'_, SshKeyStore>,
     settings: tauri::State<'_, SettingsStore>,
     connection_id: String,
     db_password: String,
@@ -1141,10 +1254,7 @@ pub async fn db_session_open(
             let passphrase = ssh_passphrase
                 .filter(|s| !s.is_empty())
                 .or_else(|| crate::store::secrets::get(&host.id).ok().flatten());
-            Auth::KeyFile {
-                path: PathBuf::from(path),
-                passphrase,
-            }
+            resolve_key_auth(&ssh_key_store, &path, passphrase)
         }
         _ => {
             let password = crate::store::secrets::get(&host.id)

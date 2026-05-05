@@ -295,6 +295,17 @@ pub async fn handshake_and_auth(
                 .await
                 .map_err(|e| HandshakeError::Any(format!("auth publickey: {e}")))?
         }
+        Auth::KeyContent { content, passphrase } => {
+            let key = crate::ssh::auth::load_key_from_content(&content, passphrase.as_deref())
+                .map_err(|e| match e {
+                    crate::ssh::SshError::Any(s) => HandshakeError::Any(s),
+                    other => HandshakeError::Any(other.to_string()),
+                })?;
+            session
+                .authenticate_publickey(user, Arc::new(key))
+                .await
+                .map_err(|e| HandshakeError::Any(format!("auth publickey: {e}")))?
+        }
         Auth::Agent => authenticate_agent(&mut session, user).await?,
     };
     if !authed {

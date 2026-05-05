@@ -178,6 +178,7 @@ fn main() {
             power_term::commands::local_list,
             power_term::commands::local_home,
             power_term::commands::local_reveal,
+            power_term::commands::local_read_text,
             power_term::commands::secret_set,
             power_term::commands::secret_get,
             power_term::commands::secret_delete,

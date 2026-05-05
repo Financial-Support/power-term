@@ -22,6 +22,9 @@ import { SnippetFormModal } from './components/SnippetFormModal';
 import { useSnippetStore } from './state/snippetStore';
 import { ForwardsPanel } from './components/ForwardsPanel';
 import { ForwardFormModal } from './components/ForwardFormModal';
+import { KeysPanel } from './components/KeysPanel';
+import { KeyFormModal } from './components/KeyFormModal';
+import { useSshKeyStore } from './state/sshKeyStore';
 import { DbConnectionsPanel } from './components/DbConnectionsPanel';
 import { DbConnectionFormModal, dbSecretKey, type PasswordIntent } from './components/DbConnectionFormModal';
 import { DbPasswordPrompt } from './components/DbPasswordPrompt';
@@ -46,7 +49,7 @@ import {
   ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
   sftpClose, sftpOpen, sshConnect, sshKill, sshWrite, snippetsTouch,
 } from './lib/ipc';
-import type { AuthRequest, DbConnection, DbConnectionInput, Forward, ForwardInput, Host, HostInput, LayoutKind, Snippet, SnippetInput, SshTarget } from './types';
+import type { AuthRequest, DbConnection, DbConnectionInput, Forward, ForwardInput, Host, HostInput, LayoutKind, Snippet, SnippetInput, SshKey, SshKeyInput, SshTarget } from './types';
 import { LAYOUT_SLOT_COUNTS as COUNTS } from './types';
 
 const DEFAULT_COLS = 80;
@@ -96,6 +99,11 @@ type DbFormMode =
   | { kind: 'closed' }
   | { kind: 'create' }
   | { kind: 'edit'; connection: DbConnection };
+
+type KeyFormMode =
+  | { kind: 'closed' }
+  | { kind: 'create' }
+  | { kind: 'edit'; key: SshKey };
 
 export function App() {
   const settings = useSettingsStore((s) => s.settings);
@@ -169,6 +177,8 @@ export function App() {
   const [confirmDeleteSnippet, setConfirmDeleteSnippet] = useState<Snippet | null>(null);
   const [forwardForm, setForwardForm] = useState<ForwardFormMode>({ kind: 'closed' });
   const [confirmDeleteForward, setConfirmDeleteForward] = useState<Forward | null>(null);
+  const [keyForm, setKeyForm] = useState<KeyFormMode>({ kind: 'closed' });
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState<SshKey | null>(null);
   const [dbForm, setDbForm] = useState<DbFormMode>({ kind: 'closed' });
   const [confirmDeleteDb, setConfirmDeleteDb] = useState<DbConnection | null>(null);
   const [dbPasswordPrompt, setDbPasswordPrompt] = useState<DbConnection | null>(null);
@@ -486,6 +496,20 @@ export function App() {
     setConfirmDeleteForward(null);
   }, [deleteForward]);
 
+  const createSshKey = useSshKeyStore((s) => s.create);
+  const updateSshKey = useSshKeyStore((s) => s.update);
+  const deleteSshKey = useSshKeyStore((s) => s.delete);
+  const handleKeySave = useCallback(async (input: SshKeyInput) => {
+    const targetId = keyForm.kind === 'edit' ? keyForm.key.id : null;
+    if (targetId) await updateSshKey(targetId, input);
+    else await createSshKey(input);
+    setKeyForm({ kind: 'closed' });
+  }, [keyForm, updateSshKey, createSshKey]);
+  const handleKeyDelete = useCallback(async (k: SshKey) => {
+    await deleteSshKey(k.id);
+    setConfirmDeleteKey(null);
+  }, [deleteSshKey]);
+
   const createDbConnection = useDbConnectionStore((s) => s.create);
   const updateDbConnection = useDbConnectionStore((s) => s.update);
   const deleteDbConnection = useDbConnectionStore((s) => s.delete);
@@ -736,6 +760,13 @@ export function App() {
               onEdit={(c) => setDbForm({ kind: 'edit', connection: c })}
               onDelete={(c) => setConfirmDeleteDb(c)}
               onOpen={(c) => void requestOpenDb(c)}
+            />
+          }
+          keysSlot={
+            <KeysPanel
+              onAdd={() => setKeyForm({ kind: 'create' })}
+              onEdit={(k) => setKeyForm({ kind: 'edit', key: k })}
+              onDelete={(k) => setConfirmDeleteKey(k)}
             />
           }
         />
@@ -1000,6 +1031,24 @@ export function App() {
       )}
       {dbConnecting && (
         <DbConnectingModal connection={dbConnecting} />
+      )}
+      {keyForm.kind !== 'closed' && (
+        <KeyFormModal
+          mode={keyForm.kind === 'edit' ? 'edit' : 'create'}
+          initial={keyForm.kind === 'edit' ? keyForm.key : undefined}
+          onSave={(input) => void handleKeySave(input)}
+          onCancel={() => setKeyForm({ kind: 'closed' })}
+        />
+      )}
+      {confirmDeleteKey && (
+        <ConfirmModal
+          title="Delete SSH key?"
+          message={`Remove "${confirmDeleteKey.name}" from saved keys? Hosts referencing this key will need to be edited.`}
+          confirmLabel="Delete"
+          destructive
+          onConfirm={() => void handleKeyDelete(confirmDeleteKey)}
+          onCancel={() => setConfirmDeleteKey(null)}
+        />
       )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} initialTab={settingsInitialTab} />}
       {sshImportOpen && <SshConfigImportModal onClose={() => setSshImportOpen(false)} />}

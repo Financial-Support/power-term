@@ -142,6 +142,10 @@ export async function localReveal(path: string): Promise<void> {
   await invoke('local_reveal', { path });
 }
 
+export async function localReadText(path: string): Promise<string> {
+  return invoke<string>('local_read_text', { path });
+}
+
 export async function secretSet(hostId: string, secret: string): Promise<void> {
   await invoke('secret_set', { hostId, secret });
 }

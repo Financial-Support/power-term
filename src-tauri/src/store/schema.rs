@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-pub const CURRENT_VERSION: u32 = 7;
+pub const CURRENT_VERSION: u32 = 8;
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     let mut version: u32 = conn
@@ -23,6 +23,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             4 => migration_v5(conn)?,
             5 => migration_v6(conn)?,
             6 => migration_v7(conn)?,
+            7 => migration_v8(conn)?,
             other => {
                 return Err(rusqlite::Error::SqliteFailure(
                     rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
@@ -141,6 +142,15 @@ fn migration_v7(conn: &Connection) -> Result<()> {
         );
         "#,
     )?;
+    Ok(())
+}
+
+fn migration_v8(conn: &Connection) -> Result<()> {
+    // Inline key contents alongside the metadata so a missing file on
+    // disk doesn't block SSH — the registry can supply the bytes
+    // directly to russh's `decode_secret_key`. Empty string keeps the
+    // previous behaviour (read from `path`).
+    conn.execute_batch("ALTER TABLE ssh_keys ADD COLUMN content TEXT NOT NULL DEFAULT '';")?;
     Ok(())
 }
 
