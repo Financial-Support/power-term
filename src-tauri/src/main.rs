@@ -183,6 +183,8 @@ fn main() {
             power_term::commands::tag_colors_list,
             power_term::commands::tag_color_set,
             power_term::commands::tag_color_delete,
+            power_term::commands::tag_rename,
+            power_term::commands::tag_delete,
             power_term::commands::sftp_open,
             power_term::commands::sftp_close,
             power_term::commands::sftp_list,

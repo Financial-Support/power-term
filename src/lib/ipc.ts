@@ -233,6 +233,12 @@ export async function tagColorSet(name: string, color: string): Promise<TagColor
 export async function tagColorDelete(name: string): Promise<void> {
   await invoke('tag_color_delete', { name });
 }
+export async function tagRename(oldName: string, newName: string): Promise<void> {
+  await invoke('tag_rename', { old: oldName, new: newName });
+}
+export async function tagDelete(name: string): Promise<void> {
+  await invoke('tag_delete', { name });
+}
 
 // ─── Port Forwarding ────────────────────────────────────────────────────────
 

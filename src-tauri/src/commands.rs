@@ -669,6 +669,23 @@ pub fn tag_color_delete(
     store.delete(&name).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn tag_rename(
+    store: tauri::State<'_, TagColorStore>,
+    old: String,
+    new: String,
+) -> Result<(), String> {
+    store.rename(&old, &new).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn tag_delete(
+    store: tauri::State<'_, TagColorStore>,
+    name: String,
+) -> Result<(), String> {
+    store.delete_everywhere(&name).map_err(|e| e.to_string())
+}
+
 // ─── Port Forwarding ────────────────────────────────────────────────────────
 
 use crate::ssh::forward_manager::{ForwardManager, ForwardStatus};

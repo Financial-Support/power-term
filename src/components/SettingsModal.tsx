@@ -259,17 +259,28 @@ function AccentPicker({ value, onChange }: { value: string; onChange: (v: string
 }
 
 /**
- * Tag color manager. Discovers tag names from the existing hosts (so the
- * user never has to "create" a tag — it just appears here once any host
- * uses it) and lets them assign a per-tag color. Internal `kind:value`
- * tags such as `proxyjump:gateway` are filtered out; they're treated as
- * markers, not user-facing labels.
+ * Tag CRUD manager. Tag *names* live on `hosts.tags_json`; this tab keeps
+ * the colour side-table in sync and offers create / rename / delete that
+ * cascade across every host. Internal `kind:value` markers such as
+ * `proxyjump:gateway` are filtered out — they aren't user-facing labels.
+ *
+ * Create here writes a colour row even if no host uses the tag yet, so the
+ * tag is immediately offered by the host-form picker. Delete strips the
+ * tag from every host that has it (and bumps their `updated_at` for sync).
  */
 function TagsTab() {
   const hosts = useHostStore((s) => s.hosts);
   const colors = useTagStore((s) => s.colors);
   const setColor = useTagStore((s) => s.setColor);
   const clearColor = useTagStore((s) => s.clearColor);
+  const renameTag = useTagStore((s) => s.renameTag);
+  const deleteTag = useTagStore((s) => s.deleteTag);
+
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState('#3b82f6');
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState('');
 
   const tagNames = useMemo(() => {
     const set = new Set<string>();
@@ -278,56 +289,156 @@ function TagsTab() {
         if (t && !t.includes(':')) set.add(t);
       }
     }
-    // Also surface any tags that have a color set but aren't on any host
-    // anymore — so the user can clean up the color row.
     for (const k of Object.keys(colors)) set.add(k);
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [hosts, colors]);
 
-  if (tagNames.length === 0) {
-    return (
-      <div className="tags-tab-panel">
-        <p className="form-hint">No tags yet. Add a tag to a host (Edit host → Tags) to manage its color here.</p>
-      </div>
-    );
-  }
+  const tagSet = useMemo(() => new Set(tagNames), [tagNames]);
+
+  const handleCreate = async () => {
+    const trimmed = newName.trim();
+    if (trimmed === '') {
+      setCreateError('Tag name cannot be empty.');
+      return;
+    }
+    if (trimmed.includes(':')) {
+      setCreateError('":" is reserved for internal markers.');
+      return;
+    }
+    if (tagSet.has(trimmed)) {
+      setCreateError(`Tag "${trimmed}" already exists.`);
+      return;
+    }
+    const result = await setColor(trimmed, newColor);
+    if (result) {
+      setNewName('');
+      setCreateError(null);
+    } else {
+      setCreateError(useTagStore.getState().error ?? 'Failed to create tag.');
+    }
+  };
+
+  const startRename = (name: string) => {
+    setEditingName(name);
+    setEditingDraft(name);
+  };
+  const cancelRename = () => {
+    setEditingName(null);
+    setEditingDraft('');
+  };
+  const commitRename = async () => {
+    if (editingName === null) return;
+    const trimmed = editingDraft.trim();
+    if (trimmed === '' || trimmed === editingName) {
+      cancelRename();
+      return;
+    }
+    if (trimmed.includes(':')) return;
+    const ok = await renameTag(editingName, trimmed);
+    if (ok) cancelRename();
+  };
+
+  const handleDelete = async (name: string) => {
+    const usage = hosts.filter((h) => h.tags.includes(name)).length;
+    const message =
+      usage > 0
+        ? `Delete tag "${name}"? It will be removed from ${usage} host${usage === 1 ? '' : 's'}.`
+        : `Delete tag "${name}"?`;
+    if (!confirm(message)) return;
+    await deleteTag(name);
+  };
 
   return (
     <div className="tags-tab-panel">
       <p className="form-hint">
-        Tag colors are stored locally and used to render the chip beside each host. Tags without a custom color use a hash of the name.
+        Tag colors are stored locally and used to render the chip beside each host. Renaming or deleting a tag updates every host that uses it.
       </p>
-      <ul className="tags-list">
-        {tagNames.map((name) => {
-          const stored = colors[name];
-          const effective = stored ?? defaultColor(name);
-          const usageCount = hosts.filter((h) => h.tags.includes(name)).length;
-          return (
-            <li key={name} className="tags-row">
-              <TagChip name={name} className="tags-row-preview" />
-              <span className="tags-row-name">{name}</span>
-              <span className="tags-row-usage">
-                {usageCount > 0 ? `${usageCount} host${usageCount === 1 ? '' : 's'}` : 'unused'}
-              </span>
-              <input
-                type="color"
-                aria-label={`color for tag ${name}`}
-                value={effective}
-                onChange={(e) => void setColor(name, e.target.value)}
-              />
-              {stored && (
+
+      <div className="tags-create-row">
+        <input
+          className="tags-create-name"
+          type="text"
+          placeholder="New tag name"
+          value={newName}
+          onChange={(e) => { setNewName(e.target.value); setCreateError(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreate(); } }}
+          aria-label="New tag name"
+        />
+        <input
+          type="color"
+          aria-label="New tag color"
+          value={newColor}
+          onChange={(e) => setNewColor(e.target.value)}
+        />
+        <button type="button" className="primary" onClick={() => void handleCreate()}>Add</button>
+      </div>
+      {createError && <p className="form-error">{createError}</p>}
+
+      {tagNames.length === 0 ? (
+        <p className="form-hint">No tags yet. Add one above, or attach a tag to a host.</p>
+      ) : (
+        <ul className="tags-list">
+          {tagNames.map((name) => {
+            const stored = colors[name];
+            const effective = stored ?? defaultColor(name);
+            const usageCount = hosts.filter((h) => h.tags.includes(name)).length;
+            const isEditing = editingName === name;
+            return (
+              <li key={name} className="tags-row">
+                <TagChip name={isEditing ? editingDraft || name : name} className="tags-row-preview" />
+                {isEditing ? (
+                  <input
+                    autoFocus
+                    className="tags-row-rename-input"
+                    value={editingDraft}
+                    onChange={(e) => setEditingDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); void commitRename(); }
+                      else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                    }}
+                    onBlur={() => void commitRename()}
+                    aria-label={`Rename ${name}`}
+                  />
+                ) : (
+                  <span className="tags-row-name">{name}</span>
+                )}
+                <span className="tags-row-usage">
+                  {usageCount > 0 ? `${usageCount} host${usageCount === 1 ? '' : 's'}` : 'unused'}
+                </span>
+                <input
+                  type="color"
+                  aria-label={`color for tag ${name}`}
+                  value={effective}
+                  onChange={(e) => void setColor(name, e.target.value)}
+                />
+                {stored && (
+                  <button
+                    type="button"
+                    className="tags-row-clear"
+                    aria-label={`reset ${name} color to default`}
+                    title="Reset to auto color"
+                    onClick={() => void clearColor(name)}
+                  >↺</button>
+                )}
                 <button
                   type="button"
-                  className="tags-row-clear"
-                  aria-label={`reset ${name} color to default`}
-                  title="Reset to auto color"
-                  onClick={() => void clearColor(name)}
-                >↺</button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                  className="tags-row-action"
+                  aria-label={`rename ${name}`}
+                  title="Rename"
+                  onClick={() => (isEditing ? void commitRename() : startRename(name))}
+                >✎</button>
+                <button
+                  type="button"
+                  className="tags-row-action tags-row-delete"
+                  aria-label={`delete ${name}`}
+                  title="Delete tag"
+                  onClick={() => void handleDelete(name)}
+                >🗑</button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

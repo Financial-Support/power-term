@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { homeDir } from '@tauri-apps/api/path';
 import type { AuthMethodKind, Host, HostInput } from '../types';
+import { TagsMultiPicker } from './TagsMultiPicker';
 
 export interface HostFormSaveArgs {
   input: HostInput;
@@ -23,7 +24,7 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
   const [port, setPort] = useState<number>(host?.port ?? 22);
   const [username, setUsername] = useState(host?.username ?? '');
   const [groupName, setGroupName] = useState(host?.group_name ?? '');
-  const [tagsText, setTagsText] = useState((host?.tags ?? []).join(', '));
+  const [tags, setTags] = useState<string[]>(host?.tags ?? []);
   const [authMethod, setAuthMethod] = useState<AuthMethodKind>(host?.auth_method ?? 'agent');
   const [keyPath, setKeyPath] = useState(host?.key_path ?? '');
   const [secret, setSecret] = useState('');
@@ -78,8 +79,10 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
 
   const submit = () => {
     if (!validForm) return;
-    const tags = tagsText.split(/[,\n]/).map((t) => t.trim()).filter((t) => t.length > 0);
-    const dedupedTags = Array.from(new Set(tags));
+    const cleaned = tags
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    const dedupedTags = Array.from(new Set(cleaned));
     const input: HostInput = {
       name: name.trim(),
       hostname: hostname.trim(),
@@ -127,7 +130,7 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
           <input id="hfm-group" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Personal" />
 
           <label htmlFor="hfm-tags">Tags</label>
-          <input id="hfm-tags" value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder="prod, db" />
+          <TagsMultiPicker id="hfm-tags" value={tags} onChange={setTags} />
         </div>
 
         <fieldset className="auth-method">

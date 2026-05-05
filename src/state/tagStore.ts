@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { tagColorDelete, tagColorSet, tagColorsList } from '../lib/ipc';
+import { tagColorDelete, tagColorSet, tagColorsList, tagDelete, tagRename } from '../lib/ipc';
+import { useHostStore } from './hostStore';
 import type { TagColor } from '../types';
 
 interface State {
@@ -10,6 +11,10 @@ interface State {
   load: () => Promise<void>;
   setColor: (name: string, color: string) => Promise<TagColor | null>;
   clearColor: (name: string) => Promise<void>;
+  /** Rename a tag everywhere (color row + every host's tags). */
+  renameTag: (oldName: string, newName: string) => Promise<boolean>;
+  /** Delete a tag everywhere (color row + strip from every host). */
+  deleteTag: (name: string) => Promise<boolean>;
 }
 
 export const useTagStore = create<State>((set) => ({
@@ -47,6 +52,48 @@ export const useTagStore = create<State>((set) => ({
       });
     } catch (e) {
       set({ error: String(e) });
+    }
+  },
+  renameTag: async (oldName, newName) => {
+    const o = oldName.trim();
+    const n = newName.trim();
+    if (o === '' || n === '') {
+      set({ error: 'tag name cannot be empty' });
+      return false;
+    }
+    if (o === n) return true;
+    try {
+      await tagRename(o, n);
+      set((state) => {
+        const next = { ...state.colors };
+        // The backend keeps `new`'s color when both rows exist. Mirror that
+        // here so the UI matches the persisted state without a refetch.
+        const merged = next[n] ?? next[o];
+        delete next[o];
+        if (merged !== undefined) next[n] = merged;
+        return { colors: next, error: null };
+      });
+      // Hosts now reference the new name; reload to keep filters/chips in sync.
+      await useHostStore.getState().load();
+      return true;
+    } catch (e) {
+      set({ error: String(e) });
+      return false;
+    }
+  },
+  deleteTag: async (name) => {
+    try {
+      await tagDelete(name);
+      set((state) => {
+        const next = { ...state.colors };
+        delete next[name];
+        return { colors: next, error: null };
+      });
+      await useHostStore.getState().load();
+      return true;
+    } catch (e) {
+      set({ error: String(e) });
+      return false;
     }
   },
 }));
