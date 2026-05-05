@@ -1,7 +1,7 @@
 // src/components/IconRail.tsx
 import type { ReactNode } from 'react';
 
-export type SidebarSection = 'hosts' | 'snippets' | 'forwards';
+export type SidebarSection = 'hosts' | 'snippets' | 'forwards' | 'databases';
 
 interface Props {
   activeSection: SidebarSection;
@@ -53,6 +53,15 @@ export function IconRail({
         expanded={expanded}
         icon={<IconForwards />}
         label="Forwards"
+      />
+      <RailButton
+        ariaLabel="Databases"
+        title="Databases"
+        onClick={() => onSection('databases')}
+        active={activeSection === 'databases'}
+        expanded={expanded}
+        icon={<IconDatabase />}
+        label="Databases"
       />
 
       <div className="rail-spacer" />
@@ -146,6 +155,16 @@ function IconForwards() {
     <svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden>
       <path d="M2 8h12M10 5l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="4" cy="8" r="1.3" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconDatabase() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <ellipse cx="8" cy="3.5" rx="5" ry="1.5" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M3 3.5v9c0 .83 2.24 1.5 5 1.5s5-.67 5-1.5v-9" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M3 8c0 .83 2.24 1.5 5 1.5s5-.67 5-1.5" stroke="currentColor" strokeWidth="1.25" />
     </svg>
   );
 }

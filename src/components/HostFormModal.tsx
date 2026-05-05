@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { homeDir } from '@tauri-apps/api/path';
+import { useHostStore } from '../state/hostStore';
+import { useSshKeyStore } from '../state/sshKeyStore';
 import type { AuthMethodKind, Host, HostInput } from '../types';
 import { TagsMultiPicker } from './TagsMultiPicker';
 
@@ -19,6 +21,10 @@ interface Props {
 }
 
 export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
+  const hosts = useHostStore((s) => s.hosts);
+  const sshKeys = useSshKeyStore((s) => s.keys);
+  const loadKeys = useSshKeyStore((s) => s.load);
+
   const [name, setName] = useState(host?.name ?? '');
   const [hostname, setHostname] = useState(host?.hostname ?? '');
   const [port, setPort] = useState<number>(host?.port ?? 22);
@@ -32,6 +38,20 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
   const [saveSecret, setSaveSecret] = useState(true);
   const [saveSecretDirty, setSaveSecretDirty] = useState(false);
   const [notes, setNotes] = useState(host?.notes ?? '');
+
+  // Lazy-load saved keys the first time the form opens; the store caches
+  // the result so reopening the form is instant.
+  useEffect(() => { void loadKeys(); }, [loadKeys]);
+
+  // Pre-existing groups derived from the current host list — used as
+  // <datalist> suggestions so the user can pick instead of retyping.
+  // Includes the currently-edited host's group to keep autocomplete
+  // consistent even before the next refresh.
+  const existingGroups = useMemo(() => {
+    const set = new Set<string>();
+    for (const h of hosts) if (h.group_name) set.add(h.group_name);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [hosts]);
 
   useEffect(() => {
     setSecret('');
@@ -127,7 +147,16 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
           <input id="hfm-username" value={username} onChange={(e) => setUsername(e.target.value)} />
 
           <label htmlFor="hfm-group">Group</label>
-          <input id="hfm-group" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Personal" />
+          <input
+            id="hfm-group"
+            list="hfm-groups"
+            value={groupName}
+            onChange={(e) => setGroupName(e.target.value)}
+            placeholder="Personal"
+          />
+          <datalist id="hfm-groups">
+            {existingGroups.map((g) => <option key={g} value={g} />)}
+          </datalist>
 
           <label htmlFor="hfm-tags">Tags</label>
           <TagsMultiPicker id="hfm-tags" value={tags} onChange={setTags} />
@@ -148,6 +177,22 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
 
         {authMethod === 'key' && (
           <div className="auth-fields">
+            <label htmlFor="hfm-key-select">Saved keys</label>
+            <select
+              id="hfm-key-select"
+              value={sshKeys.find((k) => k.path === keyPath)?.id ?? ''}
+              onChange={(e) => {
+                const k = sshKeys.find((x) => x.id === e.target.value);
+                if (k) setKeyPath(k.path);
+                else setKeyPath('');
+              }}
+            >
+              <option value="">— custom path below —</option>
+              {sshKeys.map((k) => (
+                <option key={k.id} value={k.id}>{k.name} ({k.path})</option>
+              ))}
+            </select>
+
             <label htmlFor="hfm-key-path">Key path</label>
             <div className="key-path-row">
               <input id="hfm-key-path" value={keyPath} onChange={(e) => setKeyPath(e.target.value)} placeholder="/Users/you/.ssh/id_ed25519" />

@@ -1,11 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use power_term::db::DbManager;
 use power_term::pty::PtyManager;
 use power_term::settings::SettingsStore;
 use power_term::sftp::SftpManager;
 use power_term::ssh::SshManager;
 use power_term::ssh::forward_manager::ForwardManager;
-use power_term::store::{Db, ForwardStore, HostStore, SnippetStore, TagColorStore};
+use power_term::store::{Db, DbConnectionStore, ForwardStore, HostStore, SnippetStore, SshKeyStore, TagColorStore};
 use power_term::sync::SyncManager;
 use std::sync::Arc;
 use tauri::{Emitter, Listener, Manager};
@@ -22,6 +23,8 @@ fn main() {
     let snippet_store = SnippetStore::new(db.clone());
     let forward_store = ForwardStore::new(db.clone());
     let tag_color_store = TagColorStore::new(db.clone());
+    let db_connection_store = DbConnectionStore::new(db.clone());
+    let ssh_key_store = SshKeyStore::new(db.clone());
     let sync_manager = SyncManager::new();
 
     tauri::Builder::default()
@@ -36,6 +39,9 @@ fn main() {
         .manage(forward_store)
         .manage(tag_color_store)
         .manage(ForwardManager::new())
+        .manage(db_connection_store)
+        .manage(ssh_key_store)
+        .manage(DbManager::new())
         .manage(db)
         .manage(sync_manager)
         .setup(|app| {
@@ -203,6 +209,19 @@ fn main() {
             power_term::commands::forward_stop,
             power_term::commands::forward_status,
             power_term::commands::forwards_status_all,
+            power_term::commands::db_connections_list,
+            power_term::commands::db_connections_create,
+            power_term::commands::db_connections_update,
+            power_term::commands::db_connections_delete,
+            power_term::commands::db_session_open,
+            power_term::commands::db_session_close,
+            power_term::commands::db_query,
+            power_term::commands::db_query_cancel,
+            power_term::commands::db_list_tables,
+            power_term::commands::ssh_keys_list,
+            power_term::commands::ssh_keys_create,
+            power_term::commands::ssh_keys_update,
+            power_term::commands::ssh_keys_delete,
             power_term::sync::sync_sign_in,
             power_term::sync::sync_sign_out,
             power_term::sync::sync_pull,

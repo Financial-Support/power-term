@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-pub const CURRENT_VERSION: u32 = 5;
+pub const CURRENT_VERSION: u32 = 7;
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     let mut version: u32 = conn
@@ -21,6 +21,8 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             2 => migration_v3(conn)?,
             3 => migration_v4(conn)?,
             4 => migration_v5(conn)?,
+            5 => migration_v6(conn)?,
+            6 => migration_v7(conn)?,
             other => {
                 return Err(rusqlite::Error::SqliteFailure(
                     rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
@@ -117,6 +119,52 @@ fn migration_v5(conn: &Connection) -> Result<()> {
             name  TEXT PRIMARY KEY NOT NULL,
             color TEXT NOT NULL
         );
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migration_v7(conn: &Connection) -> Result<()> {
+    // SSH key registry — a side table users curate from the Settings →
+    // Keys tab. Each row binds a friendly label to an absolute private
+    // key path; HostFormModal picks the path from this list instead of
+    // forcing every host to remember its own. `path` is unique so the
+    // same key file can't be registered twice under different labels.
+    conn.execute_batch(
+        r#"
+        CREATE TABLE ssh_keys (
+            id          TEXT PRIMARY KEY NOT NULL,
+            name        TEXT NOT NULL,
+            path        TEXT NOT NULL UNIQUE,
+            created_at  INTEGER NOT NULL,
+            updated_at  INTEGER NOT NULL DEFAULT 0
+        );
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migration_v6(conn: &Connection) -> Result<()> {
+    // Database connections — references a saved Host (whose SSH config we
+    // reuse to tunnel) plus engine-specific endpoint and credential
+    // metadata. Passwords live in the OS keyring, keyed by the row id
+    // (see secrets module), so they never touch this table.
+    conn.execute_batch(
+        r#"
+        CREATE TABLE db_connections (
+            id          TEXT PRIMARY KEY NOT NULL,
+            host_id     TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+            name        TEXT NOT NULL,
+            engine      TEXT NOT NULL CHECK (engine IN ('mysql', 'postgres')),
+            db_host     TEXT NOT NULL DEFAULT '127.0.0.1',
+            db_port     INTEGER NOT NULL CHECK (db_port BETWEEN 1 AND 65535),
+            database    TEXT NOT NULL DEFAULT '',
+            db_user     TEXT NOT NULL,
+            created_at  INTEGER NOT NULL,
+            updated_at  INTEGER NOT NULL DEFAULT 0,
+            last_used_at INTEGER
+        );
+        CREATE INDEX db_connections_host_id_idx ON db_connections(host_id);
         "#,
     )?;
     Ok(())
@@ -288,10 +336,21 @@ mod tests {
         let conn = open_in_memory();
         migrate(&conn).unwrap();
         let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 4);
+        assert_eq!(v, CURRENT_VERSION);
         conn.execute_batch("SELECT updated_at FROM hosts LIMIT 0").unwrap();
         conn.execute_batch("SELECT updated_at FROM snippets LIMIT 0").unwrap();
         conn.execute_batch("SELECT updated_at FROM forwards LIMIT 0").unwrap();
+    }
+
+    #[test]
+    fn migration_v6_creates_db_connections_table() {
+        let conn = open_in_memory();
+        migrate(&conn).unwrap();
+        let n: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='db_connections'",
+            [], |r| r.get(0),
+        ).unwrap();
+        assert_eq!(n, 1);
     }
 
     #[test]

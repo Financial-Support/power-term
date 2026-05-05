@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AuthRequest } from '../types';
 
 interface Props {
@@ -6,17 +6,42 @@ interface Props {
   host: string;
   triedAgent: boolean;
   errorMessage?: string;
+  /** When the previous attempt failed with an actionable input error
+   *  (e.g. encrypted key file), pass the auth that was tried so this
+   *  prompt can preselect the same method and prefill the key path —
+   *  the user usually only needs to type the passphrase. */
+  initialAuth?: AuthRequest;
   onSubmit: (auth: AuthRequest) => void;
   onCancel: () => void;
 }
 
 type Method = 'agent' | 'key' | 'password';
 
-export function AuthPrompt({ user, host, triedAgent, errorMessage, onSubmit, onCancel }: Props) {
-  const [method, setMethod] = useState<Method>(triedAgent ? 'key' : 'agent');
-  const [keyPath, setKeyPath] = useState('');
+function methodFromAuth(a?: AuthRequest): Method | null {
+  if (!a) return null;
+  if (a.kind === 'agent') return 'agent';
+  if (a.kind === 'key') return 'key';
+  return 'password';
+}
+
+export function AuthPrompt({ user, host, triedAgent, errorMessage, initialAuth, onSubmit, onCancel }: Props) {
+  const initialMethod: Method = methodFromAuth(initialAuth) ?? (triedAgent ? 'key' : 'agent');
+  const [method, setMethod] = useState<Method>(initialMethod);
+  const [keyPath, setKeyPath] = useState(
+    initialAuth?.kind === 'key' ? initialAuth.path : '',
+  );
   const [keyPass, setKeyPass] = useState('');
   const [password, setPassword] = useState('');
+  const passInputRef = useRef<HTMLInputElement>(null);
+
+  // When the prompt opens because of an encrypted-key failure, focus the
+  // passphrase field directly — the user has nothing else to fix.
+  useEffect(() => {
+    if (initialMethod === 'key' && keyPath !== '') {
+      passInputRef.current?.focus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submit = () => {
     if (method === 'agent') return onSubmit({ kind: 'agent' });
@@ -37,7 +62,14 @@ export function AuthPrompt({ user, host, triedAgent, errorMessage, onSubmit, onC
         {method === 'key' && (
           <div className="auth-fields">
             <input placeholder="/Users/you/.ssh/id_ed25519" value={keyPath} onChange={(e) => setKeyPath(e.target.value)} />
-            <input type="password" placeholder="Passphrase (optional)" value={keyPass} onChange={(e) => setKeyPass(e.target.value)} />
+            <input
+              ref={passInputRef}
+              type="password"
+              placeholder="Passphrase (optional)"
+              value={keyPass}
+              onChange={(e) => setKeyPass(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
+            />
           </div>
         )}
         {method === 'password' && (

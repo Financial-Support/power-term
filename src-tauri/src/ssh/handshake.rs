@@ -284,7 +284,12 @@ pub async fn handshake_and_auth(
             .map_err(|e| HandshakeError::Any(format!("auth password: {e}")))?,
         Auth::KeyFile { path, passphrase } => {
             let key = crate::ssh::auth::load_key_from_file(&path, passphrase.as_deref())
-                .map_err(|e| HandshakeError::Any(format!("{e}")))?;
+                // Avoid the `any: any: ...` double-prefix when SshError::Any
+                // displays as `any: …` — unwrap the inner message instead.
+                .map_err(|e| match e {
+                    crate::ssh::SshError::Any(s) => HandshakeError::Any(s),
+                    other => HandshakeError::Any(other.to_string()),
+                })?;
             session
                 .authenticate_publickey(user, Arc::new(key))
                 .await

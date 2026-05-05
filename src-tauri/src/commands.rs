@@ -1028,6 +1028,216 @@ fn parse_ssh_config(text: &str, home: &std::path::Path) -> Vec<SshConfigEntry> {
     }).collect()
 }
 
+// ─── Database query runner ──────────────────────────────────────────────────
+
+use crate::db::{DbManager, DbSession};
+use crate::store::{DbConnection, DbConnectionInput, DbConnectionStore, SshKey, SshKeyInput, SshKeyStore};
+
+// ─── SSH key registry ───────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn ssh_keys_list(store: tauri::State<'_, SshKeyStore>) -> Result<Vec<SshKey>, String> {
+    store.list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn ssh_keys_create(
+    store: tauri::State<'_, SshKeyStore>,
+    input: SshKeyInput,
+) -> Result<SshKey, String> {
+    store.create(&input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn ssh_keys_update(
+    store: tauri::State<'_, SshKeyStore>,
+    id: String,
+    input: SshKeyInput,
+) -> Result<SshKey, String> {
+    store.update(&id, &input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn ssh_keys_delete(
+    store: tauri::State<'_, SshKeyStore>,
+    id: String,
+) -> Result<(), String> {
+    store.delete(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn db_connections_list(
+    store: tauri::State<'_, DbConnectionStore>,
+) -> Result<Vec<DbConnection>, String> {
+    store.list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn db_connections_create(
+    store: tauri::State<'_, DbConnectionStore>,
+    input: DbConnectionInput,
+) -> Result<DbConnection, String> {
+    store.create(&input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn db_connections_update(
+    store: tauri::State<'_, DbConnectionStore>,
+    id: String,
+    input: DbConnectionInput,
+) -> Result<DbConnection, String> {
+    store.update(&id, &input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn db_connections_delete(
+    store: tauri::State<'_, DbConnectionStore>,
+    id: String,
+) -> Result<(), String> {
+    store.delete(&id).map_err(|e| e.to_string())
+}
+
+/// `ssh_passphrase` is an optional inline override for an encrypted SSH
+/// key passphrase. When the frontend catches a "key encrypted" failure it
+/// can re-call this command with the passphrase the user just typed,
+/// instead of forcing them to detour through the host editor to save it
+/// to the keychain. Falls back to the keychain entry when None.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn db_session_open(
+    db_manager: tauri::State<'_, DbManager>,
+    db_store: tauri::State<'_, DbConnectionStore>,
+    host_store: tauri::State<'_, HostStore>,
+    settings: tauri::State<'_, SettingsStore>,
+    connection_id: String,
+    db_password: String,
+    ssh_passphrase: Option<String>,
+) -> Result<String, String> {
+    let conn_meta = db_store.get(&connection_id).map_err(|e| e.to_string())?;
+    let host = host_store
+        .get(&conn_meta.host_id)
+        .map_err(|e| e.to_string())?;
+
+    // Resolve SSH auth from the host's saved auth method, pulling the
+    // passphrase / password from the OS keyring when needed. Mirrors the
+    // forward_start command's resolution path so behaviour stays consistent
+    // — if SSH auth fails here it fails there too.
+    let target = SshTarget {
+        host: host.hostname.clone(),
+        port: host.port,
+        user: host.username.clone(),
+    };
+    let auth = match host.auth_method.as_str() {
+        "agent" => Auth::Agent,
+        "key" => {
+            let path = host
+                .key_path
+                .filter(|p| !p.trim().is_empty())
+                .ok_or_else(|| "key auth requires a key_path".to_string())?;
+            // Inline override wins when present (non-empty); otherwise fall
+            // back to whatever the keychain has (which may be None — the
+            // load step then surfaces a "key is encrypted" error that the
+            // renderer handles with a re-prompt).
+            let passphrase = ssh_passphrase
+                .filter(|s| !s.is_empty())
+                .or_else(|| crate::store::secrets::get(&host.id).ok().flatten());
+            Auth::KeyFile {
+                path: PathBuf::from(path),
+                passphrase,
+            }
+        }
+        _ => {
+            let password = crate::store::secrets::get(&host.id)
+                .ok()
+                .flatten()
+                .ok_or_else(|| {
+                    "password auth requires a saved password in the keychain (db MVP)".to_string()
+                })?;
+            Auth::Password { password }
+        }
+    };
+
+    let s = settings.get();
+    let connect_timeout = Duration::from_secs(s.ssh_connect_timeout_secs as u64);
+    let keepalive = Duration::from_secs(s.ssh_keepalive_interval_secs as u64);
+    let known_hosts_path =
+        crate::ssh::known_hosts::KnownHosts::default_user_path().ok_or("no home dir")?;
+
+    let session = DbSession::open(
+        &conn_meta.engine,
+        target,
+        auth,
+        connect_timeout,
+        keepalive,
+        known_hosts_path,
+        None,
+        conn_meta.db_host.clone(),
+        conn_meta.db_port,
+        conn_meta.database.clone(),
+        conn_meta.db_user.clone(),
+        db_password,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let id = db_manager.insert(session);
+    let _ = db_store.touch(&connection_id);
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn db_session_close(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+) -> Result<(), String> {
+    manager.close(&session_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn db_query(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    sql: String,
+) -> Result<crate::db::QueryResult, String> {
+    manager
+        .query(&session_id, &sql)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn db_query_cancel(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+) -> Result<(), String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    session.cancel().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn db_list_tables(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    engine: String,
+) -> Result<Vec<String>, String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    let sql = match engine.as_str() {
+        "postgres" => {
+            "SELECT schemaname || '.' || tablename \
+             FROM pg_tables \
+             WHERE schemaname NOT IN ('pg_catalog', 'information_schema') \
+             ORDER BY schemaname, tablename"
+        }
+        "mysql" => "SHOW TABLES",
+        other => return Err(format!("unknown engine '{other}'")),
+    };
+    let r = session.query(sql).await.map_err(|e| e.to_string())?;
+    Ok(r.rows
+        .into_iter()
+        .filter_map(|row| row.into_iter().next().flatten())
+        .collect())
+}
+
 #[cfg(test)]
 mod ssh_config_tests {
     use super::*;

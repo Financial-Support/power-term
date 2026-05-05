@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod db;
 pub mod pty;
 pub mod settings;
 pub mod sftp;

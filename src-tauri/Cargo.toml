@@ -44,6 +44,8 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 aes-gcm = "0.10"
 bs58 = "0.5"
 url = "2"
+tokio-postgres = "0.7"
+mysql_async = { version = "0.34", default-features = false, features = ["minimal"] }
 
 [dev-dependencies]
 tempfile = "3"

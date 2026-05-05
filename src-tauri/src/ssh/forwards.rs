@@ -291,7 +291,10 @@ async fn start_remote(
             .map_err(|e| ForwardError::Any(format!("auth password: {e}")))?,
         Auth::KeyFile { path, passphrase } => {
             let key = crate::ssh::auth::load_key_from_file(&path, passphrase.as_deref())
-                .map_err(|e| ForwardError::Any(format!("{e}")))?;
+                .map_err(|e| match e {
+                    crate::ssh::SshError::Any(s) => ForwardError::Any(s),
+                    other => ForwardError::Any(other.to_string()),
+                })?;
             session
                 .authenticate_publickey(target.user.clone(), Arc::new(key))
                 .await

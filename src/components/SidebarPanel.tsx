@@ -5,6 +5,7 @@ import { useHostStore } from '../state/hostStore';
 import { useSessionStore } from '../state/sessionStore';
 import type { Host, HostInput } from '../types';
 import type { SidebarSection } from './IconRail';
+import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { TagChip } from './TagChip';
 
 interface Props {
@@ -15,8 +16,10 @@ interface Props {
   onImportSshConfig: () => void;
   onEditHost: (host: Host) => void;
   onDeleteHost: (host: Host) => void;
+  onDuplicateHost: (host: Host) => void;
   snippetsSlot: ReactNode;
   forwardsSlot: ReactNode;
+  databasesSlot: ReactNode;
 }
 
 interface Group {
@@ -30,8 +33,8 @@ const HOST_DRAG_MIME = 'application/x-power-term-host-id';
 
 export function SidebarPanel({
   section,
-  onConnect, onOpenSftp, onAddHost, onImportSshConfig, onEditHost, onDeleteHost,
-  snippetsSlot, forwardsSlot,
+  onConnect, onOpenSftp, onAddHost, onImportSshConfig, onEditHost, onDeleteHost, onDuplicateHost,
+  snippetsSlot, forwardsSlot, databasesSlot,
 }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const error = useHostStore((s) => s.error);
@@ -52,6 +55,7 @@ export function SidebarPanel({
   const [renameDraft, setRenameDraft] = useState('');
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const [draggingHostId, setDraggingHostId] = useState<string | null>(null);
+  const [hostMenu, setHostMenu] = useState<{ x: number; y: number; host: Host } | null>(null);
 
   const filteredHosts = useMemo(
     () => filter.trim()
@@ -217,6 +221,10 @@ export function SidebarPanel({
                           draggable
                           onDragStart={(e) => handleDragStart(e, host)}
                           onDragEnd={handleDragEnd}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setHostMenu({ x: e.clientX, y: e.clientY, host });
+                          }}
                         >
                           <button
                             type="button"
@@ -284,8 +292,47 @@ export function SidebarPanel({
           {forwardsSlot}
         </div>
       )}
+
+      {/* Databases section */}
+      {section === 'databases' && (
+        <div className="sp-section sp-section-slot">
+          {databasesSlot}
+        </div>
+      )}
+
+      {hostMenu && (
+        <ContextMenu
+          x={hostMenu.x}
+          y={hostMenu.y}
+          items={buildHostCtxItems(hostMenu.host, {
+            onConnect, onOpenSftp, onEditHost, onDeleteHost, onDuplicateHost,
+          })}
+          onClose={() => setHostMenu(null)}
+        />
+      )}
     </aside>
   );
+}
+
+function buildHostCtxItems(
+  host: Host,
+  cb: {
+    onConnect: (h: Host) => void;
+    onOpenSftp: (h: Host) => void;
+    onEditHost: (h: Host) => void;
+    onDeleteHost: (h: Host) => void;
+    onDuplicateHost: (h: Host) => void;
+  },
+): MenuEntry[] {
+  return [
+    { label: 'Connect', icon: '⏵', onClick: () => cb.onConnect(host) },
+    { label: 'Open SFTP', icon: '📂', onClick: () => cb.onOpenSftp(host) },
+    { separator: true },
+    { label: 'Edit…', icon: '✎', onClick: () => cb.onEditHost(host) },
+    { label: 'Duplicate', icon: '⎘', onClick: () => cb.onDuplicateHost(host) },
+    { separator: true },
+    { label: 'Delete', icon: '×', danger: true, onClick: () => cb.onDeleteHost(host) },
+  ];
 }
 
 function hostToInput(host: Host, override: Partial<HostInput>): HostInput {

@@ -734,6 +734,56 @@ html, body, #root { height: 100%; margin: 0; }
   cursor: pointer;
 }
 
+.keys-tab-panel { padding: 4px 0; }
+.keys-tab-panel .form-hint {
+  font-size: 12px; color: var(--fg-muted);
+  margin: 0 0 12px 0;
+}
+.keys-create-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto auto;
+  gap: 6px;
+  margin: 0 0 12px 0;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+.keys-create-name, .keys-create-path,
+.keys-row-name-input, .keys-row-path-input {
+  font-size: 13px; padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--fg);
+}
+.keys-create-row button { font-size: 12px; padding: 4px 10px; cursor: pointer; }
+.keys-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 360px; overflow-y: auto;
+}
+.keys-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+}
+.keys-row-name { font-size: 12px; font-weight: 600; color: var(--fg); }
+.keys-row-path {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--fg-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.keys-row-usage { font-size: 11px; color: var(--fg-muted); }
+.keys-row-action {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--fg-muted); font-size: 13px; padding: 2px 6px; border-radius: 4px;
+}
+.keys-row-action:hover { color: var(--fg); background: var(--bg-hover); }
+.keys-row-delete:hover { color: var(--danger); }
+
 .tag-picker {
   display: flex;
   flex-direction: column;
@@ -2089,6 +2139,264 @@ html, body, #root { height: 100%; margin: 0; }
 .fw-dot-starting { background: var(--accent); }
 .fw-dot-error { background: var(--danger); }
 .fw-dot-stopped { background: var(--fg-dim); opacity: 0.5; }
+
+/* ─── Database panel + browser ──────────────────────────────────────────── */
+.db-panel { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.db-panel-header {
+  display: flex; align-items: center;
+  padding: 8px 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.db-panel-toggle {
+  flex: 1; text-align: left; padding: 0 4px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  background: transparent; border: 0; color: var(--fg-dim); cursor: pointer;
+  display: flex; align-items: center; gap: 3px;
+}
+.db-panel-title { color: var(--fg-dim); }
+.db-panel-add {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--fg-dim); padding: 2px 6px; font-size: 14px;
+  border-radius: 4px;
+}
+.db-panel-add:hover { color: var(--fg); background: var(--bg-hover); }
+.db-panel-empty { padding: 10px 12px; font-size: 11px; color: var(--fg-dim); }
+.db-panel-list { list-style: none; margin: 0; padding: 0 4px 8px; overflow-y: auto; flex: 1; }
+.db-row {
+  display: flex; align-items: center; padding: 0 2px 0 4px; border-radius: 5px; gap: 4px;
+  transition: background 0.08s;
+}
+.db-row:hover { background: var(--bg-hover); }
+.db-row-name {
+  flex: 1; display: flex; align-items: center; gap: 6px;
+  background: transparent; border: 0; padding: 4px 4px;
+  cursor: pointer; color: var(--fg); text-align: left;
+  font-family: inherit; font-size: 12px;
+}
+.db-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-host { font-size: 10px; color: var(--fg-dim); }
+.db-engine-pill {
+  display: inline-block; min-width: 22px; padding: 1px 4px; border-radius: 4px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  text-align: center; flex-shrink: 0;
+}
+.db-engine-postgres { background: #336791; color: #fff; }
+.db-engine-mysql    { background: #00758f; color: #fff; }
+.db-row-actions { display: none; gap: 1px; }
+.db-row:hover .db-row-actions,
+.db-row:focus-within .db-row-actions { display: flex; }
+.db-row-actions button {
+  background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
+  color: var(--fg-muted); font-size: 11px; border-radius: 3px;
+}
+.db-row-actions button:hover { color: var(--fg); background: var(--bg-hover); }
+
+.db-browser {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+  background: var(--bg);
+}
+.db-browser-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+.db-browser-name { font-weight: 600; font-size: 13px; }
+.db-browser-meta { font-size: 11px; color: var(--fg-dim); font-family: var(--font-mono); }
+.db-browser-spacer { flex: 1; }
+.db-run, .db-disconnect, .db-stop {
+  font-size: 12px; padding: 4px 10px;
+  border-radius: 4px; border: 1px solid var(--border);
+  background: var(--bg-soft); color: var(--fg);
+  cursor: pointer;
+}
+.db-run.primary {
+  background: var(--accent); color: #1a1a1a; border-color: var(--accent);
+  font-weight: 600;
+}
+.db-run:disabled { opacity: 0.5; cursor: not-allowed; }
+.db-disconnect:hover { background: var(--bg-hover); }
+.db-stop {
+  background: var(--danger); color: #fff; border-color: var(--danger);
+  font-weight: 600;
+}
+.db-stop:hover { filter: brightness(1.1); }
+
+.db-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.db-schema {
+  width: 200px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.db-schema-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px 4px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--fg-dim);
+}
+.db-schema-refresh {
+  background: transparent; border: 0; color: var(--fg-dim); cursor: pointer;
+  padding: 0 4px; font-size: 12px; border-radius: 3px;
+}
+.db-schema-refresh:hover { color: var(--fg); background: var(--bg-hover); }
+.db-schema-refresh:disabled { opacity: 0.4; cursor: wait; }
+.db-schema-filter {
+  margin: 0 8px 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--fg);
+}
+.db-schema-list { flex: 1; overflow-y: auto; padding: 2px 4px 8px; }
+.db-schema-table {
+  display: block; width: 100%; text-align: left;
+  background: transparent; border: 0; cursor: pointer;
+  padding: 3px 8px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--fg); border-radius: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.db-schema-table:hover { background: var(--bg-hover); }
+.db-schema-table.active {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+.db-schema-empty, .db-schema-error {
+  padding: 8px 10px; font-size: 11px; color: var(--fg-dim);
+}
+.db-schema-error { color: var(--danger); white-space: pre-wrap; word-break: break-word; }
+
+.db-main {
+  flex: 1;
+  display: flex; flex-direction: column;
+  min-width: 0;
+}
+.db-editor-host {
+  height: 200px;
+  min-height: 80px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-terminal);
+  resize: vertical;
+  overflow: auto;
+}
+.db-editor-host .cm-editor { height: 100%; }
+.db-editor-host .cm-editor.cm-focused { outline: none; }
+.db-editor-host .cm-content { padding: 8px 0; }
+
+.db-paginate {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.db-paginate-table {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--accent-text); font-weight: 600;
+}
+.db-paginate-spacer { flex: 1; }
+.db-paginate-range { color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.db-paginate-page {
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 50px; text-align: center;
+}
+.db-paginate button {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--fg); cursor: pointer;
+  padding: 1px 8px; font-size: 13px; line-height: 1.2;
+  border-radius: 3px;
+}
+.db-paginate button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--accent); }
+.db-paginate button:disabled { opacity: 0.4; cursor: not-allowed; }
+.db-paginate-size {
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--fg); font-size: 11px;
+  padding: 1px 4px; border-radius: 3px;
+  margin-left: 4px;
+}
+
+.db-result {
+  flex: 1; overflow: auto;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.db-error {
+  padding: 12px 14px; font-family: var(--font-mono); font-size: 12px;
+  color: var(--danger); white-space: pre-wrap;
+}
+.db-result-empty {
+  padding: 24px; text-align: center; color: var(--fg-dim); font-size: 12px;
+}
+.db-result-meta {
+  padding: 6px 12px; font-size: 11px; color: var(--fg-dim);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.db-grid-wrap { overflow: auto; flex: 1; }
+.db-grid {
+  border-collapse: collapse;
+  font-family: var(--font-mono); font-size: 12px;
+  width: max-content; min-width: 100%;
+}
+.db-grid th, .db-grid td {
+  padding: 4px 10px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+  max-width: 480px; overflow: hidden; text-overflow: ellipsis;
+}
+.db-grid th {
+  position: sticky; top: 0;
+  background: var(--bg-panel);
+  font-weight: 600;
+  color: var(--fg);
+  z-index: 1;
+}
+.db-grid tbody tr:nth-child(even) td { background: var(--bg-soft); }
+.db-grid tbody tr:hover td { background: var(--bg-hover); }
+.db-grid-rownum {
+  color: var(--fg-dim); text-align: right; font-size: 10px;
+  background: var(--bg-panel); position: sticky; left: 0;
+}
+.db-grid-null { color: var(--fg-dim); font-style: italic; }
+
+.db-connecting { min-width: 360px; }
+.db-connecting-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px;
+}
+.db-connecting-name {
+  font-size: 15px; font-weight: 600; color: var(--fg);
+}
+.db-connecting-body {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0;
+}
+.db-connecting-step {
+  font-size: 13px; color: var(--fg);
+}
+.db-spinner {
+  display: inline-block;
+  width: 18px; height: 18px;
+  border: 2px solid var(--border-med);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: db-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes db-spin {
+  to { transform: rotate(360deg); }
+}
 
 .settings-tabs {
   display: flex; gap: 0;

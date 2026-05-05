@@ -19,7 +19,7 @@ export interface Settings {
 
 export type SettingsPatch = Partial<Omit<Settings, 'shell'>> & { shell?: string | null };
 
-export type TabKind = 'local' | 'ssh' | 'sftp';
+export type TabKind = 'local' | 'ssh' | 'sftp' | 'db';
 
 export interface Tab {
   id: string;
@@ -166,6 +166,53 @@ export interface ForwardStatus {
   id: string;
   state: ForwardState;
   error: string | null;
+}
+
+export interface SshKey {
+  id: string;
+  name: string;
+  path: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SshKeyInput {
+  name: string;
+  path: string;
+}
+
+export type DbEngine = 'mysql' | 'postgres';
+
+export interface DbConnection {
+  id: string;
+  host_id: string;
+  name: string;
+  engine: DbEngine;
+  db_host: string;
+  db_port: number;
+  database: string;
+  db_user: string;
+  created_at: number;
+  updated_at: number;
+  last_used_at: number | null;
+}
+
+export interface DbConnectionInput {
+  host_id: string;
+  name: string;
+  engine: DbEngine;
+  db_host: string;
+  db_port: number;
+  database: string;
+  db_user: string;
+}
+
+export interface QueryResult {
+  columns: string[];
+  rows: (string | null)[][];
+  rows_affected: number;
+  took_ms: number;
+  statements: number;
 }
 
 export interface SyncUser {

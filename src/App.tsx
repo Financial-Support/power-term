@@ -22,6 +22,14 @@ import { SnippetFormModal } from './components/SnippetFormModal';
 import { useSnippetStore } from './state/snippetStore';
 import { ForwardsPanel } from './components/ForwardsPanel';
 import { ForwardFormModal } from './components/ForwardFormModal';
+import { DbConnectionsPanel } from './components/DbConnectionsPanel';
+import { DbConnectionFormModal, dbSecretKey, type PasswordIntent } from './components/DbConnectionFormModal';
+import { DbPasswordPrompt } from './components/DbPasswordPrompt';
+import { DbSshPassphrasePrompt } from './components/DbSshPassphrasePrompt';
+import { DbConnectingModal } from './components/DbConnectingModal';
+import { DbBrowser } from './components/DbBrowser';
+import { useDbConnectionStore } from './state/dbConnectionStore';
+import { dbSessionClose, dbSessionOpen } from './lib/ipc';
 import { SettingsModal } from './components/SettingsModal';
 import { useForwardStore } from './state/forwardStore';
 import { onForwardStatusForId } from './lib/forwardEvents';
@@ -38,7 +46,7 @@ import {
   ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
   sftpClose, sftpOpen, sshConnect, sshKill, sshWrite, snippetsTouch,
 } from './lib/ipc';
-import type { AuthRequest, Forward, ForwardInput, Host, LayoutKind, Snippet, SnippetInput, SshTarget } from './types';
+import type { AuthRequest, DbConnection, DbConnectionInput, Forward, ForwardInput, Host, HostInput, LayoutKind, Snippet, SnippetInput, SshTarget } from './types';
 import { LAYOUT_SLOT_COUNTS as COUNTS } from './types';
 
 const DEFAULT_COLS = 80;
@@ -67,7 +75,7 @@ type RemoteFlow =
   | { phase: 'idle' }
   | { phase: 'connecting'; targetKind: TargetKind; target: SshTarget; auth: AuthRequest; acceptFp: string | null; titleOverride?: string; touchHostId?: string }
   | { phase: 'fingerprint'; targetKind: TargetKind; target: SshTarget; auth: AuthRequest; fingerprint: string; keyType: string; mismatch?: { expected: string }; titleOverride?: string; touchHostId?: string }
-  | { phase: 'auth'; targetKind: TargetKind; target: SshTarget; tried: string[]; available: string[]; error?: string; titleOverride?: string; touchHostId?: string };
+  | { phase: 'auth'; targetKind: TargetKind; target: SshTarget; tried: string[]; available: string[]; error?: string; titleOverride?: string; touchHostId?: string; previousAuth?: AuthRequest };
 
 type FormMode =
   | { kind: 'closed' }
@@ -83,6 +91,11 @@ type ForwardFormMode =
   | { kind: 'closed' }
   | { kind: 'create' }
   | { kind: 'edit'; forward: Forward };
+
+type DbFormMode =
+  | { kind: 'closed' }
+  | { kind: 'create' }
+  | { kind: 'edit'; connection: DbConnection };
 
 export function App() {
   const settings = useSettingsStore((s) => s.settings);
@@ -156,6 +169,18 @@ export function App() {
   const [confirmDeleteSnippet, setConfirmDeleteSnippet] = useState<Snippet | null>(null);
   const [forwardForm, setForwardForm] = useState<ForwardFormMode>({ kind: 'closed' });
   const [confirmDeleteForward, setConfirmDeleteForward] = useState<Forward | null>(null);
+  const [dbForm, setDbForm] = useState<DbFormMode>({ kind: 'closed' });
+  const [confirmDeleteDb, setConfirmDeleteDb] = useState<DbConnection | null>(null);
+  const [dbPasswordPrompt, setDbPasswordPrompt] = useState<DbConnection | null>(null);
+  /** When the SSH key file backing a DB connection is encrypted and no
+   *  passphrase was on hand, we surface a passphrase prompt here and
+   *  re-issue the open with the user's typed value. */
+  const [dbSshPrompt, setDbSshPrompt] = useState<{ connection: DbConnection; dbPassword: string } | null>(null);
+  /** Held while a `db_session_open` call is in flight — drives the
+   *  connecting modal so the user gets visual feedback during the
+   *  multi-second SSH handshake + DB auth sequence. */
+  const [dbConnecting, setDbConnecting] = useState<DbConnection | null>(null);
+  const [dbSessions, setDbSessions] = useState<Record<string, { sessionId: string; connection: DbConnection }>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sshImportOpen, setSshImportOpen] = useState(false);
   const [aiBarOpen, setAiBarOpen] = useState(false);
@@ -251,9 +276,21 @@ export function App() {
     try {
       if (tab.kind === 'sftp') await sftpClose(tab.ptyId);
       else if (tab.kind === 'ssh') await sshKill(tab.ptyId);
+      else if (tab.kind === 'db') {
+        // The ptyId for db tabs is the backend session id; closing it
+        // tears down the SSH tunnel and the driver client together.
+        await dbSessionClose(tab.ptyId);
+      }
       else await ptyKill(tab.ptyId);
     } catch (e) { console.warn('kill failed', e); }
     if (tab.kind === 'sftp') closeSftpTabState(tab.id);
+    if (tab.kind === 'db') {
+      setDbSessions((m) => {
+        const next = { ...m };
+        delete next[id];
+        return next;
+      });
+    }
     closeTab(id);
     // Last tab closed → fall through to the WelcomePane (no auto-quit).
     // Use ⌘Q or the window close button to actually exit.
@@ -305,7 +342,18 @@ export function App() {
     } catch (e) {
       if (myToken !== flowToken.current) return;
       console.error(`${targetKind === 'shell' ? 'ssh_connect' : 'sftp_open'} failed`, e);
-      setFlow({ phase: 'auth', targetKind, target, tried: [], available: ['agent', 'publickey', 'password'], error: String(e), titleOverride, touchHostId });
+      setFlow({
+        phase: 'auth',
+        targetKind, target,
+        tried: [],
+        available: ['agent', 'publickey', 'password'],
+        error: cleanAuthError(String(e)),
+        titleOverride, touchHostId,
+        // Carry the original auth so AuthPrompt can prefill the right
+        // method + key path. For an encrypted-key error this means the
+        // user only needs to type the passphrase, not retype the path.
+        previousAuth: auth,
+      });
     }
   }, [addTab, touchHost, initSftpTab, startForwardLocal]);
 
@@ -375,6 +423,32 @@ export function App() {
     setConfirmDelete(null);
   }, [deleteHost]);
 
+  const handleDuplicateHost = useCallback(async (host: Host) => {
+    // Build a HostInput mirror — Host has a few server-managed fields
+    // (id, created_at, updated_at, last_used_at) we leave the backend
+    // to regenerate. Name gets the "Copy " prefix per the user's spec.
+    const input: HostInput = {
+      name: `Copy ${host.name}`,
+      hostname: host.hostname,
+      port: host.port,
+      username: host.username,
+      group_name: host.group_name,
+      tags: [...host.tags],
+      auth_method: host.auth_method,
+      key_path: host.key_path,
+      notes: host.notes,
+    };
+    const created = await createHost(input);
+    if (!created) return;
+    // Best-effort: if the source host had a passphrase / password in the
+    // keychain, mirror it onto the new id so the duplicate connects out
+    // of the box without re-typing credentials.
+    try {
+      const existing = await secretGet(host.id);
+      if (existing) await secretSet(created.id, existing);
+    } catch (e) { console.warn('duplicate secret copy failed', e); }
+  }, [createHost]);
+
   const onInsertSnippet = useCallback((snip: Snippet) => {
     const tab = useSessionStore.getState().tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
@@ -411,6 +485,92 @@ export function App() {
     await deleteForward(f.id);
     setConfirmDeleteForward(null);
   }, [deleteForward]);
+
+  const createDbConnection = useDbConnectionStore((s) => s.create);
+  const updateDbConnection = useDbConnectionStore((s) => s.update);
+  const deleteDbConnection = useDbConnectionStore((s) => s.delete);
+
+  const handleDbSave = useCallback(async (input: DbConnectionInput, intent: PasswordIntent) => {
+    const targetId = dbForm.kind === 'edit' ? dbForm.connection.id : null;
+    const saved = targetId
+      ? await updateDbConnection(targetId, input)
+      : await createDbConnection(input);
+    if (saved) {
+      try {
+        if (intent.kind === 'set') await secretSet(dbSecretKey(saved.id), intent.password);
+        else if (intent.kind === 'forget') await secretDelete(dbSecretKey(saved.id));
+      } catch (e) { console.warn('db keychain write failed', e); }
+    }
+    setDbForm({ kind: 'closed' });
+  }, [dbForm, updateDbConnection, createDbConnection]);
+
+  const handleDbDelete = useCallback(async (c: DbConnection) => {
+    // Best-effort: also drop the saved password so the keychain doesn't
+    // accumulate dangling entries for deleted rows.
+    try { await secretDelete(dbSecretKey(c.id)); } catch { /* ignore */ }
+    await deleteDbConnection(c.id);
+    setConfirmDeleteDb(null);
+  }, [deleteDbConnection]);
+
+  const openDbConnection = useCallback(async (
+    connection: DbConnection,
+    password: string,
+    sshPassphrase?: string,
+  ) => {
+    setDbPasswordPrompt(null);
+    setDbSshPrompt(null);
+    setDbConnecting(connection);
+    try {
+      const sessionId = await dbSessionOpen(connection.id, password, sshPassphrase);
+      // The sessionStore tracks one ptyId per tab — for db tabs we use the
+      // backend session id as the ptyId so closeTab teardown can find the
+      // session by the same key. The actual driver client lives in Rust.
+      const tabId = addTab(sessionId, connection.name, 'db');
+      setDbSessions((m) => ({ ...m, [tabId]: { sessionId, connection } }));
+    } catch (e) {
+      const msg = String(e);
+      // Encrypted SSH key on the underlying host — surface a passphrase
+      // prompt and let the user retry without restarting the open flow.
+      // The `ssh:` prefix is added by `DbError::Ssh`; the wording comes
+      // from russh's `decode_secret_key` failure path.
+      if (/encrypted/i.test(msg) && /ssh:/i.test(msg)) {
+        setDbSshPrompt({ connection, dbPassword: password });
+        return;
+      }
+      alert(`Failed to open ${connection.name}: ${e}`);
+    } finally {
+      setDbConnecting(null);
+    }
+  }, [addTab]);
+
+  const submitDbSshPassphrase = useCallback(async (passphrase: string, save: boolean) => {
+    const pending = dbSshPrompt;
+    if (!pending) return;
+    // We don't clear dbSshPrompt here — openDbConnection clears it on
+    // success and leaves it set on failure so the user can retry without
+    // re-entering the DB password.
+    await openDbConnection(pending.connection, pending.dbPassword, passphrase);
+    if (save) {
+      // Best-effort: persist on the host's keychain entry (same key used
+      // by SSH terminal + SFTP + forwards) so future opens are silent.
+      try { await secretSet(pending.connection.host_id, passphrase); }
+      catch (e) { console.warn('save ssh passphrase failed', e); }
+    }
+  }, [dbSshPrompt, openDbConnection]);
+
+  const requestOpenDb = useCallback(async (connection: DbConnection) => {
+    // Try keychain first — if a password is saved, skip the prompt and go
+    // straight to opening. Surfaces a prompt only when there's nothing to
+    // remember or the saved one fails (handled inside openDbConnection).
+    try {
+      const stored = await secretGet(dbSecretKey(connection.id));
+      if (stored) {
+        await openDbConnection(connection, stored);
+        return;
+      }
+    } catch (e) { console.warn('keychain read failed', e); }
+    setDbPasswordPrompt(connection);
+  }, [openDbConnection]);
 
   useHotkeys({ onNewTab: () => void newLocalTab(), onCloseTab: (id) => void handleClose(id), onZoomIn: zoomIn, onZoomOut: zoomOut, onZoomReset: zoomReset });
 
@@ -554,6 +714,7 @@ export function App() {
           onImportSshConfig={() => setSshImportOpen(true)}
           onEditHost={(h) => setForm({ kind: 'edit', host: h })}
           onDeleteHost={(h) => setConfirmDelete(h)}
+          onDuplicateHost={(h) => void handleDuplicateHost(h)}
           snippetsSlot={
             <SnippetsPanel
               onAdd={() => setSnippetForm({ kind: 'create' })}
@@ -569,6 +730,14 @@ export function App() {
               onDelete={(f) => setConfirmDeleteForward(f)}
             />
           }
+          databasesSlot={
+            <DbConnectionsPanel
+              onAdd={() => setDbForm({ kind: 'create' })}
+              onEdit={(c) => setDbForm({ kind: 'edit', connection: c })}
+              onDelete={(c) => setConfirmDeleteDb(c)}
+              onOpen={(c) => void requestOpenDb(c)}
+            />
+          }
         />
         <SidebarResizeHandle onResize={onSidebarResize} />
         <main
@@ -579,7 +748,7 @@ export function App() {
           {/* All non-SFTP tabs always mounted at this stable parent so xterm
               state survives slot reassignment. CSS `order` places each visible
               terminal in its layout slot; non-slot tabs are display:none. */}
-          {tabs.filter((t) => t.kind !== 'sftp').map((t) => {
+          {tabs.filter((t) => t.kind !== 'sftp' && t.kind !== 'db').map((t) => {
             const slotIdx = layoutSlots.indexOf(t.id);
             const inSlot = slotIdx >= 0;
             return (
@@ -608,6 +777,29 @@ export function App() {
                 <div className="sftp-mount" style={{ width: '100%', height: '100%', display: 'flex' }}>
                   <SftpDualBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
                 </div>
+              </div>
+            );
+          })}
+          {/* DB query tabs — same slot model as SFTP. */}
+          {layoutSlots.map((tabId, i) => {
+            if (!tabId) return null;
+            const tab = tabs.find((t) => t.id === tabId);
+            if (!tab || tab.kind !== 'db') return null;
+            const session = dbSessions[tab.id];
+            if (!session) return null;
+            return (
+              <div
+                key={`db-${tab.id}`}
+                className={`pane${i === activePaneIndex ? ' pane-active' : ''}`}
+                style={{ order: i }}
+                onClick={() => setActivePane(i)}
+              >
+                <DbBrowser
+                  tabId={tab.id}
+                  sessionId={session.sessionId}
+                  connection={session.connection}
+                  onClose={() => void handleClose(tab.id)}
+                />
               </div>
             );
           })}
@@ -714,6 +906,7 @@ export function App() {
           host={flow.target.host}
           triedAgent={flow.tried.includes('agent')}
           errorMessage={flow.error}
+          initialAuth={flow.previousAuth}
           onSubmit={(auth) => driveConnect(flow.targetKind, flow.target, auth, null, flow.titleOverride, flow.touchHostId)}
           onCancel={() => setFlow({ phase: 'idle' })}
         />
@@ -772,6 +965,42 @@ export function App() {
           onCancel={() => setConfirmDeleteForward(null)}
         />
       )}
+      {dbForm.kind !== 'closed' && (
+        <DbConnectionFormModal
+          mode={dbForm.kind === 'edit' ? 'edit' : 'create'}
+          connection={dbForm.kind === 'edit' ? dbForm.connection : undefined}
+          onSave={(input, intent) => void handleDbSave(input, intent)}
+          onCancel={() => setDbForm({ kind: 'closed' })}
+        />
+      )}
+      {confirmDeleteDb && (
+        <ConfirmModal
+          title="Delete database connection?"
+          message={`Remove "${confirmDeleteDb.name}" from saved DB connections?`}
+          confirmLabel="Delete"
+          destructive
+          onConfirm={() => void handleDbDelete(confirmDeleteDb)}
+          onCancel={() => setConfirmDeleteDb(null)}
+        />
+      )}
+      {dbPasswordPrompt && (
+        <DbPasswordPrompt
+          connection={dbPasswordPrompt}
+          onSubmit={(password) => void openDbConnection(dbPasswordPrompt, password)}
+          onCancel={() => setDbPasswordPrompt(null)}
+        />
+      )}
+      {dbSshPrompt && (
+        <DbSshPassphrasePrompt
+          connection={dbSshPrompt.connection}
+          host={useHostStore.getState().hosts.find((h) => h.id === dbSshPrompt.connection.host_id) ?? null}
+          onSubmit={(passphrase, save) => void submitDbSshPassphrase(passphrase, save)}
+          onCancel={() => setDbSshPrompt(null)}
+        />
+      )}
+      {dbConnecting && (
+        <DbConnectingModal connection={dbConnecting} />
+      )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} initialTab={settingsInitialTab} />}
       {sshImportOpen && <SshConfigImportModal onClose={() => setSshImportOpen(false)} />}
       <AICommandBar open={aiBarOpen} onClose={() => setAiBarOpen(false)} />
@@ -810,4 +1039,25 @@ function defaultLocalTitle(_shell: string | null): string {
   // show user@host or the saved host name as their title, so "Local"
   // distinguishes the local-PTY tabs at a glance.
   return 'Local';
+}
+
+/**
+ * Surface a friendlier message in the AuthPrompt error banner. Backend
+ * errors arrive prefixed with their thiserror variant (`any: ...`,
+ * `connect failed: ...`, etc.) and sometimes nested ("any: any: ..."
+ * when one Any error wraps another). Strip the leading boilerplate and
+ * map the common encrypted-key wording to a clearer hint so users know
+ * exactly what they need to type.
+ */
+function cleanAuthError(raw: string): string {
+  let s = raw.trim();
+  // Strip wrappers added by the Tauri command boundary.
+  s = s.replace(/^Error:\s*/i, '');
+  // Collapse repeated `any: ` prefixes from nested Any errors.
+  while (s.startsWith('any: ')) s = s.slice('any: '.length);
+  s = s.replace(/^decode key:\s*/i, '');
+  if (/encrypted/i.test(s)) {
+    return 'Private key is encrypted — enter the passphrase below.';
+  }
+  return s;
 }

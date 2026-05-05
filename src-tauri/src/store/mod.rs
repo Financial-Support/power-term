@@ -1,15 +1,19 @@
 pub mod db;
+pub mod db_connections;
 pub mod forwards;
 pub mod host;
 pub mod schema;
 pub mod secrets;
 pub mod snippets;
+pub mod ssh_keys;
 pub mod tags;
 
 pub use db::Db;
+pub use db_connections::{DbConnection, DbConnectionInput, DbConnectionStore};
 pub use forwards::{Forward, ForwardInput, ForwardStore};
 pub use host::{Host, HostInput, HostStore};
 pub use snippets::{Snippet, SnippetInput, SnippetStore};
+pub use ssh_keys::{SshKey, SshKeyInput, SshKeyStore};
 pub use tags::{TagColor, TagColorStore};
 
 #[derive(thiserror::Error, Debug)]

@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor, DbConnection, DbConnectionInput, QueryResult, SshKey, SshKeyInput } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -265,4 +265,57 @@ export async function forwardStatus(id: string): Promise<ForwardStatus> {
 }
 export async function forwardsStatusAll(): Promise<ForwardStatus[]> {
   return invoke<ForwardStatus[]>('forwards_status_all');
+}
+
+// ─── Database query runner ──────────────────────────────────────────────────
+
+export async function dbConnectionsList(): Promise<DbConnection[]> {
+  return invoke<DbConnection[]>('db_connections_list');
+}
+export async function dbConnectionsCreate(input: DbConnectionInput): Promise<DbConnection> {
+  return invoke<DbConnection>('db_connections_create', { input });
+}
+export async function dbConnectionsUpdate(id: string, input: DbConnectionInput): Promise<DbConnection> {
+  return invoke<DbConnection>('db_connections_update', { id, input });
+}
+export async function dbConnectionsDelete(id: string): Promise<void> {
+  await invoke('db_connections_delete', { id });
+}
+export async function dbSessionOpen(
+  connectionId: string,
+  dbPassword: string,
+  sshPassphrase?: string,
+): Promise<string> {
+  return invoke<string>('db_session_open', {
+    connectionId,
+    dbPassword,
+    sshPassphrase: sshPassphrase ?? null,
+  });
+}
+export async function dbSessionClose(sessionId: string): Promise<void> {
+  await invoke('db_session_close', { sessionId });
+}
+export async function dbQuery(sessionId: string, sql: string): Promise<QueryResult> {
+  return invoke<QueryResult>('db_query', { sessionId, sql });
+}
+export async function dbQueryCancel(sessionId: string): Promise<void> {
+  await invoke('db_query_cancel', { sessionId });
+}
+export async function dbListTables(sessionId: string, engine: string): Promise<string[]> {
+  return invoke<string[]>('db_list_tables', { sessionId, engine });
+}
+
+// ─── SSH key registry ───────────────────────────────────────────────────────
+
+export async function sshKeysList(): Promise<SshKey[]> {
+  return invoke<SshKey[]>('ssh_keys_list');
+}
+export async function sshKeysCreate(input: SshKeyInput): Promise<SshKey> {
+  return invoke<SshKey>('ssh_keys_create', { input });
+}
+export async function sshKeysUpdate(id: string, input: SshKeyInput): Promise<SshKey> {
+  return invoke<SshKey>('ssh_keys_update', { id, input });
+}
+export async function sshKeysDelete(id: string): Promise<void> {
+  await invoke('ssh_keys_delete', { id });
 }
