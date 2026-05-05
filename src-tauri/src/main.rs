@@ -121,16 +121,27 @@ fn main() {
             app.listen("deep-link://new-url", move |event| {
                 let sync_state = handle.state::<SyncManager>();
                 let payload = event.payload();
-                // payload is a JSON array of URL strings
+                let _ = handle.emit(
+                    "sync:auth-debug",
+                    format!("deep-link event ({} bytes)", payload.len()),
+                );
                 if let Ok(urls) = serde_json::from_str::<Vec<String>>(payload) {
+                    let _ = handle.emit(
+                        "sync:auth-debug",
+                        format!("parsed {} URL(s) from event", urls.len()),
+                    );
                     for url in urls {
                         power_term::sync::handle_auth_callback(&url, &handle, &sync_state);
                     }
                 } else {
-                    // Some versions emit a plain string
                     let url = payload.trim_matches('"');
                     if url.starts_with("power-term://") {
                         power_term::sync::handle_auth_callback(url, &handle, &sync_state);
+                    } else {
+                        let _ = handle.emit(
+                            "sync:auth-error",
+                            format!("deep-link payload not parseable: {} bytes", payload.len()),
+                        );
                     }
                 }
             });

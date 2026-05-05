@@ -161,11 +161,20 @@ export function App() {
     let u2: (() => void) | undefined;
     let u3: (() => void) | undefined;
     let u4: (() => void) | undefined;
+    let u5: (() => void) | undefined;
+    let u6: (() => void) | undefined;
     listen('menu:open-settings', () => { setSettingsOpen(true); }).then(fn => { u1 = fn; });
     listen('menu:zoom-in', () => { zoomIn(); }).then(fn => { u2 = fn; });
     listen('menu:zoom-out', () => { zoomOut(); }).then(fn => { u3 = fn; });
     listen('menu:zoom-reset', () => { zoomReset(); }).then(fn => { u4 = fn; });
-    return () => { u1?.(); u2?.(); u3?.(); u4?.(); };
+    listen<string>('sync:auth-debug', (e) => {
+      console.log('[auth-debug]', e.payload);
+    }).then(fn => { u5 = fn; });
+    listen<string>('sync:auth-error', (e) => {
+      console.error('[auth-error]', e.payload);
+      alert(`Sign-in failed: ${e.payload}`);
+    }).then(fn => { u6 = fn; });
+    return () => { u1?.(); u2?.(); u3?.(); u4?.(); u5?.(); u6?.(); };
   }, [zoomIn, zoomOut, zoomReset]);
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);

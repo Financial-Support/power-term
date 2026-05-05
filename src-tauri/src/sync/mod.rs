@@ -198,16 +198,30 @@ pub async fn sync_set_key(key_b58: String) -> Result<(), String> {
 /// are never logged, even on the failure path, because OAuth callback URLs
 /// carry long-lived `refresh_token`s in the fragment.
 pub fn handle_auth_callback(url: &str, app: &AppHandle, sync: &SyncManager) {
+    let emit_err = |reason: &str| {
+        tracing::warn!(reason, "auth callback rejected");
+        let _ = app.emit("sync:auth-error", reason.to_string());
+    };
+
+    let _ = app.emit("sync:auth-debug", format!("callback received ({} chars)", url.len()));
+
     let query = url
         .split_once('?')
         .map(|(_, q)| q)
         .or_else(|| url.split_once('#').map(|(_, q)| q))
         .unwrap_or("");
+    if query.is_empty() {
+        emit_err("callback URL has no query or fragment");
+        return;
+    }
+
     let mut access_token = None;
     let mut refresh_token = None;
     let mut state = None;
+    let mut keys_seen: Vec<&str> = Vec::new();
     for pair in query.split('&') {
         if let Some((k, v)) = pair.split_once('=') {
+            keys_seen.push(k);
             match k {
                 "access_token" => access_token = Some(v.to_string()),
                 "refresh_token" => refresh_token = Some(v.to_string()),
@@ -216,40 +230,49 @@ pub fn handle_auth_callback(url: &str, app: &AppHandle, sync: &SyncManager) {
             }
         }
     }
+    let _ = app.emit(
+        "sync:auth-debug",
+        format!("parsed query keys: {}", keys_seen.join(",")),
+    );
 
     let expected_state = match auth::take_oauth_state() {
         Ok(Some(s)) => s,
         Ok(None) => {
-            tracing::warn!("deep-link callback received with no pending OAuth flow — rejecting");
+            emit_err("no pending OAuth state in keychain (sign-in not initiated from this app, or already consumed)");
             return;
         }
         Err(e) => {
-            tracing::error!(error = %e, "failed to read OAuth state from keychain");
+            emit_err(&format!("keychain read error: {e}"));
             return;
         }
     };
     match state.as_deref() {
         Some(s) if s == expected_state => {}
-        _ => {
-            tracing::warn!("deep-link callback state mismatch — rejecting (possible CSRF)");
+        Some(_) => {
+            emit_err("state mismatch — possible CSRF or stale callback");
+            return;
+        }
+        None => {
+            emit_err("callback URL missing `state` parameter");
             return;
         }
     }
 
     let (Some(access), Some(refresh)) = (access_token, refresh_token) else {
-        tracing::warn!("deep-link callback missing tokens (URL redacted to avoid leaking JWT)");
+        emit_err("callback URL missing access_token or refresh_token");
         return;
     };
     if let Err(e) = auth::store_access_token(&access) {
-        tracing::error!(error = %e, "failed to store access token");
+        emit_err(&format!("failed to store access token: {e}"));
         return;
     }
     if let Err(e) = auth::store_refresh_token(&refresh) {
-        tracing::error!(error = %e, "failed to store refresh token");
+        emit_err(&format!("failed to store refresh token: {e}"));
         return;
     }
     let user = auth::user_from_jwt(&access);
     sync.set_user(user, app);
+    let _ = app.emit("sync:auth-debug", "auth callback succeeded".to_string());
 }
 
 #[cfg(test)]
