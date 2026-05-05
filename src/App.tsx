@@ -14,6 +14,7 @@ import { Splitter } from './components/Splitter';
 import { SshConfigImportModal } from './components/SshConfigImportModal';
 import { AICommandBar } from './components/AICommandBar';
 import { SidebarPanel } from './components/SidebarPanel';
+import { SidebarResizeHandle } from './components/SidebarResizeHandle';
 import { HostFormModal, type HostFormSaveArgs } from './components/HostFormModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { SnippetsPanel } from './components/SnippetsPanel';
@@ -132,6 +133,20 @@ export function App() {
     return localStorage.getItem('icon-rail-expanded') === '1';
   });
   useEffect(() => { localStorage.setItem('icon-rail-expanded', railExpanded ? '1' : '0'); }, [railExpanded]);
+
+  const SIDEBAR_MIN = 160;
+  const SIDEBAR_MAX = 480;
+  const SIDEBAR_DEFAULT = 210;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const raw = localStorage.getItem('sidebar-width');
+    const n = raw ? parseInt(raw, 10) : NaN;
+    if (Number.isFinite(n) && n >= SIDEBAR_MIN && n <= SIDEBAR_MAX) return n;
+    return SIDEBAR_DEFAULT;
+  });
+  useEffect(() => { localStorage.setItem('sidebar-width', String(sidebarWidth)); }, [sidebarWidth]);
+  const onSidebarResize = useCallback((dx: number) => {
+    setSidebarWidth((w) => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w + dx)));
+  }, []);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [flow, setFlow] = useState<RemoteFlow>({ phase: 'idle' });
@@ -519,7 +534,10 @@ export function App() {
       <TitleBar onLayoutChange={(kind) => void fillNullSlots(kind)} onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}>
         <TabBar onNew={() => void newLocalTab()} onClose={(id) => void handleClose(id)} />
       </TitleBar>
-      <div className="body">
+      <div
+        className="body"
+        style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` }}
+      >
         <IconRail
           activeSection={sidebarSection}
           onSection={setSidebarSection}
@@ -552,6 +570,7 @@ export function App() {
             />
           }
         />
+        <SidebarResizeHandle onResize={onSidebarResize} />
         <main
           ref={terminalsRef}
           className={`terminals layout-${layoutKind}${broadcast ? ' broadcast-on' : ''}`}

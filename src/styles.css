@@ -346,14 +346,36 @@ html, body, #root { height: 100%; margin: 0; }
 
 /* ─── Sidebar panel ─────────────────────────────────────────────────────── */
 .sidebar-panel {
-  width: 210px;
-  flex: 0 0 210px;
+  /* Width is driven by --sidebar-width set on .body in App.tsx so the user
+     can drag the resize handle to widen / narrow the host list. Default
+     matches the previous fixed value, clamped on the JS side. */
+  width: var(--sidebar-width, 210px);
+  flex: 0 0 var(--sidebar-width, 210px);
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   user-select: none;
+}
+
+.sidebar-resize-handle {
+  flex: 0 0 4px;
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.12s ease;
+  z-index: 1;
+  /* Negative left margin overlaps the sidebar's right border so the
+     pointer hit-zone bites into both sides without making the column
+     visually wider when idle. */
+  margin-left: -2px;
+  margin-right: -2px;
+  position: relative;
+}
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--accent);
 }
 .sp-section {
   display: flex;
