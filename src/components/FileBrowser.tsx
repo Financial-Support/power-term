@@ -224,12 +224,15 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     const items: MenuEntry[] = [];
     if (isDir) {
       items.push({ label: 'Open', icon: '▸', onClick: () => cdInto(entry.name) });
-    } else {
-      if (onCopyToLocal) items.push({
-        label: 'Copy to local',
+    }
+    if (onCopyToLocal && (isDir || entry.kind === 'file')) {
+      items.push({
+        label: isDir ? 'Copy folder to local' : 'Copy to local',
         icon: '⇠',
         onClick: () => void onCopyToLocal(remotePath, entry.name),
       });
+    }
+    if (!isDir) {
       items.push({ label: 'Download…', icon: '⬇', onClick: () => void onDownload(entry) });
     }
     items.push({ separator: true });

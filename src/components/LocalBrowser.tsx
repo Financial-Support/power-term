@@ -102,8 +102,10 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
 
   const onDragStart = (e: React.DragEvent, entry: LocalEntry) => {
     if (!cwd) return;
-    if (entry.kind !== 'file') {
-      // Folder-recursive copy isn't wired — only files for MVP.
+    if (entry.kind !== 'file' && entry.kind !== 'dir') {
+      // Symlinks and special files stay non-draggable — recursive copy
+      // would either silently follow them out of the intended subtree
+      // or raise unhelpful errors mid-walk.
       e.preventDefault();
       return;
     }
@@ -195,11 +197,17 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
           <div
             key={entry.name}
             className={`file-row local-row${entry.kind === 'dir' ? ' is-dir' : ''}`}
-            draggable={entry.kind === 'file'}
+            draggable={entry.kind === 'file' || entry.kind === 'dir'}
             onDragStart={(e) => onDragStart(e, entry)}
             onDoubleClick={() => entry.kind === 'dir' && cdInto(entry.name)}
             onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, entry }); }}
-            title={entry.kind === 'file' ? 'Drag to remote pane to upload' : undefined}
+            title={
+              entry.kind === 'file'
+                ? 'Drag to remote pane to upload'
+                : entry.kind === 'dir'
+                  ? 'Drag to remote pane to upload folder'
+                  : undefined
+            }
           >
             <span className="file-row-name">
               <span className="file-icon">{entry.kind === 'dir' ? '▸' : '·'}</span>
@@ -232,8 +240,13 @@ function buildLocalCtxItems(
   const items: MenuEntry[] = [];
   if (isDir) {
     items.push({ label: 'Open', icon: '▸', onClick: () => cb.cdInto(entry.name) });
-  } else if (cb.onCopyToRemote) {
-    items.push({ label: 'Copy to remote', icon: '⇢', onClick: () => void cb.onCopyToRemote!(fullPath, entry.name) });
+  }
+  if (cb.onCopyToRemote && (isDir || entry.kind === 'file')) {
+    items.push({
+      label: isDir ? 'Copy folder to remote' : 'Copy to remote',
+      icon: '⇢',
+      onClick: () => void cb.onCopyToRemote!(fullPath, entry.name),
+    });
   }
   items.push({ label: 'Reveal in Finder', icon: '◌', onClick: () => void localReveal(fullPath) });
   items.push({ label: 'Copy path', icon: '❏', onClick: () => void navigator.clipboard.writeText(fullPath) });

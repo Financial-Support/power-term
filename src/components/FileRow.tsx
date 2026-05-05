@@ -6,23 +6,26 @@ interface Props {
   onDownload: (entry: SftpEntry) => void;
   onRename: (entry: SftpEntry) => void;
   onDelete: (entry: SftpEntry) => void;
-  /** When set, file rows become draggable; called to fill dataTransfer.
-   *  Directories are never draggable (folder copy isn't wired). */
+  /** When set, rows (files AND directories) become draggable; called to
+   *  fill dataTransfer. Directory drags trigger a recursive download on
+   *  the receiving pane. Symlinks stay non-draggable to keep the copy
+   *  tree well-defined. */
   onDragStart?: (e: React.DragEvent, entry: SftpEntry) => void;
   onContextMenu?: (e: React.MouseEvent, entry: SftpEntry) => void;
 }
 
 export function FileRow({ entry, onCd, onDownload, onRename, onDelete, onDragStart, onContextMenu }: Props) {
   const isDir = entry.kind === 'dir';
-  const icon = isDir ? '📁' : entry.kind === 'symlink' ? '🔗' : '📄';
-  const draggable = !!onDragStart && !isDir;
+  const isSymlink = entry.kind === 'symlink';
+  const icon = isDir ? '📁' : isSymlink ? '🔗' : '📄';
+  const draggable = !!onDragStart && !isSymlink;
   return (
     <div
       className={`file-row ${isDir ? 'is-dir' : ''}`}
       draggable={draggable}
       onDragStart={draggable ? (e) => onDragStart!(e, entry) : undefined}
       onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e, entry); } : undefined}
-      title={draggable ? 'Drag to local pane to download' : undefined}
+      title={draggable ? (isDir ? 'Drag to local pane to download folder' : 'Drag to local pane to download') : undefined}
     >
       <button
         type="button"

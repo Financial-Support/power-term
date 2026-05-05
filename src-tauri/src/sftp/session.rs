@@ -164,7 +164,34 @@ impl SftpSession {
             .map_err(map_sftp_err)
     }
 
+    /// Public download entry point. Stats `remote` and dispatches to the
+    /// directory- or file-recursive variant. Returns total bytes copied.
     pub async fn download(&self, remote: &str, local: &Path) -> Result<u64, SftpError> {
+        let meta = {
+            let sftp = self.sftp.lock().await;
+            sftp.metadata(remote.to_string())
+                .await
+                .map_err(map_sftp_err)?
+        };
+        if meta.is_dir() {
+            self.download_dir(remote, local).await
+        } else {
+            self.download_file(remote, local).await
+        }
+    }
+
+    /// Public upload entry point. Stats `local` and dispatches to the
+    /// directory- or file-recursive variant. Returns total bytes copied.
+    pub async fn upload(&self, local: &Path, remote: &str) -> Result<u64, SftpError> {
+        let meta = tokio::fs::metadata(local).await?;
+        if meta.is_dir() {
+            self.upload_dir(local, remote).await
+        } else {
+            self.upload_file(local, remote).await
+        }
+    }
+
+    async fn download_file(&self, remote: &str, local: &Path) -> Result<u64, SftpError> {
         let sftp = self.sftp.lock().await;
         let mut remote_file = sftp.open(remote.to_string()).await.map_err(map_sftp_err)?;
         if let Some(parent) = local.parent() {
@@ -188,7 +215,7 @@ impl SftpSession {
         Ok(total)
     }
 
-    pub async fn upload(&self, local: &Path, remote: &str) -> Result<u64, SftpError> {
+    async fn upload_file(&self, local: &Path, remote: &str) -> Result<u64, SftpError> {
         let sftp = self.sftp.lock().await;
         let mut local_file = tokio::fs::File::open(local).await?;
         let mut remote_file = sftp
@@ -216,6 +243,79 @@ impl SftpSession {
             .await
             .map_err(|e| SftpError::Any(format!("remote shutdown: {e}")))?;
         Ok(total)
+    }
+
+    /// Recursively copy a remote directory tree into `local`. Iterative
+    /// queue rather than async recursion so each operation locks the sftp
+    /// mutex for the smallest possible window. Symlinks are skipped to
+    /// avoid following links out of the intended subtree.
+    async fn download_dir(&self, remote: &str, local: &Path) -> Result<u64, SftpError> {
+        tokio::fs::create_dir_all(local).await?;
+        let mut total: u64 = 0;
+        let mut queue: Vec<(String, PathBuf)> =
+            vec![(remote.to_string(), local.to_path_buf())];
+        while let Some((rdir, ldir)) = queue.pop() {
+            let entries = self.list(&rdir).await?;
+            for e in entries {
+                let r = format!("{}/{}", rdir.trim_end_matches('/'), e.name);
+                let l = ldir.join(&e.name);
+                match e.kind.as_str() {
+                    "dir" => {
+                        tokio::fs::create_dir_all(&l).await?;
+                        queue.push((r, l));
+                    }
+                    "file" => {
+                        total += self.download_file(&r, &l).await?;
+                    }
+                    _ => { /* skip symlinks and unknown kinds */ }
+                }
+            }
+        }
+        Ok(total)
+    }
+
+    /// Recursively copy a local directory tree into `remote`. The remote
+    /// root is created best-effort — an "already exists" error is ignored
+    /// so partial-resume / merge-into-existing-folder works naturally;
+    /// any other failure surfaces when the first contained file open fails.
+    async fn upload_dir(&self, local: &Path, remote: &str) -> Result<u64, SftpError> {
+        let _ = self.try_mkdir(remote).await;
+        let mut total: u64 = 0;
+        let mut queue: Vec<(PathBuf, String)> =
+            vec![(local.to_path_buf(), remote.to_string())];
+        while let Some((ldir, rdir)) = queue.pop() {
+            let mut rd = tokio::fs::read_dir(&ldir).await?;
+            while let Some(entry) = rd.next_entry().await? {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let l = entry.path();
+                let r = format!("{}/{}", rdir.trim_end_matches('/'), name);
+                let ft = entry.file_type().await?;
+                if ft.is_dir() {
+                    let _ = self.try_mkdir(&r).await;
+                    queue.push((l, r));
+                } else if ft.is_file() {
+                    total += self.upload_file(&l, &r).await?;
+                }
+                // skip symlinks
+            }
+        }
+        Ok(total)
+    }
+
+    /// Like `mkdir` but treats "already exists" as success. Other server
+    /// errors propagate so the caller can decide to abort.
+    async fn try_mkdir(&self, path: &str) -> Result<(), SftpError> {
+        let sftp = self.sftp.lock().await;
+        if sftp
+            .try_exists(path.to_string())
+            .await
+            .map_err(map_sftp_err)?
+        {
+            return Ok(());
+        }
+        sftp.create_dir(path.to_string())
+            .await
+            .map_err(map_sftp_err)
     }
 
     pub async fn close(&self) -> Result<(), SftpError> {
