@@ -298,58 +298,30 @@ pub fn hosts_list(store: tauri::State<'_, HostStore>) -> Result<Vec<Host>, Strin
 }
 
 #[tauri::command]
-pub fn hosts_create(
+pub async fn hosts_create(
     store: tauri::State<'_, HostStore>,
     sync: tauri::State<'_, SyncManager>,
     input: HostInput,
 ) -> Result<Host, String> {
     let host = store.create(&input).map_err(|e| e.to_string())?;
-    {
-        let host_clone = host.clone();
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
-                if !user_id.is_empty() {
-                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                        let row = crate::sync::push::host_to_row(&host_clone, &user_id);
-                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertHost(row.clone())).await {
-                            tracing::warn!(error = %e, "sync push failed — queuing");
-                            queue.enqueue(PendingOp::UpsertHost(row));
-                        }
-                    }
-                }
-            }
-        });
+    if let Some(user_id) = current_user_id().await {
+        let row = crate::sync::push::host_to_row(&host, &user_id);
+        push_or_queue(sync.queue(), PendingOp::UpsertHost(row)).await;
     }
     Ok(host)
 }
 
 #[tauri::command]
-pub fn hosts_update(
+pub async fn hosts_update(
     store: tauri::State<'_, HostStore>,
     sync: tauri::State<'_, SyncManager>,
     id: String,
     input: HostInput,
 ) -> Result<Host, String> {
     let host = store.update(&id, &input).map_err(|e| e.to_string())?;
-    {
-        let host_clone = host.clone();
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
-                if !user_id.is_empty() {
-                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                        let row = crate::sync::push::host_to_row(&host_clone, &user_id);
-                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertHost(row.clone())).await {
-                            tracing::warn!(error = %e, "sync push failed — queuing");
-                            queue.enqueue(PendingOp::UpsertHost(row));
-                        }
-                    }
-                }
-            }
-        });
+    if let Some(user_id) = current_user_id().await {
+        let row = crate::sync::push::host_to_row(&host, &user_id);
+        push_or_queue(sync.queue(), PendingOp::UpsertHost(row)).await;
     }
     Ok(host)
 }
@@ -369,24 +341,23 @@ pub async fn hosts_delete(
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
     let op = PendingOp::DeleteHost { id: id.clone(), updated_at };
-    push_or_queue_tombstone(sync.queue(), op).await;
+    push_or_queue(sync.queue(), op).await;
     Ok(())
 }
 
-/// Deletes are special: if we return before Supabase has the tombstone
-/// the user can quit the app and the in-memory queue evaporates. The
-/// next pull then sees the live row on the server and resurrects it
-/// locally. So we await the push synchronously when the network is up,
-/// and only fall back to the offline queue when the call fails — the
-/// queue is also flushed on the next sync so genuine offline deletes
-/// still propagate eventually.
-async fn push_or_queue_tombstone(
+/// Push a sync op to Supabase synchronously, falling back to the
+/// offline queue on transport failure. Used by every create / update /
+/// delete command so the in-memory queue can't strand a write across
+/// an app quit. When the user is offline (or signed out), the op stays
+/// queued and is flushed by the next sync. 404 PGRST205 means the
+/// target table doesn't exist on the server yet — re-queueing would
+/// loop forever, so we drop the op and log once.
+async fn push_or_queue(
     queue: std::sync::Arc<crate::sync::push::PushQueue>,
     op: PendingOp,
 ) {
     let token = match crate::sync::client::get_valid_token().await {
         Ok(t) => t,
-        // Not signed in or refresh failed — keep the tombstone for later.
         Err(_) => { queue.enqueue(op); return; }
     };
     let client = match crate::sync::client::SupabaseClient::new(token) {
@@ -395,12 +366,22 @@ async fn push_or_queue_tombstone(
     };
     if let Err(e) = crate::sync::push::push_op(&client, &op).await {
         if e.is_table_missing() {
-            tracing::warn!(error = %e, "tombstone target table missing — dropping op");
+            tracing::warn!(error = %e, "sync target table missing — dropping op");
             return;
         }
-        tracing::warn!(error = %e, "tombstone push failed — queuing for next sync");
+        tracing::warn!(error = %e, "sync push failed — queuing for next sync");
         queue.enqueue(op);
     }
+}
+
+/// User id resolution with one-shot Supabase client construction. Cuts
+/// the boilerplate from every upsert command — the few that need to
+/// build encrypted payloads still call into the sync_key + token
+/// helpers themselves.
+async fn current_user_id() -> Option<String> {
+    let token = crate::sync::client::get_valid_token().await.ok()?;
+    let user = crate::sync::auth::user_from_jwt(&token)?;
+    if user.id.is_empty() { None } else { Some(user.id) }
 }
 
 #[tauri::command]
@@ -577,66 +558,36 @@ pub fn snippets_list(store: tauri::State<'_, SnippetStore>) -> Result<Vec<Snippe
 }
 
 #[tauri::command]
-pub fn snippets_create(
+pub async fn snippets_create(
     store: tauri::State<'_, SnippetStore>,
     sync: tauri::State<'_, SyncManager>,
     input: SnippetInput,
 ) -> Result<Snippet, String> {
     let snippet = store.create(&input).map_err(|e| e.to_string())?;
-    {
-        let snippet_clone = snippet.clone();
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
-                if !user_id.is_empty() {
-                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                        let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
-                        let row = match crate::sync::push::snippet_to_row(&snippet_clone, &user_id, sync_key.as_ref()) {
-                            Ok(r) => r,
-                            Err(e) => { tracing::warn!(error = %e, "snippet encrypt failed — skipping push"); return; }
-                        };
-                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
-                            tracing::warn!(error = %e, "sync push failed — queuing");
-                            queue.enqueue(PendingOp::UpsertSnippet(row));
-                        }
-                    }
-                }
-            }
-        });
+    if let Some(user_id) = current_user_id().await {
+        let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
+        match crate::sync::push::snippet_to_row(&snippet, &user_id, sync_key.as_ref()) {
+            Ok(row) => push_or_queue(sync.queue(), PendingOp::UpsertSnippet(row)).await,
+            Err(e) => tracing::warn!(error = %e, "snippet encrypt failed — skipping push"),
+        }
     }
     Ok(snippet)
 }
 
 #[tauri::command]
-pub fn snippets_update(
+pub async fn snippets_update(
     store: tauri::State<'_, SnippetStore>,
     sync: tauri::State<'_, SyncManager>,
     id: String,
     input: SnippetInput,
 ) -> Result<Snippet, String> {
     let snippet = store.update(&id, &input).map_err(|e| e.to_string())?;
-    {
-        let snippet_clone = snippet.clone();
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
-                if !user_id.is_empty() {
-                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                        let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
-                        let row = match crate::sync::push::snippet_to_row(&snippet_clone, &user_id, sync_key.as_ref()) {
-                            Ok(r) => r,
-                            Err(e) => { tracing::warn!(error = %e, "snippet encrypt failed — skipping push"); return; }
-                        };
-                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSnippet(row.clone())).await {
-                            tracing::warn!(error = %e, "sync push failed — queuing");
-                            queue.enqueue(PendingOp::UpsertSnippet(row));
-                        }
-                    }
-                }
-            }
-        });
+    if let Some(user_id) = current_user_id().await {
+        let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
+        match crate::sync::push::snippet_to_row(&snippet, &user_id, sync_key.as_ref()) {
+            Ok(row) => push_or_queue(sync.queue(), PendingOp::UpsertSnippet(row)).await,
+            Err(e) => tracing::warn!(error = %e, "snippet encrypt failed — skipping push"),
+        }
     }
     Ok(snippet)
 }
@@ -653,7 +604,7 @@ pub async fn snippets_delete(
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
     let op = PendingOp::DeleteSnippet { id: id.clone(), updated_at };
-    push_or_queue_tombstone(sync.queue(), op).await;
+    push_or_queue(sync.queue(), op).await;
     Ok(())
 }
 
@@ -718,58 +669,30 @@ pub fn forwards_list(store: tauri::State<'_, ForwardStore>) -> Result<Vec<Forwar
 }
 
 #[tauri::command]
-pub fn forwards_create(
+pub async fn forwards_create(
     store: tauri::State<'_, ForwardStore>,
     sync: tauri::State<'_, SyncManager>,
     input: ForwardInput,
 ) -> Result<Forward, String> {
     let forward = store.create(&input).map_err(|e| e.to_string())?;
-    {
-        let forward_clone = forward.clone();
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
-                if !user_id.is_empty() {
-                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                        let row = crate::sync::push::forward_to_row(&forward_clone, &user_id);
-                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertForward(row.clone())).await {
-                            tracing::warn!(error = %e, "sync push failed — queuing");
-                            queue.enqueue(PendingOp::UpsertForward(row));
-                        }
-                    }
-                }
-            }
-        });
+    if let Some(user_id) = current_user_id().await {
+        let row = crate::sync::push::forward_to_row(&forward, &user_id);
+        push_or_queue(sync.queue(), PendingOp::UpsertForward(row)).await;
     }
     Ok(forward)
 }
 
 #[tauri::command]
-pub fn forwards_update(
+pub async fn forwards_update(
     store: tauri::State<'_, ForwardStore>,
     sync: tauri::State<'_, SyncManager>,
     id: String,
     input: ForwardInput,
 ) -> Result<Forward, String> {
     let forward = store.update(&id, &input).map_err(|e| e.to_string())?;
-    {
-        let forward_clone = forward.clone();
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                let user_id = crate::sync::auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
-                if !user_id.is_empty() {
-                    if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                        let row = crate::sync::push::forward_to_row(&forward_clone, &user_id);
-                        if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertForward(row.clone())).await {
-                            tracing::warn!(error = %e, "sync push failed — queuing");
-                            queue.enqueue(PendingOp::UpsertForward(row));
-                        }
-                    }
-                }
-            }
-        });
+    if let Some(user_id) = current_user_id().await {
+        let row = crate::sync::push::forward_to_row(&forward, &user_id);
+        push_or_queue(sync.queue(), PendingOp::UpsertForward(row)).await;
     }
     Ok(forward)
 }
@@ -789,7 +712,7 @@ pub async fn forwards_delete(
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
     let op = PendingOp::DeleteForward { id: id.clone(), updated_at };
-    push_or_queue_tombstone(sync.queue(), op).await;
+    push_or_queue(sync.queue(), op).await;
     Ok(())
 }
 
@@ -1080,25 +1003,25 @@ pub fn ssh_keys_list(store: tauri::State<'_, SshKeyStore>) -> Result<Vec<SshKey>
 }
 
 #[tauri::command]
-pub fn ssh_keys_create(
+pub async fn ssh_keys_create(
     store: tauri::State<'_, SshKeyStore>,
     sync: tauri::State<'_, SyncManager>,
     input: SshKeyInput,
 ) -> Result<SshKey, String> {
     let key = store.create(&input).map_err(|e| e.to_string())?;
-    push_ssh_key_async(sync.queue(), key.clone());
+    push_ssh_key(sync.queue(), key.clone()).await;
     Ok(key)
 }
 
 #[tauri::command]
-pub fn ssh_keys_update(
+pub async fn ssh_keys_update(
     store: tauri::State<'_, SshKeyStore>,
     sync: tauri::State<'_, SyncManager>,
     id: String,
     input: SshKeyInput,
 ) -> Result<SshKey, String> {
     let key = store.update(&id, &input).map_err(|e| e.to_string())?;
-    push_ssh_key_async(sync.queue(), key.clone());
+    push_ssh_key(sync.queue(), key.clone()).await;
     Ok(key)
 }
 
@@ -1114,43 +1037,23 @@ pub async fn ssh_keys_delete(
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
     let op = PendingOp::DeleteSshKey { id: id.clone(), updated_at: now };
-    push_or_queue_tombstone(sync.queue(), op).await;
+    push_or_queue(sync.queue(), op).await;
     Ok(())
 }
 
-/// Background helper: encrypt + push a single ssh_key row, fall back to
-/// the offline queue on failure. Mirrors the snippet pattern so sync
-/// stays consistent across entities.
-fn push_ssh_key_async(queue: std::sync::Arc<crate::sync::push::PushQueue>, key: SshKey) {
-    tauri::async_runtime::spawn(async move {
-        if let Ok(token) = crate::sync::client::get_valid_token().await {
-            let user_id = crate::sync::auth::user_from_jwt(&token)
-                .map(|u| u.id)
-                .unwrap_or_default();
-            if user_id.is_empty() { return; }
-            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
-                let row = match crate::sync::push::ssh_key_to_row(&key, &user_id, sync_key.as_ref()) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "ssh_key encrypt failed — skipping push");
-                        return;
-                    }
-                };
-                if let Err(e) = crate::sync::push::push_op(&client, &PendingOp::UpsertSshKey(row.clone())).await {
-                    if e.is_table_missing() {
-                        tracing::warn!(
-                            "ssh_keys table missing on Supabase — provision it before sync will work \
-                             (see release notes / docs for the SQL)"
-                        );
-                    } else {
-                        tracing::warn!(error = %e, "ssh_key push failed — queuing");
-                        queue.enqueue(PendingOp::UpsertSshKey(row));
-                    }
-                }
-            }
-        }
-    });
+/// Encrypt + push a single ssh_key row synchronously. The shared
+/// push_or_queue helper handles the offline-queue fallback so we just
+/// have to encrypt and call it.
+async fn push_ssh_key(
+    queue: std::sync::Arc<crate::sync::push::PushQueue>,
+    key: SshKey,
+) {
+    let Some(user_id) = current_user_id().await else { return; };
+    let sync_key = crate::sync::auth::load_sync_key_bytes().ok().flatten();
+    match crate::sync::push::ssh_key_to_row(&key, &user_id, sync_key.as_ref()) {
+        Ok(row) => push_or_queue(queue, PendingOp::UpsertSshKey(row)).await,
+        Err(e) => tracing::warn!(error = %e, "ssh_key encrypt failed — skipping push"),
+    }
 }
 
 #[tauri::command]

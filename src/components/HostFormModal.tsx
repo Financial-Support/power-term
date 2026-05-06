@@ -18,9 +18,12 @@ interface Props {
   host?: Host;
   onSave: (args: HostFormSaveArgs) => void;
   onCancel: () => void;
+  /** When true, disable Save and show a spinner — set by App.tsx while
+   *  the create/update + sync push round-trip is in flight. */
+  saving?: boolean;
 }
 
-export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
+export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const sshKeys = useSshKeyStore((s) => s.keys);
   const loadKeys = useSshKeyStore((s) => s.load);
@@ -223,8 +226,11 @@ export function HostFormModal({ mode, host, onSave, onCancel }: Props) {
         <textarea id="hfm-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
 
         <div className="modal-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary" onClick={submit} disabled={!validForm}>Save</button>
+          <button type="button" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button type="button" className="primary" onClick={submit} disabled={!validForm || saving}>
+            {saving && <span className="db-spinner inline-spinner" aria-hidden />}
+            {saving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </div>
     </div>

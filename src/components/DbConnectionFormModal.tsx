@@ -12,6 +12,7 @@ interface Props {
    *  apply the keychain mutation after the create returns. */
   onSave: (input: DbConnectionInput, password: PasswordIntent) => void;
   onCancel: () => void;
+  saving?: boolean;
 }
 
 export type PasswordIntent =
@@ -24,7 +25,7 @@ export const dbSecretKey = (id: string) => `${KEY_PREFIX}${id}`;
 
 const DEFAULT_PORTS: Record<DbEngine, number> = { mysql: 3306, postgres: 5432 };
 
-export function DbConnectionFormModal({ mode, connection, onSave, onCancel }: Props) {
+export function DbConnectionFormModal({ mode, connection, onSave, onCancel, saving }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const [name, setName] = useState(connection?.name ?? '');
   const [hostId, setHostId] = useState(connection?.host_id ?? hosts[0]?.id ?? '');
@@ -175,8 +176,11 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel }: Pr
         </p>
 
         <div className="modal-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary" onClick={submit} disabled={!valid}>Save</button>
+          <button type="button" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button type="button" className="primary" onClick={submit} disabled={!valid || saving}>
+            {saving && <span className="db-spinner inline-spinner" aria-hidden />}
+            {saving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </div>
     </div>

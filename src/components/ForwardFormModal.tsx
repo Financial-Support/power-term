@@ -7,9 +7,10 @@ interface Props {
   forward?: Forward;
   onSave: (input: ForwardInput) => void;
   onCancel: () => void;
+  saving?: boolean;
 }
 
-export function ForwardFormModal({ mode, forward, onSave, onCancel }: Props) {
+export function ForwardFormModal({ mode, forward, onSave, onCancel, saving }: Props) {
   const hosts = useHostStore((s) => s.hosts);
   const [name, setName] = useState(forward?.name ?? '');
   const [hostId, setHostId] = useState(forward?.host_id ?? '');
@@ -91,8 +92,11 @@ export function ForwardFormModal({ mode, forward, onSave, onCancel }: Props) {
         </label>
 
         <div className="modal-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary" onClick={submit} disabled={!valid}>Save</button>
+          <button type="button" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button type="button" className="primary" onClick={submit} disabled={!valid || saving}>
+            {saving && <span className="db-spinner inline-spinner" aria-hidden />}
+            {saving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </div>
     </div>

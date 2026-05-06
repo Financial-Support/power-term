@@ -6,9 +6,10 @@ interface Props {
   snippet?: Snippet;
   onSave: (input: SnippetInput) => void;
   onCancel: () => void;
+  saving?: boolean;
 }
 
-export function SnippetFormModal({ mode, snippet, onSave, onCancel }: Props) {
+export function SnippetFormModal({ mode, snippet, onSave, onCancel, saving }: Props) {
   const [name, setName] = useState(snippet?.name ?? '');
   const [content, setContent] = useState(snippet?.content ?? '');
   const [tagsText, setTagsText] = useState((snippet?.tags ?? []).join(', '));
@@ -66,8 +67,11 @@ export function SnippetFormModal({ mode, snippet, onSave, onCancel }: Props) {
         />
 
         <div className="modal-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary" onClick={submit} disabled={!validForm}>Save</button>
+          <button type="button" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button type="button" className="primary" onClick={submit} disabled={!validForm || saving}>
+            {saving && <span className="db-spinner inline-spinner" aria-hidden />}
+            {saving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </div>
     </div>

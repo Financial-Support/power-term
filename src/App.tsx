@@ -173,6 +173,10 @@ export function App() {
   const [flow, setFlow] = useState<RemoteFlow>({ phase: 'idle' });
   const [form, setForm] = useState<FormMode>({ kind: 'closed' });
   const [confirmDelete, setConfirmDelete] = useState<Host | null>(null);
+  /** Tracks any in-flight delete / save that's awaiting a Supabase
+   *  round-trip so the relevant modal can show a spinner + lock its
+   *  buttons instead of feeling unresponsive. */
+  const [syncBusy, setSyncBusy] = useState(false);
   const [snippetForm, setSnippetForm] = useState<SnippetFormMode>({ kind: 'closed' });
   const [confirmDeleteSnippet, setConfirmDeleteSnippet] = useState<Snippet | null>(null);
   const [forwardForm, setForwardForm] = useState<ForwardFormMode>({ kind: 'closed' });
@@ -415,23 +419,31 @@ export function App() {
   }, [driveConnect]);
 
   const handleFormSave = useCallback(async (args: HostFormSaveArgs) => {
-    const targetId = form.kind === 'edit' ? form.host.id : null;
-    const saved = targetId ? await updateHost(targetId, args.input) : await createHost(args.input);
-    if (!saved) return;
-    if (args.saveSecret && args.secret) {
-      try { await secretSet(saved.id, args.secret); }
-      catch (e) { console.warn('secret_set failed', e); }
-    } else if (args.forgetSecret) {
-      try { await secretDelete(saved.id); }
-      catch (e) { console.warn('secret_delete failed', e); }
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      const targetId = form.kind === 'edit' ? form.host.id : null;
+      const saved = targetId ? await updateHost(targetId, args.input) : await createHost(args.input);
+      if (!saved) return;
+      if (args.saveSecret && args.secret) {
+        try { await secretSet(saved.id, args.secret); }
+        catch (e) { console.warn('secret_set failed', e); }
+      } else if (args.forgetSecret) {
+        try { await secretDelete(saved.id); }
+        catch (e) { console.warn('secret_delete failed', e); }
+      }
+      setForm({ kind: 'closed' });
+    } finally {
+      setSyncBusy(false);
     }
-    setForm({ kind: 'closed' });
-  }, [form, updateHost, createHost]);
+  }, [form, updateHost, createHost, syncBusy]);
 
   const handleDelete = useCallback(async (host: Host) => {
-    await deleteHost(host.id);
-    setConfirmDelete(null);
-  }, [deleteHost]);
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try { await deleteHost(host.id); }
+    finally { setSyncBusy(false); setConfirmDelete(null); }
+  }, [deleteHost, syncBusy]);
 
   const handleDuplicateHost = useCallback(async (host: Host) => {
     // Build a HostInput mirror — Host has a few server-managed fields
@@ -473,68 +485,104 @@ export function App() {
   }, [activeTabId, touchSnippetLocal]);
 
   const handleSnippetSave = useCallback(async (input: SnippetInput) => {
-    const targetId = snippetForm.kind === 'edit' ? snippetForm.snippet.id : null;
-    if (targetId) await updateSnippet(targetId, input);
-    else await createSnippet(input);
-    setSnippetForm({ kind: 'closed' });
-  }, [snippetForm, updateSnippet, createSnippet]);
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      const targetId = snippetForm.kind === 'edit' ? snippetForm.snippet.id : null;
+      if (targetId) await updateSnippet(targetId, input);
+      else await createSnippet(input);
+      setSnippetForm({ kind: 'closed' });
+    } finally {
+      setSyncBusy(false);
+    }
+  }, [snippetForm, updateSnippet, createSnippet, syncBusy]);
 
   const handleSnippetDelete = useCallback(async (snip: Snippet) => {
-    await deleteSnippet(snip.id);
-    setConfirmDeleteSnippet(null);
-  }, [deleteSnippet]);
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try { await deleteSnippet(snip.id); }
+    finally { setSyncBusy(false); setConfirmDeleteSnippet(null); }
+  }, [deleteSnippet, syncBusy]);
 
   const handleForwardSave = useCallback(async (input: ForwardInput) => {
-    const targetId = forwardForm.kind === 'edit' ? forwardForm.forward.id : null;
-    if (targetId) await updateForward(targetId, input);
-    else await createForward(input);
-    setForwardForm({ kind: 'closed' });
-  }, [forwardForm, updateForward, createForward]);
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      const targetId = forwardForm.kind === 'edit' ? forwardForm.forward.id : null;
+      if (targetId) await updateForward(targetId, input);
+      else await createForward(input);
+      setForwardForm({ kind: 'closed' });
+    } finally {
+      setSyncBusy(false);
+    }
+  }, [forwardForm, updateForward, createForward, syncBusy]);
 
   const handleForwardDelete = useCallback(async (f: Forward) => {
-    await deleteForward(f.id);
-    setConfirmDeleteForward(null);
-  }, [deleteForward]);
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try { await deleteForward(f.id); }
+    finally { setSyncBusy(false); setConfirmDeleteForward(null); }
+  }, [deleteForward, syncBusy]);
 
   const createSshKey = useSshKeyStore((s) => s.create);
   const updateSshKey = useSshKeyStore((s) => s.update);
   const deleteSshKey = useSshKeyStore((s) => s.delete);
   const handleKeySave = useCallback(async (input: SshKeyInput) => {
-    const targetId = keyForm.kind === 'edit' ? keyForm.key.id : null;
-    if (targetId) await updateSshKey(targetId, input);
-    else await createSshKey(input);
-    setKeyForm({ kind: 'closed' });
-  }, [keyForm, updateSshKey, createSshKey]);
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      const targetId = keyForm.kind === 'edit' ? keyForm.key.id : null;
+      if (targetId) await updateSshKey(targetId, input);
+      else await createSshKey(input);
+      setKeyForm({ kind: 'closed' });
+    } finally {
+      setSyncBusy(false);
+    }
+  }, [keyForm, updateSshKey, createSshKey, syncBusy]);
   const handleKeyDelete = useCallback(async (k: SshKey) => {
-    await deleteSshKey(k.id);
-    setConfirmDeleteKey(null);
-  }, [deleteSshKey]);
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try { await deleteSshKey(k.id); }
+    finally { setSyncBusy(false); setConfirmDeleteKey(null); }
+  }, [deleteSshKey, syncBusy]);
 
   const createDbConnection = useDbConnectionStore((s) => s.create);
   const updateDbConnection = useDbConnectionStore((s) => s.update);
   const deleteDbConnection = useDbConnectionStore((s) => s.delete);
 
   const handleDbSave = useCallback(async (input: DbConnectionInput, intent: PasswordIntent) => {
-    const targetId = dbForm.kind === 'edit' ? dbForm.connection.id : null;
-    const saved = targetId
-      ? await updateDbConnection(targetId, input)
-      : await createDbConnection(input);
-    if (saved) {
-      try {
-        if (intent.kind === 'set') await secretSet(dbSecretKey(saved.id), intent.password);
-        else if (intent.kind === 'forget') await secretDelete(dbSecretKey(saved.id));
-      } catch (e) { console.warn('db keychain write failed', e); }
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      const targetId = dbForm.kind === 'edit' ? dbForm.connection.id : null;
+      const saved = targetId
+        ? await updateDbConnection(targetId, input)
+        : await createDbConnection(input);
+      if (saved) {
+        try {
+          if (intent.kind === 'set') await secretSet(dbSecretKey(saved.id), intent.password);
+          else if (intent.kind === 'forget') await secretDelete(dbSecretKey(saved.id));
+        } catch (e) { console.warn('db keychain write failed', e); }
+      }
+      setDbForm({ kind: 'closed' });
+    } finally {
+      setSyncBusy(false);
     }
-    setDbForm({ kind: 'closed' });
-  }, [dbForm, updateDbConnection, createDbConnection]);
+  }, [dbForm, updateDbConnection, createDbConnection, syncBusy]);
 
   const handleDbDelete = useCallback(async (c: DbConnection) => {
-    // Best-effort: also drop the saved password so the keychain doesn't
-    // accumulate dangling entries for deleted rows.
-    try { await secretDelete(dbSecretKey(c.id)); } catch { /* ignore */ }
-    await deleteDbConnection(c.id);
-    setConfirmDeleteDb(null);
-  }, [deleteDbConnection]);
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      // Best-effort: also drop the saved password so the keychain doesn't
+      // accumulate dangling entries for deleted rows.
+      try { await secretDelete(dbSecretKey(c.id)); } catch { /* ignore */ }
+      await deleteDbConnection(c.id);
+    } finally {
+      setSyncBusy(false);
+      setConfirmDeleteDb(null);
+    }
+  }, [deleteDbConnection, syncBusy]);
 
   const openDbConnection = useCallback(async (
     connection: DbConnection,
@@ -948,6 +996,7 @@ export function App() {
           host={form.kind === 'edit' ? form.host : undefined}
           onSave={(args) => void handleFormSave(args)}
           onCancel={() => setForm({ kind: 'closed' })}
+          saving={syncBusy}
         />
       )}
       {confirmDelete && (
@@ -955,6 +1004,8 @@ export function App() {
           title="Delete host?"
           message={`Remove "${confirmDelete.name}" from saved hosts? Any saved password / passphrase will also be removed from the Keychain.`}
           confirmLabel="Delete"
+          loadingLabel="Deleting"
+          loading={syncBusy}
           destructive
           onConfirm={() => void handleDelete(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
@@ -966,6 +1017,7 @@ export function App() {
           snippet={snippetForm.kind === 'edit' ? snippetForm.snippet : undefined}
           onSave={(input) => void handleSnippetSave(input)}
           onCancel={() => setSnippetForm({ kind: 'closed' })}
+          saving={syncBusy}
         />
       )}
       {confirmDeleteSnippet && (
@@ -973,6 +1025,8 @@ export function App() {
           title="Delete snippet?"
           message={`Remove "${confirmDeleteSnippet.name}" from saved snippets?`}
           confirmLabel="Delete"
+          loadingLabel="Deleting"
+          loading={syncBusy}
           destructive
           onConfirm={() => void handleSnippetDelete(confirmDeleteSnippet)}
           onCancel={() => setConfirmDeleteSnippet(null)}
@@ -984,6 +1038,7 @@ export function App() {
           forward={forwardForm.kind === 'edit' ? forwardForm.forward : undefined}
           onSave={(input) => void handleForwardSave(input)}
           onCancel={() => setForwardForm({ kind: 'closed' })}
+          saving={syncBusy}
         />
       )}
       {confirmDeleteForward && (
@@ -991,6 +1046,8 @@ export function App() {
           title="Delete forward?"
           message={`Remove "${confirmDeleteForward.name}" from saved forwards?`}
           confirmLabel="Delete"
+          loadingLabel="Deleting"
+          loading={syncBusy}
           destructive
           onConfirm={() => void handleForwardDelete(confirmDeleteForward)}
           onCancel={() => setConfirmDeleteForward(null)}
@@ -1002,6 +1059,7 @@ export function App() {
           connection={dbForm.kind === 'edit' ? dbForm.connection : undefined}
           onSave={(input, intent) => void handleDbSave(input, intent)}
           onCancel={() => setDbForm({ kind: 'closed' })}
+          saving={syncBusy}
         />
       )}
       {confirmDeleteDb && (
@@ -1009,6 +1067,8 @@ export function App() {
           title="Delete database connection?"
           message={`Remove "${confirmDeleteDb.name}" from saved DB connections?`}
           confirmLabel="Delete"
+          loadingLabel="Deleting"
+          loading={syncBusy}
           destructive
           onConfirm={() => void handleDbDelete(confirmDeleteDb)}
           onCancel={() => setConfirmDeleteDb(null)}
@@ -1038,6 +1098,7 @@ export function App() {
           initial={keyForm.kind === 'edit' ? keyForm.key : undefined}
           onSave={(input) => void handleKeySave(input)}
           onCancel={() => setKeyForm({ kind: 'closed' })}
+          saving={syncBusy}
         />
       )}
       {confirmDeleteKey && (
@@ -1045,6 +1106,8 @@ export function App() {
           title="Delete SSH key?"
           message={`Remove "${confirmDeleteKey.name}" from saved keys? Hosts referencing this key will need to be edited.`}
           confirmLabel="Delete"
+          loadingLabel="Deleting"
+          loading={syncBusy}
           destructive
           onConfirm={() => void handleKeyDelete(confirmDeleteKey)}
           onCancel={() => setConfirmDeleteKey(null)}

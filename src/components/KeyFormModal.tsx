@@ -9,6 +9,7 @@ interface Props {
   initial?: SshKey;
   onSave: (input: SshKeyInput) => void;
   onCancel: () => void;
+  saving?: boolean;
 }
 
 /**
@@ -18,7 +19,7 @@ interface Props {
  * when the original file is gone. The captured copy is still encrypted
  * with the user's sync key before any remote upload — see push.rs.
  */
-export function KeyFormModal({ mode, initial, onSave, onCancel }: Props) {
+export function KeyFormModal({ mode, initial, onSave, onCancel, saving }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [path, setPath] = useState(initial?.path ?? '');
   const [content, setContent] = useState(initial?.content ?? '');
@@ -131,8 +132,11 @@ export function KeyFormModal({ mode, initial, onSave, onCancel }: Props) {
         </div>
 
         <div className="modal-actions">
-          <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="primary" onClick={submit} disabled={!valid}>Save</button>
+          <button type="button" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button type="button" className="primary" onClick={submit} disabled={!valid || saving}>
+            {saving && <span className="db-spinner inline-spinner" aria-hidden />}
+            {saving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </div>
     </div>
