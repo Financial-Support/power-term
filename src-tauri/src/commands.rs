@@ -355,7 +355,7 @@ pub fn hosts_update(
 }
 
 #[tauri::command]
-pub fn hosts_delete(
+pub async fn hosts_delete(
     store: tauri::State<'_, HostStore>,
     sync: tauri::State<'_, SyncManager>,
     id: String,
@@ -368,24 +368,39 @@ pub fn hosts_delete(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-    // Enqueue synchronously BEFORE returning so the tombstone is durable
-    // in the offline queue even if the user immediately triggers a sync.
-    // Otherwise pull_all sees the not-yet-deleted row on Supabase and
-    // re-inserts it locally.
-    let queue = sync.queue();
-    queue.enqueue(PendingOp::DeleteHost { id: id.clone(), updated_at });
-    // Best-effort opportunistic flush so a healthy network drains the
-    // tombstone right away. Failure leaves the queued op in place for the
-    // next sync — no data is lost either way.
-    let queue_clone = queue.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Ok(token) = crate::sync::client::get_valid_token().await {
-            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                crate::sync::push::flush_queue(&client, &queue_clone).await;
-            }
-        }
-    });
+    let op = PendingOp::DeleteHost { id: id.clone(), updated_at };
+    push_or_queue_tombstone(sync.queue(), op).await;
     Ok(())
+}
+
+/// Deletes are special: if we return before Supabase has the tombstone
+/// the user can quit the app and the in-memory queue evaporates. The
+/// next pull then sees the live row on the server and resurrects it
+/// locally. So we await the push synchronously when the network is up,
+/// and only fall back to the offline queue when the call fails — the
+/// queue is also flushed on the next sync so genuine offline deletes
+/// still propagate eventually.
+async fn push_or_queue_tombstone(
+    queue: std::sync::Arc<crate::sync::push::PushQueue>,
+    op: PendingOp,
+) {
+    let token = match crate::sync::client::get_valid_token().await {
+        Ok(t) => t,
+        // Not signed in or refresh failed — keep the tombstone for later.
+        Err(_) => { queue.enqueue(op); return; }
+    };
+    let client = match crate::sync::client::SupabaseClient::new(token) {
+        Ok(c) => c,
+        Err(_) => { queue.enqueue(op); return; }
+    };
+    if let Err(e) = crate::sync::push::push_op(&client, &op).await {
+        if e.is_table_missing() {
+            tracing::warn!(error = %e, "tombstone target table missing — dropping op");
+            return;
+        }
+        tracing::warn!(error = %e, "tombstone push failed — queuing for next sync");
+        queue.enqueue(op);
+    }
 }
 
 #[tauri::command]
@@ -627,7 +642,7 @@ pub fn snippets_update(
 }
 
 #[tauri::command]
-pub fn snippets_delete(
+pub async fn snippets_delete(
     store: tauri::State<'_, SnippetStore>,
     sync: tauri::State<'_, SyncManager>,
     id: String,
@@ -637,16 +652,8 @@ pub fn snippets_delete(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-    let queue = sync.queue();
-    queue.enqueue(PendingOp::DeleteSnippet { id: id.clone(), updated_at });
-    let queue_clone = queue.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Ok(token) = crate::sync::client::get_valid_token().await {
-            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                crate::sync::push::flush_queue(&client, &queue_clone).await;
-            }
-        }
-    });
+    let op = PendingOp::DeleteSnippet { id: id.clone(), updated_at };
+    push_or_queue_tombstone(sync.queue(), op).await;
     Ok(())
 }
 
@@ -768,7 +775,7 @@ pub fn forwards_update(
 }
 
 #[tauri::command]
-pub fn forwards_delete(
+pub async fn forwards_delete(
     store: tauri::State<'_, ForwardStore>,
     manager: tauri::State<'_, ForwardManager>,
     sync: tauri::State<'_, SyncManager>,
@@ -781,16 +788,8 @@ pub fn forwards_delete(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-    let queue = sync.queue();
-    queue.enqueue(PendingOp::DeleteForward { id: id.clone(), updated_at });
-    let queue_clone = queue.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Ok(token) = crate::sync::client::get_valid_token().await {
-            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                crate::sync::push::flush_queue(&client, &queue_clone).await;
-            }
-        }
-    });
+    let op = PendingOp::DeleteForward { id: id.clone(), updated_at };
+    push_or_queue_tombstone(sync.queue(), op).await;
     Ok(())
 }
 
@@ -1104,7 +1103,7 @@ pub fn ssh_keys_update(
 }
 
 #[tauri::command]
-pub fn ssh_keys_delete(
+pub async fn ssh_keys_delete(
     store: tauri::State<'_, SshKeyStore>,
     sync: tauri::State<'_, SyncManager>,
     id: String,
@@ -1114,16 +1113,8 @@ pub fn ssh_keys_delete(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-    let queue = sync.queue();
-    queue.enqueue(PendingOp::DeleteSshKey { id: id.clone(), updated_at: now });
-    let queue_clone = queue.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Ok(token) = crate::sync::client::get_valid_token().await {
-            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                crate::sync::push::flush_queue(&client, &queue_clone).await;
-            }
-        }
-    });
+    let op = PendingOp::DeleteSshKey { id: id.clone(), updated_at: now };
+    push_or_queue_tombstone(sync.queue(), op).await;
     Ok(())
 }
 
