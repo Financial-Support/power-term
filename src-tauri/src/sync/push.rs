@@ -255,6 +255,14 @@ pub async fn flush_queue(client: &SupabaseClient, queue: &Arc<PushQueue>) {
     let ops = queue.drain();
     for op in ops {
         if let Err(e) = push_op(client, &op).await {
+            // PostgREST 404 PGRST205 means the table itself doesn't exist
+            // on Supabase yet — re-queueing would loop forever, so log
+            // once and drop the op. Operator runs the SQL migration to
+            // recover; offline retries can't fix a missing schema.
+            if e.is_table_missing() {
+                tracing::warn!(error = %e, "push: target table missing on server — dropping op");
+                continue;
+            }
             tracing::warn!(error = %e, "push retry failed — re-enqueuing");
             queue.enqueue(op);
         }

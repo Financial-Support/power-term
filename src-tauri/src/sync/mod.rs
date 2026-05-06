@@ -80,18 +80,30 @@ impl SyncManager {
         self.emit_state(app);
 
         let queue = self.queue.clone();
+        // First-sync detection: when last_synced is None, the local SQLite
+        // has data the server has never seen, so a one-shot push_all_local
+        // bootstrap is appropriate. After that, every change goes through
+        // the queue so we never blindly re-upload local rows that happen
+        // to be tombstoned on the server.
+        let is_first_sync = self.state.lock().last_synced.is_none();
         let result: Result<(), String> = async {
             let token = get_valid_token().await.map_err(|e| e.to_string())?;
             let user_id = auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
             let client = SupabaseClient::new(token).map_err(|e| e.to_string())?;
             let sync_key = auth::load_sync_key_bytes().ok().flatten();
+
+            // Push local ops FIRST so any pending tombstones reach the
+            // server before we pull. Without this, a freshly-deleted host
+            // can be re-inserted by pull_all because the server still has
+            // the row without deleted_at, and a subsequent push_all_local
+            // would then echo the resurrected row right back up.
+            flush_queue(&client, &queue).await;
             pull::pull_all(&client, db, sync_key.as_ref()).await.map_err(|e| e.to_string())?;
-            if !user_id.is_empty() {
+            if is_first_sync && !user_id.is_empty() {
                 if let Err(e) = push::push_all_local(&client, db, &user_id).await {
                     tracing::warn!(error = %e, "push_all_local failed");
                 }
             }
-            flush_queue(&client, &queue).await;
             Ok(())
         }.await;
 

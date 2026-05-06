@@ -364,25 +364,27 @@ pub fn hosts_delete(
     if let Err(e) = store::secrets::delete(&id) {
         tracing::warn!(host_id = %id, error = ?e, "failed to delete secret on host delete");
     }
-    {
-        let delete_id = id.clone();
-        let updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    let op = PendingOp::DeleteHost { id: delete_id.clone(), updated_at };
-                    if let Err(e) = crate::sync::push::push_op(&client, &op).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::DeleteHost { id: delete_id, updated_at });
-                    }
-                }
+    let updated_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    // Enqueue synchronously BEFORE returning so the tombstone is durable
+    // in the offline queue even if the user immediately triggers a sync.
+    // Otherwise pull_all sees the not-yet-deleted row on Supabase and
+    // re-inserts it locally.
+    let queue = sync.queue();
+    queue.enqueue(PendingOp::DeleteHost { id: id.clone(), updated_at });
+    // Best-effort opportunistic flush so a healthy network drains the
+    // tombstone right away. Failure leaves the queued op in place for the
+    // next sync — no data is lost either way.
+    let queue_clone = queue.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Ok(token) = crate::sync::client::get_valid_token().await {
+            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                crate::sync::push::flush_queue(&client, &queue_clone).await;
             }
-        });
-    }
+        }
+    });
     Ok(())
 }
 
@@ -631,25 +633,20 @@ pub fn snippets_delete(
     id: String,
 ) -> Result<(), String> {
     store.delete(&id).map_err(|e| e.to_string())?;
-    {
-        let delete_id = id.clone();
-        let updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    let op = PendingOp::DeleteSnippet { id: delete_id.clone(), updated_at };
-                    if let Err(e) = crate::sync::push::push_op(&client, &op).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::DeleteSnippet { id: delete_id, updated_at });
-                    }
-                }
+    let updated_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let queue = sync.queue();
+    queue.enqueue(PendingOp::DeleteSnippet { id: id.clone(), updated_at });
+    let queue_clone = queue.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Ok(token) = crate::sync::client::get_valid_token().await {
+            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                crate::sync::push::flush_queue(&client, &queue_clone).await;
             }
-        });
-    }
+        }
+    });
     Ok(())
 }
 
@@ -780,25 +777,20 @@ pub fn forwards_delete(
 ) -> Result<(), String> {
     store.delete(&id).map_err(|e| e.to_string())?;
     let _ = manager.stop(app, &id);
-    {
-        let delete_id = id.clone();
-        let updated_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
-        let queue = sync.queue();
-        tauri::async_runtime::spawn(async move {
-            if let Ok(token) = crate::sync::client::get_valid_token().await {
-                if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                    let op = PendingOp::DeleteForward { id: delete_id.clone(), updated_at };
-                    if let Err(e) = crate::sync::push::push_op(&client, &op).await {
-                        tracing::warn!(error = %e, "sync push failed — queuing");
-                        queue.enqueue(PendingOp::DeleteForward { id: delete_id, updated_at });
-                    }
-                }
+    let updated_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let queue = sync.queue();
+    queue.enqueue(PendingOp::DeleteForward { id: id.clone(), updated_at });
+    let queue_clone = queue.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Ok(token) = crate::sync::client::get_valid_token().await {
+            if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
+                crate::sync::push::flush_queue(&client, &queue_clone).await;
             }
-        });
-    }
+        }
+    });
     Ok(())
 }
 
@@ -1118,24 +1110,17 @@ pub fn ssh_keys_delete(
     id: String,
 ) -> Result<(), String> {
     store.delete(&id).map_err(|e| e.to_string())?;
-    let queue = sync.queue();
-    let id_clone = id.clone();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
+    let queue = sync.queue();
+    queue.enqueue(PendingOp::DeleteSshKey { id: id.clone(), updated_at: now });
+    let queue_clone = queue.clone();
     tauri::async_runtime::spawn(async move {
         if let Ok(token) = crate::sync::client::get_valid_token().await {
             if let Ok(client) = crate::sync::client::SupabaseClient::new(token) {
-                let op = PendingOp::DeleteSshKey { id: id_clone.clone(), updated_at: now };
-                if let Err(e) = crate::sync::push::push_op(&client, &op).await {
-                    if e.is_table_missing() {
-                        tracing::warn!("ssh_keys table missing on Supabase — skipping delete sync");
-                    } else {
-                        tracing::warn!(error = %e, "ssh_key delete push failed — queuing");
-                        queue.enqueue(op);
-                    }
-                }
+                crate::sync::push::flush_queue(&client, &queue_clone).await;
             }
         }
     });
