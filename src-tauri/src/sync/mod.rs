@@ -10,8 +10,31 @@ use crate::sync::client::{get_valid_token, SupabaseClient};
 use crate::sync::push::{PushQueue, flush_queue};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
+
+/// Path to the marker file that flags "we have run push_all_local at
+/// least once on this install". Lives next to the encrypted secrets
+/// blob so it shares a single, durable, per-user config dir.
+fn first_sync_marker_path() -> PathBuf {
+    let dir = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("power-term");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(".first-sync-done")
+}
+
+fn first_sync_marker_exists() -> bool {
+    first_sync_marker_path().exists()
+}
+
+fn mark_first_sync_done() {
+    let path = first_sync_marker_path();
+    if let Err(e) = std::fs::write(&path, b"") {
+        tracing::warn!(error = %e, "could not write first-sync marker — push_all_local may run again next launch");
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -80,12 +103,14 @@ impl SyncManager {
         self.emit_state(app);
 
         let queue = self.queue.clone();
-        // First-sync detection: when last_synced is None, the local SQLite
-        // has data the server has never seen, so a one-shot push_all_local
-        // bootstrap is appropriate. After that, every change goes through
-        // the queue so we never blindly re-upload local rows that happen
-        // to be tombstoned on the server.
-        let is_first_sync = self.state.lock().last_synced.is_none();
+        // First-sync detection: persisted to disk so the bootstrap
+        // push_all_local fires exactly once ever per install. The previous
+        // version checked the in-memory last_synced field, which resets
+        // on every app launch — that meant push_all_local ran on every
+        // session and could resurrect tombstoned rows by upserting them
+        // back without deleted_at. Now we only bootstrap when the marker
+        // file is missing.
+        let is_first_sync = !first_sync_marker_exists();
         let result: Result<(), String> = async {
             let token = get_valid_token().await.map_err(|e| e.to_string())?;
             let user_id = auth::user_from_jwt(&token).map(|u| u.id).unwrap_or_default();
@@ -95,13 +120,14 @@ impl SyncManager {
             // Push local ops FIRST so any pending tombstones reach the
             // server before we pull. Without this, a freshly-deleted host
             // can be re-inserted by pull_all because the server still has
-            // the row without deleted_at, and a subsequent push_all_local
-            // would then echo the resurrected row right back up.
+            // the row without deleted_at.
             flush_queue(&client, &queue).await;
             pull::pull_all(&client, db, sync_key.as_ref()).await.map_err(|e| e.to_string())?;
             if is_first_sync && !user_id.is_empty() {
                 if let Err(e) = push::push_all_local(&client, db, &user_id).await {
                     tracing::warn!(error = %e, "push_all_local failed");
+                } else {
+                    mark_first_sync_done();
                 }
             }
             Ok(())

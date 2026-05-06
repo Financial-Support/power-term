@@ -34,6 +34,12 @@ pub struct RemoteHostRow {
     pub created_at: i64,
     pub last_used_at: Option<i64>,
     pub updated_at: i64,
+    /// Tombstone timestamp. Skipped when None so PostgREST upsert does
+    /// NOT touch the server's existing deleted_at — that's what kept
+    /// re-emerging deleted rows: a bootstrap push_all_local would send
+    /// `deleted_at: null` and clobber the tombstone for any row a peer
+    /// device had just deleted.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<i64>,
 }
 
@@ -47,6 +53,7 @@ pub struct RemoteSnippetRow {
     pub created_at: i64,
     pub last_used_at: Option<i64>,
     pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<i64>,
 }
 
@@ -64,6 +71,7 @@ pub struct RemoteForwardRow {
     pub auto_start: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<i64>,
 }
 
@@ -86,6 +94,7 @@ pub struct RemoteSshKeyRow {
     pub content: String,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<i64>,
 }
 
@@ -95,6 +104,7 @@ pub struct RemoteCredentialRow {
     pub user_id: String,
     pub ciphertext: String,
     pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<i64>,
 }
 
