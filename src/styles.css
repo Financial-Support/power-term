@@ -870,40 +870,57 @@ html, body, #root { height: 100%; margin: 0; }
 .sp-host-actions button:hover { color: var(--fg); background: var(--bg-hover); }
 
 .sp-footer {
-  padding: 8px 10px;
+  padding: 10px 10px 12px;
   border-top: 1px solid var(--border);
 }
-.sp-add-btn {
-  width: 100%;
+/* Split button: primary "Add host" CTA + a square import-from-ssh-config
+   sibling. Same row + same border-radius forces the eye to read them as
+   one control with an extra option, not two competing buttons. */
+.sp-add-row {
+  display: flex;
+  gap: 1px;
+  background: var(--accent);
+  border-radius: 7px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+}
+.sp-add-primary {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
-  border-radius: 7px;
-  color: var(--fg-muted);
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--accent);
+  color: #1a1a1a;
+  border: 0;
   font: inherit;
-  font-size: 15px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
+  transition: filter 0.1s;
 }
-.sp-add-btn:hover { background: var(--bg-hover); color: var(--fg); }
-.sp-import-btn {
-  width: 100%;
-  margin-top: 4px;
-  padding: 5px 10px;
-  background: transparent;
-  border: 1px dashed var(--border-med);
-  border-radius: 6px;
-  color: var(--fg-dim);
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: 0.02em;
+.sp-add-primary:hover { filter: brightness(1.07); }
+.sp-add-primary:active { filter: brightness(0.95); }
+.sp-add-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sp-add-import {
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #1a1a1a;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--accent) 70%, black 30%);
   cursor: pointer;
-  transition: color 0.1s, border-color 0.1s;
+  transition: filter 0.1s;
 }
-.sp-import-btn:hover { color: var(--fg-muted); border-color: var(--fg-dim); }
+.sp-add-import:hover { filter: brightness(1.07); }
+.sp-add-import:active { filter: brightness(0.95); }
 
 /* ─── ssh config import modal ───────────────────────────────────────────── */
 .ssh-import-modal { width: 560px; }

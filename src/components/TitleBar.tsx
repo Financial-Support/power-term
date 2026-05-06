@@ -122,13 +122,30 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
     void getCurrentWindow().startDragging();
   };
 
+  // Double-click anywhere on the drag region toggles zoom — matches the
+  // native macOS title-bar behaviour we lose when titleBarStyle is set
+  // to "Overlay" (the title bar is hidden so the OS never sees the
+  // double-click). Click-targets that opt out of dragging also opt out
+  // of zoom so toolbar buttons aren't accidentally maximizing the
+  // window.
+  const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, [role="tab"], [data-no-drag]')) return;
+    void getCurrentWindow().toggleMaximize();
+  };
+
   const handlePick = (kind: LayoutKind) => {
     setPickerOpen(false);
     onLayoutChange?.(kind);
   };
 
   return (
-    <div className={`titlebar${isFullscreen ? ' titlebar-fullscreen' : ''}`} onMouseDown={handleMouseDown}>
+    <div
+      className={`titlebar${isFullscreen ? ' titlebar-fullscreen' : ''}`}
+      onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
+    >
       <div className="titlebar-drag-left" />
       <div className="brand" aria-label="Power Term" data-no-drag>
         <BrandMark />

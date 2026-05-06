@@ -265,17 +265,33 @@ export function SidebarPanel({
             })}
           </div>
           <div className="sp-footer">
-            <button type="button" className="sp-add-btn" onClick={onAddHost}>
-              <span>+</span> Add Host
-            </button>
-            <button
-              type="button"
-              className="sp-import-btn"
-              onClick={onImportSshConfig}
-              title="Parse ~/.ssh/config and pick which hosts to import"
-            >
-              Import ~/.ssh/config
-            </button>
+            <div className="sp-add-row" role="group" aria-label="Add host actions">
+              <button
+                type="button"
+                className="sp-add-primary"
+                onClick={onAddHost}
+                title="Add a new host"
+              >
+                <span className="sp-add-icon" aria-hidden>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <span>Add host</span>
+              </button>
+              <button
+                type="button"
+                className="sp-add-import"
+                onClick={onImportSshConfig}
+                title="Parse ~/.ssh/config and pick which hosts to import"
+                aria-label="Import from ~/.ssh/config"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <path d="M3 9v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  <path d="M7 2v6.5M4 6l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       )}
