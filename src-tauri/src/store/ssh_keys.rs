@@ -64,21 +64,28 @@ impl SshKeyStore {
         let conn = self.db.lock();
         let id = uuid::Uuid::new_v4().to_string();
         let now = now_millis();
+        // When the user pastes content directly without a file path,
+        // generate a unique placeholder so the UNIQUE constraint is happy.
+        let path = if input.path.trim().is_empty() {
+            format!("[pasted] {}", id)
+        } else {
+            input.path.trim().to_string()
+        };
         conn.execute(
             "INSERT INTO ssh_keys (id, name, path, content, created_at, updated_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-            params![id, input.name.trim(), input.path.trim(), input.content, now],
+            params![id, input.name.trim(), path, input.content, now],
         )
         .map_err(|e| match e {
             rusqlite::Error::SqliteFailure(_, msg) if msg.as_deref().unwrap_or("").contains("UNIQUE") => {
-                StoreError::Invalid(format!("a key already exists for path '{}'", input.path.trim()))
+                StoreError::Invalid(format!("a key already exists for path '{}'", path))
             }
             other => StoreError::from(other),
         })?;
         Ok(SshKey {
             id,
             name: input.name.trim().to_string(),
-            path: input.path.trim().to_string(),
+            path,
             content: input.content.clone(),
             created_at: now,
             updated_at: now,
@@ -89,14 +96,19 @@ impl SshKeyStore {
         validate(input)?;
         let conn = self.db.lock();
         let now = now_millis();
+        let path = if input.path.trim().is_empty() {
+            format!("[pasted] {}", id)
+        } else {
+            input.path.trim().to_string()
+        };
         let n = conn
             .execute(
                 "UPDATE ssh_keys SET name=?1, path=?2, content=?3, updated_at=?4 WHERE id=?5",
-                params![input.name.trim(), input.path.trim(), input.content, now, id],
+                params![input.name.trim(), path, input.content, now, id],
             )
             .map_err(|e| match e {
                 rusqlite::Error::SqliteFailure(_, msg) if msg.as_deref().unwrap_or("").contains("UNIQUE") => {
-                    StoreError::Invalid(format!("a key already exists for path '{}'", input.path.trim()))
+                    StoreError::Invalid(format!("a key already exists for path '{}'", path))
                 }
                 other => StoreError::from(other),
             })?;
@@ -134,8 +146,9 @@ fn validate(input: &SshKeyInput) -> Result<(), StoreError> {
     if input.name.trim().is_empty() {
         return Err(StoreError::Invalid("name required".into()));
     }
-    if input.path.trim().is_empty() {
-        return Err(StoreError::Invalid("path required".into()));
+    // Path is required unless the user provided content directly (paste).
+    if input.path.trim().is_empty() && input.content.trim().is_empty() {
+        return Err(StoreError::Invalid("path or content required".into()));
     }
     Ok(())
 }
@@ -201,7 +214,11 @@ mod tests {
     fn validate_rejects_empty() {
         let s = store();
         assert!(s.create(&input("", "/k")).is_err());
-        assert!(s.create(&input("name", "")).is_err());
+        // Empty path is ok when content is provided (paste mode).
+        assert!(s.create(&input("name", "")).is_err()); // no content either
+        let mut i = input("name", "");
+        i.content = "PRIVATE-KEY".into();
+        assert!(s.create(&i).is_ok()); // content present, path not needed
     }
 
     #[test]
