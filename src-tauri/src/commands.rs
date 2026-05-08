@@ -50,7 +50,10 @@ pub fn system_accent_color() -> String {
 fn shell_with_fallback(opt: Option<String>) -> String {
     if let Some(s) = opt.filter(|s| !s.is_empty()) { return s; }
     if let Ok(env) = std::env::var("SHELL") { if !env.is_empty() { return env; } }
-    "/bin/zsh".to_string()
+    #[cfg(target_os = "windows")]
+    { "powershell.exe".to_string() }
+    #[cfg(not(target_os = "windows"))]
+    { "/bin/zsh".to_string() }
 }
 
 #[tauri::command]
@@ -856,7 +859,21 @@ pub fn local_reveal(path: String) -> Result<(), String> {
         cmd.status().map_err(|e| format!("open: {e}"))?;
         return Ok(());
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let p = std::path::Path::new(&path);
+        let mut cmd = if p.is_dir() {
+            std::process::Command::new("explorer")
+        } else {
+            let mut c = std::process::Command::new("explorer");
+            c.arg("/select,");
+            c
+        };
+        cmd.arg(&path);
+        cmd.status().map_err(|e| format!("explorer: {e}"))?;
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = path;
         Err("reveal not supported on this platform".into())

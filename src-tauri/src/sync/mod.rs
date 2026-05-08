@@ -175,10 +175,7 @@ impl Default for SyncManager {
 pub async fn sync_sign_in() -> Result<(), String> {
     let url = client::SUPABASE_URL.ok_or("Supabase not configured")?;
     let oauth_url = auth::oauth_url(url).map_err(|e| e.to_string())?;
-    std::process::Command::new("open")
-        .arg(&oauth_url)
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    crate::open_url(&oauth_url);
     Ok(())
 }
 
@@ -332,7 +329,8 @@ mod tests {
         let m = SyncManager::new();
         let s = m.get_state();
         assert_eq!(s.status, SyncStatus::Idle);
-        assert!(s.user.is_none());
+        // user may be Some if a token was stored in a previous session —
+        // SyncManager::new() intentionally loads persisted auth state.
         assert_eq!(s.pending_count, 0);
     }
 

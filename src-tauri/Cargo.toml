@@ -1,6 +1,6 @@
 [package]
 name = "power-term"
-version = "0.1.23"
+version = "0.1.24"
 description = "A modern terminal app"
 authors = ["band"]
 edition = "2021"
@@ -36,7 +36,8 @@ async-trait = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "net", "sync", "time", "fs"] }
 tokio-util = "0.7"
 rusqlite = { version = "0.31", features = ["bundled"] }
-keyring = { version = "3", features = ["apple-native"] }
+# keyring is configured per-platform below
+
 russh-sftp = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
@@ -55,3 +56,12 @@ mockito = "1"
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 mock-keychain = []
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["linux-native"] }

@@ -12,6 +12,8 @@ use std::sync::Arc;
 use tauri::{Emitter, Listener, Manager};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
+use power_term::open_url;
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -49,19 +51,22 @@ fn main() {
             let settings_item = MenuItemBuilder::with_id("open_settings", "Settings…")
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?;
-            let app_submenu = SubmenuBuilder::new(app, "Power Term")
+            let mut app_submenu = SubmenuBuilder::new(app, "Power Term")
                 .about(None)
                 .separator()
                 .item(&settings_item)
-                .separator()
-                .services()
-                .separator()
-                .hide()
-                .hide_others()
-                .show_all()
-                .separator()
-                .quit()
-                .build()?;
+                .separator();
+            #[cfg(target_os = "macos")]
+            {
+                app_submenu = app_submenu
+                    .services()
+                    .separator()
+                    .hide()
+                    .hide_others()
+                    .show_all()
+                    .separator();
+            }
+            let app_submenu = app_submenu.quit().build()?;
             let zoom_in_item = MenuItemBuilder::with_id("zoom_in", "Zoom In")
                 .accelerator("CmdOrCtrl+=")
                 .build(app)?;
@@ -116,10 +121,8 @@ fn main() {
                     "zoom_in"       => { let _ = app_handle.emit("menu:zoom-in", ()); }
                     "zoom_out"      => { let _ = app_handle.emit("menu:zoom-out", ()); }
                     "zoom_reset"    => { let _ = app_handle.emit("menu:zoom-reset", ()); }
-                    "help_github"   => {
-                        let _ = std::process::Command::new("open")
-                            .arg("https://github.com/bango97/homebrew-power-term")
-                            .spawn();
+                    "help_github" => {
+                        open_url("https://github.com/bango97/homebrew-power-term");
                     }
                     _ => {}
                 }
