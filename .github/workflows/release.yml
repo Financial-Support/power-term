@@ -47,6 +47,7 @@ jobs:
         with:
           args: --target ${{ matrix.platform.target }}
           tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
 
   publish:
     name: Publish Release
