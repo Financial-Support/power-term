@@ -44,6 +44,8 @@ jobs:
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          POWER_TERM_SUPABASE_URL: ${{ secrets.POWER_TERM_SUPABASE_URL }}
+          POWER_TERM_SUPABASE_ANON_KEY: ${{ secrets.POWER_TERM_SUPABASE_ANON_KEY }}
         with:
           args: --target ${{ matrix.platform.target }}
           tagName: ${{ github.ref_name }}
