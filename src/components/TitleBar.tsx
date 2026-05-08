@@ -73,6 +73,7 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
   const [pickerOpen, setPickerOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef({ x: 0, y: 0, dragging: false });
 
   // Track macOS native fullscreen so we can collapse the 78px spacer that
   // otherwise leaves a hole where the (now-hidden) traffic lights used to be.
@@ -117,22 +118,31 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
+
+    // Double-click toggles zoom (macOS standard).
+    if (e.detail === 2) {
+      if (!target.closest('button, input, [role="tab"]')) {
+        void getCurrentWindow().toggleMaximize();
+      }
+      return;
+    }
+
+    // Don't initiate drag from interactive elements.
     if (target.closest('button, input, [role="tab"], [data-no-drag]')) return;
-    if (e.detail >= 2) return;
-    void getCurrentWindow().startDragging();
+
+    // Record mousedown position; drag starts only after mouse movement.
+    dragRef.current = { x: e.clientX, y: e.clientY, dragging: false };
   };
 
-  // Double-click anywhere on the drag region toggles zoom — matches the
-  // native macOS title-bar behaviour we lose when titleBarStyle is set
-  // to "Overlay" (the title bar is hidden so the OS never sees the
-  // double-click). Click-targets that opt out of dragging also opt out
-  // of zoom so toolbar buttons aren't accidentally maximizing the
-  // window.
-  const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    const target = e.target as HTMLElement;
-    if (target.closest('button, input, [role="tab"], [data-no-drag]')) return;
-    void getCurrentWindow().toggleMaximize();
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.buttons !== 1) return;
+    const d = dragRef.current;
+    if (d.dragging) return;
+    // Start dragging after 3px movement (avoids accidental drags).
+    if (Math.abs(e.clientX - d.x) > 3 || Math.abs(e.clientY - d.y) > 3) {
+      d.dragging = true;
+      void getCurrentWindow().startDragging();
+    }
   };
 
   const handlePick = (kind: LayoutKind) => {
@@ -144,7 +154,7 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
     <div
       className={`titlebar${isFullscreen ? ' titlebar-fullscreen' : ''}`}
       onMouseDown={handleMouseDown}
-      onDoubleClick={handleDoubleClick}
+      onMouseMove={handleMouseMove}
     >
       <div className="titlebar-drag-left" />
       <div className="brand" aria-label="Power Term" data-no-drag>

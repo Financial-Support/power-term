@@ -308,6 +308,21 @@ export async function dbQueryCancel(sessionId: string): Promise<void> {
 export async function dbListTables(sessionId: string, engine: string): Promise<string[]> {
   return invoke<string[]>('db_list_tables', { sessionId, engine });
 }
+export async function dbListDatabases(sessionId: string, engine: string): Promise<string[]> {
+  return invoke<string[]>('db_list_databases', { sessionId, engine });
+}
+export async function dbSwitchDatabase(sessionId: string, database: string): Promise<void> {
+  await invoke('db_switch_database', { sessionId, database });
+}
+export async function dbExportDump(sessionId: string, dataToo: boolean): Promise<string> {
+  return invoke<string>('db_export_dump', { sessionId, dataToo });
+}
+export async function readTextFile(path: string): Promise<string> {
+  return invoke<string>('read_text_file', { path });
+}
+export async function writeTextFile(path: string, content: string): Promise<void> {
+  await invoke('write_text_file', { path, content });
+}
 
 // ─── SSH key registry ───────────────────────────────────────────────────────
 

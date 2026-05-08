@@ -4,7 +4,9 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirro
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { sql } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { dbListTables, dbQuery, dbQueryCancel, dbSessionClose } from '../lib/ipc';
+import { dbListTables, dbListDatabases, dbSwitchDatabase, dbQuery, dbQueryCancel, dbSessionClose, dbExportDump } from '../lib/ipc';
+import { readTextFile, writeTextFile } from '../lib/ipc';
+import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
 import type { DbConnection, QueryResult } from '../types';
 
 interface Props {
@@ -54,6 +56,16 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
   const [tablesLoading, setTablesLoading] = useState(false);
   const [tablesError, setTablesError] = useState<string | null>(null);
   const [tableFilter, setTableFilter] = useState('');
+  const [databases, setDatabases] = useState<string[] | null>(null);
+  const [databasesLoading, setDatabasesLoading] = useState(false);
+  const [currentDatabase, setCurrentDatabase] = useState(connection.database || '');
+  const [switchingDb, setSwitchingDb] = useState(false);
+  const [importPath, setImportPath] = useState<string | null>(null);
+  const [importConfirm, setImportConfirm] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [exportState, setExportState] = useState<'idle' | 'options' | 'running'>('idle');
+  const [exportIncludeData, setExportIncludeData] = useState(true);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   // Refs so the freshly-built SQL doesn't race the React state update — the
   // pagination handlers compute the SQL string and feed it directly to
@@ -151,6 +163,51 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
     }
   };
 
+  const handleExportClick = () => {
+    setExportState('options');
+  };
+
+  const handleExportStart = async () => {
+    setExportState('idle');
+    const path = await pickLocalSavePath(`${connection.name}-dump.sql`);
+    if (!path) return;
+    setExportState('running');
+    setExportError(null);
+    try {
+      const sql = await dbExportDump(sessionId, exportIncludeData);
+      await writeTextFile(path, sql);
+      setExportState('idle');
+    } catch (e) {
+      setExportError(String(e));
+    }
+  };
+
+  const handleImportSelect = async () => {
+    const path = await pickLocalFile();
+    if (path) {
+      setImportPath(path);
+      setImportConfirm(true);
+    }
+  };
+
+  const handleImportConfirm = async () => {
+    if (!importPath) return;
+    setImportConfirm(false);
+    setImporting(true);
+    try {
+      const sql = await readTextFile(importPath);
+      setError(null);
+      const r = await dbQuery(sessionId, sql);
+      setResult(r);
+      void loadTables();
+    } catch (e) {
+      setError(`Import failed: ${e}`);
+    } finally {
+      setImporting(false);
+      setImportPath(null);
+    }
+  };
+
   const closeSession = async () => {
     try { await dbSessionClose(sessionId); } catch (e) { console.warn('db close failed', e); }
     onClose();
@@ -169,9 +226,64 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
     }
   }, [sessionId, connection.engine]);
 
-  // Auto-load on first mount so the schema is there as soon as the
-  // session opens. Subsequent refreshes are user-driven.
-  useEffect(() => { void loadTables(); }, [loadTables]);
+  const loadDatabases = useCallback(async () => {
+    setDatabasesLoading(true);
+    try {
+      const list = await dbListDatabases(sessionId, connection.engine);
+      setDatabases(list);
+      // If connection already had a database and it's in the list, keep it.
+      // Otherwise pick the first available database.
+      if (connection.database && list.includes(connection.database)) {
+        setCurrentDatabase(connection.database);
+      } else if (!currentDatabase && list.length > 0) {
+        setCurrentDatabase(list[0]);
+      }
+    } catch { /* ignore */ }
+    finally { setDatabasesLoading(false); }
+  }, [sessionId, connection.engine, connection.database]);
+
+  const switchDb = useCallback(async (db: string) => {
+    if (db === currentDatabase) return;
+    setSwitchingDb(true);
+    setTables(null);
+    setTablesError(null);
+    try {
+      await dbSwitchDatabase(sessionId, db);
+      setCurrentDatabase(db);
+      // Automatically reload tables after switching.
+      const list = await dbListTables(sessionId, connection.engine);
+      setTables(list);
+    } catch (e) {
+      setTablesError(String(e));
+    } finally {
+      setSwitchingDb(false);
+    }
+  }, [sessionId, connection.engine, currentDatabase]);
+
+  // Auto-load databases on first mount, then tables if a database is already set.
+  useEffect(() => {
+    void (async () => {
+      await loadDatabases();
+    })();
+  }, [loadDatabases]);
+
+  useEffect(() => {
+    if (currentDatabase) {
+      const load = async () => {
+        setTablesLoading(true);
+        setTablesError(null);
+        try {
+          const list = await dbListTables(sessionId, connection.engine);
+          setTables(list);
+        } catch (e) {
+          setTablesError(String(e));
+        } finally {
+          setTablesLoading(false);
+        }
+      };
+      void load();
+    }
+  }, [sessionId, connection.engine, currentDatabase]);
 
   const goToPage = useCallback(async (next: Pagination) => {
     const sqlText = buildPaginatedSql(next);
@@ -244,10 +356,111 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
           onClick={() => void closeSession()}
           title="Disconnect and close tab"
         >Disconnect</button>
+        <button
+          type="button"
+          className="db-export"
+          onClick={() => void handleExportClick()}
+          disabled={exportState !== 'idle'}
+          title="Export database as SQL dump"
+        >Export</button>
+        <button
+          type="button"
+          className="db-import"
+          onClick={() => void handleImportSelect()}
+          disabled={importing}
+          title="Import SQL file"
+        >{importing ? 'Importing…' : 'Import'}</button>
       </div>
+
+      {importConfirm && (
+        <div className="modal-backdrop" role="dialog" aria-label="import confirmation">
+          <div className="modal modal-warning">
+            <h2>⚠ Import SQL file</h2>
+            <p>
+              This will execute all SQL statements from the selected file.
+              Make sure you have a backup before proceeding.
+            </p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => { setImportConfirm(false); setImportPath(null); }}>Cancel</button>
+              <button type="button" className="danger" onClick={() => void handleImportConfirm()}>Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {exportState === 'options' && (
+        <div className="modal-backdrop" role="dialog" aria-label="export options">
+          <div className="modal">
+            <h2>Export SQL Dump</h2>
+            <p>Choose what to include in the dump:</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                <input
+                  type="radio"
+                  name="export-mode"
+                  checked={!exportIncludeData}
+                  onChange={() => setExportIncludeData(false)}
+                />
+                Structure only (CREATE TABLE)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                <input
+                  type="radio"
+                  name="export-mode"
+                  checked={exportIncludeData}
+                  onChange={() => setExportIncludeData(true)}
+                />
+                Structure + Data (CREATE TABLE + INSERT)
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setExportState('idle')}>Cancel</button>
+              <button type="button" className="primary" onClick={() => void handleExportStart()}>Next</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {exportState === 'running' && (
+        <div className="modal-backdrop" role="dialog" aria-label="exporting">
+          <div className="modal" style={{ textAlign: 'center' }}>
+            {exportError ? (
+              <>
+                <h2>Export Failed</h2>
+                <p className="error">{exportError}</p>
+                <div className="modal-actions">
+                  <button type="button" onClick={() => { setExportState('idle'); setExportError(null); }}>Close</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2>Exporting…</h2>
+                <p>Generating SQL dump, please wait.</p>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+                  <span className="db-spinner" />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="db-body">
         <aside className="db-schema">
+          <div className="db-schema-header">
+            <span>Database</span>
+          </div>
+          <select
+            className="db-schema-select"
+            value={currentDatabase}
+            onChange={(e) => { void switchDb(e.target.value); }}
+            disabled={switchingDb || databasesLoading || databases === null || databases.length === 0}
+          >
+            {!currentDatabase && <option value="">Select database…</option>}
+            {(databases ?? []).map((db) => (
+              <option key={db} value={db}>{db}</option>
+            ))}
+          </select>
           <div className="db-schema-header">
             <span>Tables</span>
             <button
@@ -255,7 +468,7 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
               className="db-schema-refresh"
               aria-label="Refresh tables"
               onClick={() => void loadTables()}
-              disabled={tablesLoading}
+              disabled={tablesLoading || switchingDb}
             >⟳</button>
           </div>
           <input

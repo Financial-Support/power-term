@@ -1227,6 +1227,58 @@ pub async fn db_list_tables(
         .collect())
 }
 
+#[tauri::command]
+pub async fn db_list_databases(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    engine: String,
+) -> Result<Vec<String>, String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    let sql = match engine.as_str() {
+        "postgres" => "SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY datname",
+        "mysql" => "SHOW DATABASES",
+        other => return Err(format!("unknown engine '{other}'")),
+    };
+    let r = session.query(sql).await.map_err(|e| e.to_string())?;
+    Ok(r.rows
+        .into_iter()
+        .filter_map(|row| row.into_iter().next().flatten())
+        .collect())
+}
+
+#[tauri::command]
+pub async fn db_switch_database(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    database: String,
+) -> Result<(), String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    session.switch_database(&database).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn db_export_dump(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    data_too: bool,
+) -> Result<String, String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    let engine = session.engine().to_string();
+    session.export_dump(&engine, data_too).await.map_err(|e| e.to_string())
+}
+
+/// Read a text file from disk and return its content as a UTF-8 string.
+#[tauri::command]
+pub fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {e}"))
+}
+
+/// Write a string to a file on disk.
+#[tauri::command]
+pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, &content).map_err(|e| format!("Failed to write file: {e}"))
+}
+
 #[cfg(test)]
 mod ssh_config_tests {
     use super::*;

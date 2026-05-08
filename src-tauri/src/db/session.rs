@@ -69,23 +69,11 @@ enum Driver {
 }
 
 pub struct DbSession {
+    engine: String,
     driver: AsyncMutex<Driver>,
-    /// The proxy is dropped on session close which tears down the listener.
-    /// Kept private — Drop on this field also fires when the whole struct
-    /// drops, so we get a free belt-and-braces cleanup.
     _proxy: DbProxy,
-    /// Disconnect hook fired explicitly on `close()`. Held in an Option so
-    /// `close` can take ownership and consume it exactly once.
     ssh: AsyncMutex<Option<Arc<Handle<ClientHandler>>>>,
-    /// Engine-specific cancellation handle. Postgres uses tokio-postgres'
-    /// CancelToken (sends SSH_FXP_CANCEL on a fresh tunnel connection);
-    /// MySQL stores the connection id and runs `KILL QUERY` from a side
-    /// connection. Either way the original query future wakes with an
-    /// I/O error and `query()` returns it as `DbError::Cancel`.
     cancel_state: PLMutex<CancelState>,
-    /// Reused by the cancel path on MySQL — we open a fresh `Conn` to the
-    /// same proxy port so we don't have to ask the user for the password
-    /// again at cancel time.
     creds: Creds,
 }
 
@@ -94,7 +82,7 @@ struct Creds {
     proxy_port: u16,
     user: String,
     password: String,
-    database: String,
+    database: Arc<std::sync::Mutex<String>>,
 }
 
 enum CancelState {
@@ -105,6 +93,10 @@ enum CancelState {
 
 #[allow(clippy::too_many_arguments)]
 impl DbSession {
+    pub fn engine(&self) -> &str {
+        &self.engine
+    }
+
     pub async fn open(
         engine: &str,
         ssh_target: SshTarget,
@@ -141,6 +133,7 @@ impl DbSession {
         };
 
         Ok(Self {
+            engine: engine.to_string(),
             driver: AsyncMutex::new(driver),
             _proxy: proxy,
             ssh: AsyncMutex::new(Some(session)),
@@ -149,7 +142,7 @@ impl DbSession {
                 proxy_port: local_port,
                 user: db_user,
                 password: db_password,
-                database,
+                database: Arc::new(std::sync::Mutex::new(database)),
             },
         })
     }
@@ -193,8 +186,12 @@ impl DbSession {
                     .tcp_port(self.creds.proxy_port)
                     .user(Some(self.creds.user.clone()))
                     .pass(Some(self.creds.password.clone()));
-                if !self.creds.database.is_empty() {
-                    opts = opts.db_name(Some(self.creds.database.clone()));
+                let db_name = {
+                    let db = self.creds.database.lock().unwrap();
+                    if !db.is_empty() { Some(db.clone()) } else { None }
+                };
+                if let Some(db) = db_name {
+                    opts = opts.db_name(Some(db));
                 }
                 let mut conn = mysql_async::Conn::new(opts)
                     .await
@@ -208,6 +205,109 @@ impl DbSession {
             }
             CancelState::Unsupported => Err(DbError::Cancel("not supported".into())),
         }
+    }
+
+    pub async fn switch_database(&self, new_database: &str) -> Result<(), DbError> {
+        let mut driver = self.driver.lock().await;
+        match &mut *driver {
+            Driver::Postgres(_client) => {
+                let (new_driver, new_cancel) =
+                    connect_postgres(self.creds.proxy_port, new_database, &self.creds.user, &self.creds.password)
+                        .await?;
+                *driver = new_driver;
+                let mut cancel = self.cancel_state.lock();
+                *cancel = new_cancel;
+            }
+            Driver::Mysql(conn) => {
+                use mysql_async::prelude::Queryable;
+                conn.query_drop(format!("USE `{}`", new_database.replace('`', "``")))
+                    .await
+                    .map_err(|e| DbError::Query(format!("mysql: {e}")))?;
+            }
+        }
+        let mut db = self.creds.database.lock().unwrap();
+        *db = new_database.to_string();
+        Ok(())
+    }
+
+    pub async fn export_dump(&self, engine: &str, data_too: bool) -> Result<String, DbError> {
+        use std::time::SystemTime;
+        let ts = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let mut out = String::new();
+        out.push_str(&format!("-- Power Term SQL Dump\n-- Engine: {engine}\n-- Timestamp: {ts}\n\n"));
+
+        // Get table names
+        let tables_sql = match engine {
+            "postgres" => "SELECT schemaname || '.' || tablename FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema') ORDER BY schemaname, tablename",
+            "mysql" => "SHOW TABLES",
+            other => return Err(DbError::Query(format!("unknown engine '{other}'"))),
+        };
+        let tables_result = self.query(tables_sql).await?;
+        let tables: Vec<String> = tables_result.rows.iter()
+            .filter_map(|row| row.first().cloned().flatten())
+            .collect();
+
+        for table in &tables {
+            out.push_str(&format!("\n-- Table: {table}\n"));
+
+            // Schema
+            match engine {
+                "postgres" => {
+                    // Get column definitions from information_schema
+                    let parts: Vec<&str> = table.splitn(2, '.').collect();
+                    let (schema, tbl) = if parts.len() == 2 { (parts[0], parts[1]) } else { ("public", parts[0]) };
+                    let cols_sql = format!(
+                        "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema = '{schema}' AND table_name = '{tbl}' ORDER BY ordinal_position"
+                    );
+                    let cols = self.query(&cols_sql).await?;
+                    let mut col_defs: Vec<String> = Vec::new();
+                    for row in &cols.rows {
+                        if row.len() >= 4 {
+                            let name = row[0].as_deref().unwrap_or("?");
+                            let dtype = row[1].as_deref().unwrap_or("text");
+                            let nullable = row[2].as_deref().unwrap_or("YES") == "YES";
+                            let default = row[3].as_deref();
+                            let mut def = format!("\"{name}\" {dtype}");
+                            if !nullable { def.push_str(" NOT NULL"); }
+                            if let Some(d) = default { def.push_str(&format!(" DEFAULT {d}")); }
+                            col_defs.push(def);
+                        }
+                    }
+                    out.push_str(&format!("CREATE TABLE \"{tbl}\" (\n  {}\n);\n\n", col_defs.join(",\n  ")));
+                }
+                "mysql" => {
+                    if let Ok(r) = self.query(&format!("SHOW CREATE TABLE `{}`", table.replace('`', "``"))).await {
+                        if let Some(row) = r.rows.first() {
+                            if row.len() >= 2 {
+                                if let Some(create) = &row[1] {
+                                    out.push_str(&format!("{create};\n\n"));
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            // Data
+            if data_too {
+            let data = self.query(&format!("SELECT * FROM {table}")).await?;
+            if !data.rows.is_empty() {
+                let col_names: Vec<String> = data.columns.iter()
+                    .map(|c| format!("\"{c}\""))
+                    .collect();
+                for row in &data.rows {
+                    let values: Vec<String> = row.iter().map(|v| sql_value(v.as_deref())).collect();
+                    out.push_str(&format!("INSERT INTO {table} ({}) VALUES ({});\n",
+                        col_names.join(", "),
+                        values.join(", ")));
+                }
+                out.push('\n');
+            }
+            }
+        }
+        out.push_str("-- End of dump\n");
+        Ok(out)
     }
 
     pub async fn close(&self) -> Result<(), DbError> {
@@ -240,7 +340,7 @@ async fn connect_postgres(
         .port(local_port)
         .user(user)
         .password(password)
-        .dbname(if database.is_empty() { user } else { database })
+        .dbname(if database.is_empty() { "postgres" } else { database })
         .connect_timeout(Duration::from_secs(15));
     let (client, connection) = config
         .connect(tokio_postgres::NoTls)
@@ -420,6 +520,16 @@ fn classify_mysql_error(e: mysql_async::Error) -> DbError {
         DbError::Cancel(s)
     } else {
         DbError::Query(format!("mysql: {s}"))
+    }
+}
+
+fn sql_value(v: Option<&str>) -> String {
+    match v {
+        None => "NULL".to_string(),
+        Some(s) => {
+            let escaped = s.replace('\'', "''").replace('\\', "\\\\");
+            format!("'{escaped}'")
+        }
     }
 }
 
