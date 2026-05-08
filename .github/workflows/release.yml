@@ -58,6 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mkdir -p artifacts
           gh release download "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             --dir artifacts
@@ -71,3 +72,55 @@ jobs:
             --title "${{ github.ref_name }}" \
             --notes "Release ${{ github.ref_name }}" \
             artifacts/*
+
+  cask:
+    name: Update Homebrew cask
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: bango97/homebrew-power-term
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+
+      - name: Update cask formula
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          V="${TAG#v}"
+
+          # Download DMGs and compute SHA256
+          URL_AARCH64="https://github.com/bango97/homebrew-power-term/releases/download/${TAG}/Power.Term_${V}_aarch64.dmg"
+          URL_X64="https://github.com/bango97/homebrew-power-term/releases/download/${TAG}/Power.Term_${V}_x64.dmg"
+
+          curl -sLo aarch64.dmg "$URL_AARCH64"
+          curl -sLo x64.dmg "$URL_X64"
+
+          SHA_ARM=$(sha256sum aarch64.dmg | awk '{print $1}')
+          SHA_INTEL=$(sha256sum x64.dmg | awk '{print $1}')
+
+          echo "aarch64 SHA256: $SHA_ARM"
+          echo "x86_64 SHA256: $SHA_INTEL"
+
+          # Update version
+          sed -i "s/version \".*\"/version \"$V\"/" Casks/power-term.rb
+
+          # Update SHA256s
+          sed -i "s|sha256 arm:   \".*\"|sha256 arm:   \"$SHA_ARM\"|" Casks/power-term.rb
+          sed -i "s|sha256 intel: \".*\"|sha256 intel: \"$SHA_INTEL\"|" Casks/power-term.rb
+
+          # Ensure URL pattern uses Power.Term_ naming (Tauri 2 default)
+          if ! grep -q 'Power.Term_' Casks/power-term.rb; then
+            sed -i 's|PowerTerm-#{version}-#{arch}|Power.Term_#{version}_#{arch}|' Casks/power-term.rb
+          fi
+
+          cat Casks/power-term.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/power-term.rb
+          git diff --cached --quiet || git commit -m "chore: bump to ${{ github.ref_name }}"
+          git push
