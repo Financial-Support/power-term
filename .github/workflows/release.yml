@@ -50,27 +50,24 @@ jobs:
           releaseName: ${{ github.ref_name }}
 
   publish:
-    name: Publish Release
+    name: Mirror to public repo
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Publish to public mirror
+      - name: Download artifacts
         env:
-          PUBLIC_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -z "$PUBLIC_REPO" ]; then
-            echo "PUBLIC_RELEASE_REPO variable not set — skipping mirror"
-            exit 0
-          fi
-          echo "Mirroring release ${{ github.ref_name }} to $PUBLIC_REPO"
-          # Download all artifacts from this release and push to public repo
-          # Requires GH_TOKEN with write access to the public repo
           gh release download "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             --dir artifacts
+
+      - name: Publish to bango97/homebrew-power-term
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+        run: |
           gh release create "${{ github.ref_name }}" \
-            --repo "$PUBLIC_REPO" \
+            --repo bango97/homebrew-power-term \
             --title "${{ github.ref_name }}" \
             --notes "Release ${{ github.ref_name }}" \
             artifacts/*
