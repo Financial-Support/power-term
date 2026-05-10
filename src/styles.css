@@ -1637,10 +1637,12 @@ html, body, #root { height: 100%; margin: 0; }
 
 .modal.modal-form { width: 520px; max-height: 82vh; overflow-y: auto; }
 .modal .form-grid {
-  display: grid; grid-template-columns: 110px 1fr;
+  display: grid; grid-template-columns: 110px minmax(0, 1fr);
   gap: 10px 14px; align-items: center; margin: 0 0 14px 0;
 }
 .modal .form-grid > label { font-size: 12px; color: var(--fg-muted); text-align: left; }
+.modal .form-grid > input,
+.modal .form-grid > select { width: 100%; min-width: 0; box-sizing: border-box; }
 
 .theme-picker {
   display: inline-flex;
@@ -2185,12 +2187,6 @@ html, body, #root { height: 100%; margin: 0; }
   display: flex; align-items: center; gap: 3px;
 }
 .db-panel-title { color: var(--fg-dim); }
-.db-panel-add {
-  background: transparent; border: 0; cursor: pointer;
-  color: var(--fg-dim); padding: 2px 6px; font-size: 14px;
-  border-radius: 4px;
-}
-.db-panel-add:hover { color: var(--fg); background: var(--bg-hover); }
 .db-panel-empty { padding: 10px 12px; font-size: 11px; color: var(--fg-dim); }
 .db-panel-list { list-style: none; margin: 0; padding: 0 4px 8px; overflow-y: auto; flex: 1; }
 .db-row {

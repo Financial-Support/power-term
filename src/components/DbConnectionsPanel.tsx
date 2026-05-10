@@ -44,13 +44,12 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen }: Props) {
           <span className="sp-caret">{collapsed ? '▸' : '▾'}</span>
           <span className="db-panel-title">Databases</span>
         </button>
-        <button type="button" className="db-panel-add" aria-label="add db connection" onClick={onAdd}>+</button>
       </div>
       {error && <p className="sp-error">{error}</p>}
       {!collapsed && (
         <>
           {sorted.length === 0 ? (
-            <p className="db-panel-empty">No DB connections. Click + to add one.</p>
+            <p className="db-panel-empty">No DB connections yet.</p>
           ) : (
             <ul className="db-panel-list">
               {sorted.map((c) => (
@@ -73,6 +72,23 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen }: Props) {
               ))}
             </ul>
           )}
+          <div className="sp-footer">
+            <div className="sp-add-row" role="group" aria-label="Add database actions">
+              <button
+                type="button"
+                className="sp-add-primary"
+                onClick={onAdd}
+                title="Add a new database connection"
+              >
+                <span className="sp-add-icon" aria-hidden>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <span>Add database</span>
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>
