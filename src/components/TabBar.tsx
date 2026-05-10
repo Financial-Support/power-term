@@ -12,14 +12,22 @@ interface CtxMenu {
   y: number;
 }
 
+interface DropHint {
+  tabId: string;
+  position: 'before' | 'after';
+}
+
 export function TabBar({ onNew, onClose }: Props) {
   const tabs = useSessionStore((s) => s.tabs);
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const setActive = useSessionStore((s) => s.setActive);
   const rename = useSessionStore((s) => s.rename);
+  const reorderTab = useSessionStore((s) => s.reorderTab);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<DropHint | null>(null);
 
   // Dismiss the context menu on Esc or any click outside it.
   useEffect(() => {
@@ -54,6 +62,11 @@ export function TabBar({ onNew, onClose }: Props) {
     setEditingId(tabId);
   };
 
+  const computeDropPosition = (e: React.DragEvent<HTMLDivElement>): 'before' | 'after' => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return e.clientX - rect.left < rect.width / 2 ? 'before' : 'after';
+  };
+
   return (
     <div className="tabbar" role="tablist">
       {tabs.map((tab) => {
@@ -62,16 +75,51 @@ export function TabBar({ onNew, onClose }: Props) {
         const exited = tab.exitCode != null;
         const isRemote = tab.kind === 'ssh' || tab.kind === 'sftp';
         const dotClass = exited ? 'exited' : (isRemote ? 'connected' : '');
+        const isDragging = tab.id === draggingId;
+        const hint = dropHint && dropHint.tabId === tab.id ? dropHint.position : null;
         return (
           <div
             key={tab.id}
             role="tab"
             aria-selected={isActive}
-            className={`tab ${isActive ? 'active' : ''}`}
+            className={`tab ${isActive ? 'active' : ''} ${isDragging ? 'dragging' : ''} ${hint ? `drop-${hint}` : ''}`}
+            draggable={!isEditing}
             onClick={() => !isEditing && setActive(tab.id)}
             onContextMenu={(e) => {
               e.preventDefault();
               setCtxMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
+            }}
+            onDragStart={(e) => {
+              setDraggingId(tab.id);
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', tab.id);
+            }}
+            onDragOver={(e) => {
+              if (!draggingId || draggingId === tab.id) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              const position = computeDropPosition(e);
+              if (!dropHint || dropHint.tabId !== tab.id || dropHint.position !== position) {
+                setDropHint({ tabId: tab.id, position });
+              }
+            }}
+            onDragLeave={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (next && e.currentTarget.contains(next)) return;
+              if (dropHint?.tabId === tab.id) setDropHint(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const sourceId = draggingId ?? e.dataTransfer.getData('text/plain');
+              if (sourceId && sourceId !== tab.id) {
+                reorderTab(sourceId, tab.id, computeDropPosition(e));
+              }
+              setDraggingId(null);
+              setDropHint(null);
+            }}
+            onDragEnd={() => {
+              setDraggingId(null);
+              setDropHint(null);
             }}
           >
             {dotClass && <span className={`tab-status-dot tab-status-${dotClass}`} aria-hidden />}

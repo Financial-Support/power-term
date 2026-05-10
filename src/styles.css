@@ -209,6 +209,20 @@ html, body, #root { height: 100%; margin: 0; }
   background: var(--accent);
   border-radius: 0 0 2px 2px;
 }
+.tab.dragging { opacity: 0.45; }
+.tab.drop-before::before,
+.tab.drop-after::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.tab.drop-before::before { left: -1px; }
+.tab.drop-after::before { right: -1px; }
 .tab-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--online);

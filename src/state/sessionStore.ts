@@ -44,6 +44,7 @@ interface State {
   setSplit: (patch: Partial<SplitState>) => void;
   resetSplits: () => void;
   setBroadcast: (on: boolean) => void;
+  reorderTab: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
 }
 
 export const useSessionStore = create<State>((set, get) => ({
@@ -137,4 +138,20 @@ export const useSessionStore = create<State>((set, get) => ({
   setSplit: (patch) => set((s) => ({ splits: { ...s.splits, ...patch } })),
   resetSplits: () => set({ splits: DEFAULT_SPLITS }),
   setBroadcast: (on) => set({ broadcast: on }),
+
+  reorderTab: (sourceId, targetId, position) => {
+    set((s) => {
+      if (sourceId === targetId) return s;
+      const from = s.tabs.findIndex((t) => t.id === sourceId);
+      const to = s.tabs.findIndex((t) => t.id === targetId);
+      if (from < 0 || to < 0) return s;
+      const next = s.tabs.slice();
+      const [moved] = next.splice(from, 1);
+      let insertAt = next.findIndex((t) => t.id === targetId);
+      if (insertAt < 0) return s;
+      if (position === 'after') insertAt += 1;
+      next.splice(insertAt, 0, moved);
+      return { tabs: next };
+    });
+  },
 }));
