@@ -127,8 +127,13 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
       return;
     }
 
-    // Don't initiate drag from interactive elements.
-    if (target.closest('button, input, [role="tab"], [data-no-drag]')) return;
+    // Don't initiate drag from interactive elements. Mark this gesture as
+    // already-dragging so mousemove short-circuits and lets the underlying
+    // element (e.g. an HTML5 draggable tab) own the gesture.
+    if (target.closest('button, input, [role="tab"], [data-no-drag]')) {
+      dragRef.current = { x: 0, y: 0, dragging: true };
+      return;
+    }
 
     // Record mousedown position; drag starts only after mouse movement.
     dragRef.current = { x: e.clientX, y: e.clientY, dragging: false };
