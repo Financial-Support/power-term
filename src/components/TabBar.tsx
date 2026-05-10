@@ -104,24 +104,22 @@ export function TabBar({ onNew, onClose }: Props) {
 
   /** Compute the insertion index for the post-removal array given the
    * drag-over event on the tab at `displayIndex`. Cursor in the left half →
-   * insert before; right half → insert after. The result is normalised so
-   * that "insert before/after the dragged tab itself" maps to its current
-   * post-removal position (no-op move). */
+   * insert before; right half → insert after. Hovering the dragged tab
+   * itself keeps the current preview (no snap-back). */
   const computePreviewIndex = (
     e: React.DragEvent<HTMLDivElement>,
     displayIndex: number,
   ): number => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const before = e.clientX - rect.left < rect.width / 2;
     if (draggingId == null) return displayIndex;
     const fromIdx = tabs.findIndex((t) => t.id === draggingId);
+    const fallback = previewIndex ?? fromIdx;
     const targetTab = displayTabs[displayIndex];
-    if (!targetTab) return fromIdx;
-    if (targetTab.id === draggingId) return fromIdx;
-    // Map the display-index target to its index in the post-removal array.
+    if (!targetTab || targetTab.id === draggingId) return fallback;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = e.clientX - rect.left < rect.width / 2;
     const postRemoval = tabs.filter((t) => t.id !== draggingId);
     const targetPost = postRemoval.findIndex((t) => t.id === targetTab.id);
-    if (targetPost < 0) return fromIdx;
+    if (targetPost < 0) return fallback;
     return before ? targetPost : targetPost + 1;
   };
 
