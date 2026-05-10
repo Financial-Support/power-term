@@ -45,6 +45,8 @@ interface State {
   resetSplits: () => void;
   setBroadcast: (on: boolean) => void;
   reorderTab: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
+  /** Move tab to a specific index in the post-removal array (0..tabs.length-1). */
+  moveTabTo: (sourceId: string, newIndex: number) => void;
 }
 
 export const useSessionStore = create<State>((set, get) => ({
@@ -151,6 +153,19 @@ export const useSessionStore = create<State>((set, get) => ({
       if (insertAt < 0) return s;
       if (position === 'after') insertAt += 1;
       next.splice(insertAt, 0, moved);
+      return { tabs: next };
+    });
+  },
+
+  moveTabTo: (sourceId, newIndex) => {
+    set((s) => {
+      const from = s.tabs.findIndex((t) => t.id === sourceId);
+      if (from < 0) return s;
+      const next = s.tabs.slice();
+      const [moved] = next.splice(from, 1);
+      const clamped = Math.max(0, Math.min(newIndex, next.length));
+      if (clamped === from) return s;
+      next.splice(clamped, 0, moved);
       return { tabs: next };
     });
   },
