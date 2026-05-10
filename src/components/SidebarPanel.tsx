@@ -200,6 +200,9 @@ export function SidebarPanel({
                         ) : (
                           <span className="sp-group-name">{g.name}</span>
                         )}
+                        {!isRenaming && (
+                          <span className="sp-group-count" aria-hidden>{g.hosts.length}</span>
+                        )}
                       </button>
                       {!isRenaming && (
                         <button

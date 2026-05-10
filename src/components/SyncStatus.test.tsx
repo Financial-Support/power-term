@@ -41,12 +41,13 @@ describe('SyncStatus', () => {
     expect(screen.getByLabelText('syncing')).toBeTruthy();
   });
 
-  it('renders nothing when status is synced (no visual noise)', () => {
+  it('shows signed-in avatar when synced', () => {
     vi.mocked(useSyncStore).mockImplementation((sel: any) =>
-      sel(makeStore({ syncState: { user: { id: 'u', email: null }, status: 'synced', last_synced: 1000, pending_count: 0, error: null } }))
+      sel(makeStore({ syncState: { user: { id: 'u', email: 'alice@example.com' }, status: 'synced', last_synced: 1000, pending_count: 0, error: null } }))
     );
-    const { container } = render(<SyncStatus />);
-    expect(container.firstChild).toBeNull();
+    render(<SyncStatus />);
+    const btn = screen.getByLabelText('Signed in as alice@example.com');
+    expect(btn.textContent).toBe('A');
   });
 
   it('shows sync error label when status is error', () => {

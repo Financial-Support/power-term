@@ -168,7 +168,7 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
       </div>
       {children}
       <div className="titlebar-drag-right" />
-      <SyncStatus onErrorClick={onOpenSyncSettings} />
+      <SyncStatus onErrorClick={onOpenSyncSettings} onClick={onOpenSyncSettings} />
       <button
         type="button"
         className={`broadcast-btn${broadcast ? ' active' : ''}`}

@@ -223,6 +223,10 @@ html, body, #root { height: 100%; margin: 0; }
   box-shadow: 0 0 4px var(--online-glow);
 }
 .tab-status-exited { background: var(--danger); }
+.tab-status-local {
+  background: var(--fg-dim);
+  opacity: 0.55;
+}
 .tab-title {
   flex: 1;
   overflow: hidden;
@@ -275,15 +279,15 @@ html, body, #root { height: 100%; margin: 0; }
 
 /* ─── Icon rail ─────────────────────────────────────────────────────────── */
 .icon-rail {
-  width: 55px;
-  flex: 0 0 55px;
+  width: 50px;
+  flex: 0 0 50px;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 10px 8px;
-  gap: 3px;
+  padding: 6px 6px;
+  gap: 2px;
   user-select: none;
   transition: width 0.15s ease, flex-basis 0.15s ease;
 }
@@ -295,8 +299,8 @@ html, body, #root { height: 100%; margin: 0; }
   align-items: stretch;
 }
 .rail-icon {
-  height: 38px;
-  border-radius: 9px;
+  height: 32px;
+  border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--fg-muted);
@@ -334,12 +338,16 @@ html, body, #root { height: 100%; margin: 0; }
 .rail-spacer { flex: 1; }
 .rail-icon-bottom { margin-top: 0; }
 .rail-icon-toggle {
-  /* Slightly dimmer than the section icons so it reads as a control
+  /* Visually grouped as a "rail control" — bordered card sitting above the
+     section icons, separated by a small gap so it reads as a chrome handle
      rather than a destination. */
   color: var(--fg-dim);
-  margin-bottom: 6px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  height: 26px;
+  margin-bottom: 8px;
 }
-.rail-icon-toggle:hover { color: var(--fg); background: var(--bg-hover); }
+.rail-icon-toggle:hover { color: var(--fg); background: var(--bg-hover); border-color: var(--border-med); }
 .rail-icon:focus-visible {
   outline: 2px solid var(--accent-ring);
   outline-offset: 1px;
@@ -495,6 +503,19 @@ html, body, #root { height: 100%; margin: 0; }
   flex-shrink: 0;
 }
 .sp-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-group-count {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--fg-dim);
+  text-transform: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  margin-left: auto;
+}
 .sp-group-rename-btn {
   display: none;
   background: transparent;
@@ -2178,17 +2199,25 @@ html, body, #root { height: 100%; margin: 0; }
 .db-panel-list { list-style: none; margin: 0; padding: 0 4px 8px; overflow-y: auto; flex: 1; }
 .db-row {
   display: flex; align-items: center; padding: 0 2px 0 4px; border-radius: 5px; gap: 4px;
+  min-width: 0;
   transition: background 0.08s;
 }
 .db-row:hover { background: var(--bg-hover); }
 .db-row-name {
-  flex: 1; display: flex; align-items: center; gap: 6px;
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
   background: transparent; border: 0; padding: 4px 4px;
   cursor: pointer; color: var(--fg); text-align: left;
   font-family: inherit; font-size: 12px;
+  overflow: hidden;
 }
-.db-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.db-host { font-size: 10px; color: var(--fg-dim); }
+.db-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-host {
+  font-size: 10px; color: var(--fg-dim);
+  flex: 0 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 40%;
+}
 .db-engine-pill {
   display: inline-block; min-width: 22px; padding: 1px 4px; border-radius: 4px;
   font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
@@ -2650,11 +2679,26 @@ html, body, #root { height: 100%; margin: 0; }
   padding: 0 6px;
   color: var(--accent-text);
   font-size: 13px; line-height: 1;
-  display: flex; align-items: center;
+  /* The titlebar uses align-items: stretch, so without align-self: center
+     a 22-24px control would top-align in the 34px-tall row. */
+  align-self: center;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
-.sync-status--synced  { color: var(--online); }
 .sync-status--syncing { color: var(--fg-muted); }
 .sync-status--error { color: #f87171; cursor: pointer; }
+.sync-status--user {
+  width: 24px; height: 24px;
+  padding: 0;
+  margin-right: 2px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent-text);
+  font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.1s, transform 0.1s;
+}
+.sync-status--user:hover { background: var(--accent-ring); transform: scale(1.05); }
 .sync-spinner { display: inline-block; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

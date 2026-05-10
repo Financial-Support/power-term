@@ -29,6 +29,7 @@ interface CtxMenu {
 
 interface SortableTabProps {
   tab: Tab;
+  displayTitle: string;
   isActive: boolean;
   isEditing: boolean;
   draft: string;
@@ -43,6 +44,7 @@ interface SortableTabProps {
 
 function SortableTab({
   tab,
+  displayTitle,
   isActive,
   isEditing,
   draft,
@@ -59,7 +61,7 @@ function SortableTab({
 
   const exited = tab.exitCode != null;
   const isRemote = tab.kind === 'ssh' || tab.kind === 'sftp';
-  const dotClass = exited ? 'exited' : (isRemote ? 'connected' : '');
+  const dotClass = exited ? 'exited' : (isRemote ? 'connected' : 'local');
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -83,7 +85,7 @@ function SortableTab({
       {...restAttributes}
       {...listeners}
     >
-      {dotClass && <span className={`tab-status-dot tab-status-${dotClass}`} aria-hidden />}
+      <span className={`tab-status-dot tab-status-${dotClass}`} aria-hidden />
       {isEditing ? (
         <input
           autoFocus
@@ -101,13 +103,13 @@ function SortableTab({
           className="tab-title"
           onDoubleClick={onBeginRename}
         >
-          {tab.kind === 'sftp' ? `SFTP - ${tab.title}` : tab.title}
+          {tab.kind === 'sftp' ? `SFTP - ${displayTitle}` : displayTitle}
         </span>
       )}
       <button
         type="button"
         className="tab-close"
-        aria-label={`Close tab ${tab.title}`}
+        aria-label={`Close tab ${displayTitle}`}
         onClick={(e) => { e.stopPropagation(); onClose(); }}
         onPointerDown={(e) => e.stopPropagation()}
       >
@@ -115,6 +117,26 @@ function SortableTab({
       </button>
     </div>
   );
+}
+
+/** Append " 2", " 3", ... to titles that collide so the user can tell two
+ * tabs named "Local" apart. Singletons keep their original name. */
+function buildDisplayTitles(tabs: Tab[]): Map<string, string> {
+  const totals = new Map<string, number>();
+  for (const t of tabs) totals.set(t.title, (totals.get(t.title) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  const out = new Map<string, string>();
+  for (const t of tabs) {
+    const total = totals.get(t.title) ?? 1;
+    if (total <= 1) {
+      out.set(t.id, t.title);
+      continue;
+    }
+    const n = (seen.get(t.title) ?? 0) + 1;
+    seen.set(t.title, n);
+    out.set(t.id, `${t.title} ${n}`);
+  }
+  return out;
 }
 
 export function TabBar({ onNew, onClose }: Props) {
@@ -175,6 +197,8 @@ export function TabBar({ onNew, onClose }: Props) {
     moveTabTo(String(active.id), newIndex);
   };
 
+  const displayTitles = buildDisplayTitles(tabs);
+
   return (
     <div className="tabbar" role="tablist">
       <DndContext
@@ -190,6 +214,7 @@ export function TabBar({ onNew, onClose }: Props) {
               <SortableTab
                 key={tab.id}
                 tab={tab}
+                displayTitle={displayTitles.get(tab.id) ?? tab.title}
                 isActive={isActive}
                 isEditing={isEditing}
                 draft={draft}

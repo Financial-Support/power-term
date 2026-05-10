@@ -1,12 +1,19 @@
 import { useEffect } from 'react';
 import { useSyncStore } from '../state/syncStore';
-import type { SyncStatusKind } from '../types';
 
 interface Props {
   onErrorClick?: () => void;
+  onClick?: () => void;
 }
 
-export function SyncStatus({ onErrorClick }: Props) {
+/** Top-right indicator of the sync session. The behaviour depends on state:
+ * - signed out → render nothing
+ * - syncing    → spinner
+ * - error      → red ✕ that opens sync settings
+ * - idle/synced → subtle avatar pill (email initial) so the user can see at a
+ *   glance which account this app is signed into without us having to lay out
+ *   a full account chip in the title bar. */
+export function SyncStatus({ onErrorClick, onClick }: Props) {
   const syncState = useSyncStore((s) => s.syncState);
   const listenForStateEvents = useSyncStore((s) => s._listenForStateEvents);
 
@@ -17,24 +24,44 @@ export function SyncStatus({ onErrorClick }: Props) {
   }, [listenForStateEvents]);
 
   if (!syncState?.user) return null;
+  const { status, user } = syncState;
 
-  const status: SyncStatusKind = syncState.status;
-
-  // Only surface in-progress / error states. The "synced" check used to
-  // sit permanently in the top-right and added visual noise without telling
-  // the user anything actionable; the spinner / error icon are enough.
-  if (status === 'idle' || status === 'synced') return null;
-
+  if (status === 'syncing') {
+    return (
+      <button
+        type="button"
+        className="sync-status sync-status--syncing"
+        aria-label="syncing"
+        title="Syncing with Supabase…"
+      >
+        <span className="sync-spinner">↻</span>
+      </button>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <button
+        type="button"
+        className="sync-status sync-status--error"
+        aria-label="sync error"
+        title={syncState.error ?? 'Sync error'}
+        onClick={onErrorClick}
+      >
+        ✕
+      </button>
+    );
+  }
+  // idle / synced — show signed-in avatar.
+  const initial = (user.email ?? '?').charAt(0).toUpperCase();
   return (
     <button
       type="button"
-      className={`sync-status sync-status--${status}`}
-      aria-label={status === 'error' ? 'sync error' : 'syncing'}
-      onClick={status === 'error' ? onErrorClick : undefined}
-      title={status === 'error' ? (syncState.error ?? 'Sync error') : 'Syncing with Supabase…'}
+      className="sync-status sync-status--user"
+      aria-label={user.email ? `Signed in as ${user.email}` : 'Signed in'}
+      title={user.email ?? 'Signed in'}
+      onClick={onClick}
     >
-      {status === 'syncing' && <span className="sync-spinner">↻</span>}
-      {status === 'error' && <span>✕</span>}
+      {initial}
     </button>
   );
 }
