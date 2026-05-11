@@ -125,14 +125,20 @@ html, body, #root { height: 100%; margin: 0; }
   flex-shrink: 0;
 }
 .titlebar-drag-left {
+  /* Reserves space for the macOS traffic-light cluster which overlays the
+     titlebar. Default to 0 — only macOS needs it. */
+  width: 0;
+  flex: 0 0 0;
+  transition: flex-basis 0.15s ease, width 0.15s ease;
+}
+.platform-mac .titlebar-drag-left {
   width: 78px;
   flex: 0 0 78px;
-  transition: flex-basis 0.15s ease, width 0.15s ease;
 }
 /* In macOS native fullscreen, the traffic lights slide off-screen so the
    reserved 78px spacer becomes wasted space — collapse it so the brand
    block sits flush to the window edge. */
-.titlebar-fullscreen .titlebar-drag-left {
+.platform-mac .titlebar-fullscreen .titlebar-drag-left {
   width: 0;
   flex: 0 0 0;
 }

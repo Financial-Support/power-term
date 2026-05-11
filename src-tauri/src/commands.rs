@@ -52,8 +52,18 @@ fn shell_with_fallback(opt: Option<String>) -> String {
     if let Ok(env) = std::env::var("SHELL") { if !env.is_empty() { return env; } }
     #[cfg(target_os = "windows")]
     { "powershell.exe".to_string() }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     { "/bin/zsh".to_string() }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        // Linux / *BSD — prefer bash since most distros ship it, falling
+        // back to /bin/sh when /bin/bash is missing (minimal containers).
+        if std::path::Path::new("/bin/bash").exists() {
+            "/bin/bash".to_string()
+        } else {
+            "/bin/sh".to_string()
+        }
+    }
 }
 
 #[tauri::command]
@@ -873,7 +883,20 @@ pub fn local_reveal(path: String) -> Result<(), String> {
         cmd.status().map_err(|e| format!("explorer: {e}"))?;
         return Ok(());
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    {
+        // No portable "select file in manager" API across DEs; opening the
+        // containing directory with xdg-open is the universally available
+        // fallback. For directories themselves, open them directly.
+        let p = std::path::Path::new(&path);
+        let target = if p.is_dir() { p } else { p.parent().unwrap_or(p) };
+        std::process::Command::new("xdg-open")
+            .arg(target)
+            .status()
+            .map_err(|e| format!("xdg-open: {e}"))?;
+        return Ok(());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = path;
         Err("reveal not supported on this platform".into())
