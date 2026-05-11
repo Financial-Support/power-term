@@ -230,8 +230,11 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .tab-status-exited { background: var(--danger); }
 .tab-status-local {
-  background: var(--fg-dim);
-  opacity: 0.55;
+  /* Use the app accent so local tabs read as "this machine" — distinct
+     from the green "remote connected" dot and the red "exited" dot, while
+     staying in the app's colour family. */
+  background: var(--accent);
+  opacity: 0.75;
 }
 .tab-title {
   flex: 1;

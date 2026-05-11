@@ -120,21 +120,36 @@ function SortableTab({
 }
 
 /** Append " 2", " 3", ... to titles that collide so the user can tell two
- * tabs named "Local" apart. Singletons keep their original name. */
+ * tabs named "Local" apart. Singletons keep their original name.
+ *
+ * Numbers are assigned in *creation order* (parsed from the id's monotonic
+ * counter prefix, e.g. "tab-7-…") — NOT the current store order — so
+ * dragging a tab to a new slot never swaps "Local 1" ↔ "Local 2". The
+ * suffix stays glued to whichever tab the user originally opened first. */
 function buildDisplayTitles(tabs: Tab[]): Map<string, string> {
   const totals = new Map<string, number>();
   for (const t of tabs) totals.set(t.title, (totals.get(t.title) ?? 0) + 1);
+
+  const counter = (id: string) => {
+    const m = id.match(/^tab-(\d+)-/);
+    return m ? Number(m[1]) : 0;
+  };
+  const stable = [...tabs].sort((a, b) => counter(a.id) - counter(b.id));
+
+  const numbers = new Map<string, number>();
   const seen = new Map<string, number>();
-  const out = new Map<string, string>();
-  for (const t of tabs) {
+  for (const t of stable) {
     const total = totals.get(t.title) ?? 1;
-    if (total <= 1) {
-      out.set(t.id, t.title);
-      continue;
-    }
+    if (total <= 1) continue;
     const n = (seen.get(t.title) ?? 0) + 1;
     seen.set(t.title, n);
-    out.set(t.id, `${t.title} ${n}`);
+    numbers.set(t.id, n);
+  }
+
+  const out = new Map<string, string>();
+  for (const t of tabs) {
+    const num = numbers.get(t.id);
+    out.set(t.id, num ? `${t.title} ${num}` : t.title);
   }
   return out;
 }
