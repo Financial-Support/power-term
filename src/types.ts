@@ -27,6 +27,11 @@ export interface Tab {
   title: string;
   kind: TabKind;
   exitCode?: number | null;
+  /** Termination signal from the backend (e.g. "network_error", "killed").
+   * Distinguishes a clean exit (code !== null, signal === null) from a
+   * channel that died mid-session — used by the UI to show a "disconnected"
+   * dot and surface a Reconnect action. */
+  exitSignal?: string | null;
   hostId?: string;
 }
 

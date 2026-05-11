@@ -19,6 +19,7 @@ import type { Tab } from '../types';
 interface Props {
   onNew: () => void;
   onClose: (id: string) => void;
+  onReconnect?: (id: string) => void;
 }
 
 interface CtxMenu {
@@ -40,6 +41,7 @@ interface SortableTabProps {
   onBeginRename: () => void;
   onContextMenu: (x: number, y: number) => void;
   onClose: () => void;
+  onReconnect?: () => void;
 }
 
 function SortableTab({
@@ -55,13 +57,20 @@ function SortableTab({
   onBeginRename,
   onContextMenu,
   onClose,
+  onReconnect,
 }: SortableTabProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: tab.id, disabled: isEditing });
 
-  const exited = tab.exitCode != null;
+  // Any termination — clean exit code OR a signal like "network_error" —
+  // counts as "no longer connected". The previous check was exitCode-only,
+  // which missed signal-killed channels (their code stays null).
+  const dead = tab.exitCode != null || tab.exitSignal != null;
   const isRemote = tab.kind === 'ssh' || tab.kind === 'sftp';
-  const dotClass = exited ? 'exited' : (isRemote ? 'connected' : 'local');
+  const dotClass = dead
+    ? (tab.exitSignal != null ? 'disconnected' : 'exited')
+    : (isRemote ? 'connected' : 'local');
+  const canReconnect = dead && isRemote && !!tab.hostId && !!onReconnect;
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -105,6 +114,18 @@ function SortableTab({
         >
           {tab.kind === 'sftp' ? `SFTP - ${displayTitle}` : displayTitle}
         </span>
+      )}
+      {canReconnect && (
+        <button
+          type="button"
+          className="tab-reconnect"
+          aria-label={`Reconnect ${displayTitle}`}
+          title="Reconnect"
+          onClick={(e) => { e.stopPropagation(); onReconnect?.(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          ↻
+        </button>
       )}
       <button
         type="button"
@@ -154,7 +175,7 @@ function buildDisplayTitles(tabs: Tab[]): Map<string, string> {
   return out;
 }
 
-export function TabBar({ onNew, onClose }: Props) {
+export function TabBar({ onNew, onClose, onReconnect }: Props) {
   const tabs = useSessionStore((s) => s.tabs);
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const setActive = useSessionStore((s) => s.setActive);
@@ -240,6 +261,7 @@ export function TabBar({ onNew, onClose }: Props) {
                 onBeginRename={() => beginRename(tab.id)}
                 onContextMenu={(x, y) => setCtxMenu({ tabId: tab.id, x, y })}
                 onClose={() => onClose(tab.id)}
+                onReconnect={onReconnect ? () => onReconnect(tab.id) : undefined}
               />
             );
           })}

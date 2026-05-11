@@ -115,7 +115,7 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     (async () => {
       unsubOutput = await onPtyOutput(tab.ptyId, (bytes) => term.write(bytes));
       unsubExit = await onPtyExit(tab.ptyId, (p) => {
-        markExit(tab.ptyId, p.code);
+        markExit(tab.ptyId, p.code, p.signal);
         // Shell exited cleanly (e.g. `exit`, Ctrl-D, even with a non-zero
         // status inherited from the last command): auto-close the tab. Only
         // keep it open when the channel died on a signal — network_error,

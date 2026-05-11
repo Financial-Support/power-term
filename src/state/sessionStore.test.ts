@@ -82,11 +82,20 @@ describe('sessionStore', () => {
     expect(useSessionStore.getState().tabs[0].title).toBe('new');
   });
 
-  it('markExit stores exit code on tab', () => {
+  it('markExit stores exit code and signal on tab', () => {
     const { addTab, markExit } = useSessionStore.getState();
     addTab('pty-1', 'a');
-    markExit('pty-1', 137);
+    markExit('pty-1', 137, null);
     expect(useSessionStore.getState().tabs[0].exitCode).toBe(137);
+    expect(useSessionStore.getState().tabs[0].exitSignal).toBeNull();
+  });
+
+  it('markExit captures signal-only deaths (network_error etc.)', () => {
+    const { addTab, markExit } = useSessionStore.getState();
+    addTab('pty-1', 'a');
+    markExit('pty-1', null, 'network_error');
+    expect(useSessionStore.getState().tabs[0].exitCode).toBeNull();
+    expect(useSessionStore.getState().tabs[0].exitSignal).toBe('network_error');
   });
 
   it('addTab defaults kind to local; ssh kind is preserved', () => {

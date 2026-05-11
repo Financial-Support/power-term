@@ -418,6 +418,20 @@ export function App() {
     await driveConnect('sftp', target, auth, null, host.name, host.id);
   }, [driveConnect]);
 
+  /** Re-open a dead SSH/SFTP tab against the same host. Closes the stale
+   * tab first so its pane slot frees up; the new connection then takes
+   * the active pane slot via the usual addTab path. */
+  const handleReconnect = useCallback(async (tabId: string) => {
+    const tab = useSessionStore.getState().tabs.find((t) => t.id === tabId);
+    if (!tab || !tab.hostId) return;
+    const host = useHostStore.getState().hosts.find((h) => h.id === tab.hostId);
+    if (!host) return;
+    const kind = tab.kind;
+    await handleClose(tabId);
+    if (kind === 'sftp') await openSftpFromHost(host);
+    else await connectFromHost(host);
+  }, [handleClose, connectFromHost, openSftpFromHost]);
+
   const handleFormSave = useCallback(async (args: HostFormSaveArgs) => {
     if (syncBusy) return;
     setSyncBusy(true);
@@ -764,7 +778,11 @@ export function App() {
   return (
     <div className="app">
       <TitleBar onLayoutChange={(kind) => void fillNullSlots(kind)} onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}>
-        <TabBar onNew={() => void newLocalTab()} onClose={(id) => void handleClose(id)} />
+        <TabBar
+          onNew={() => void newLocalTab()}
+          onClose={(id) => void handleClose(id)}
+          onReconnect={(id) => void handleReconnect(id)}
+        />
       </TitleBar>
       <div
         className="body"

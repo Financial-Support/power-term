@@ -37,7 +37,7 @@ interface State {
   closeTab: (id: string) => void;
   setActive: (id: string) => void;
   rename: (id: string, title: string) => void;
-  markExit: (ptyId: string, code: number | null) => void;
+  markExit: (ptyId: string, code: number | null, signal: string | null) => void;
   setLayout: (kind: LayoutKind) => void;
   setActivePane: (index: number) => void;
   assignSlot: (index: number, tabId: string) => void;
@@ -97,9 +97,11 @@ export const useSessionStore = create<State>((set, get) => ({
   rename: (id, title) =>
     set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)) })),
 
-  markExit: (ptyId, code) =>
+  markExit: (ptyId, code, signal) =>
     set((s) => ({
-      tabs: s.tabs.map((t) => (t.ptyId === ptyId ? { ...t, exitCode: code } : t)),
+      tabs: s.tabs.map((t) =>
+        t.ptyId === ptyId ? { ...t, exitCode: code, exitSignal: signal } : t,
+      ),
     })),
 
   setLayout: (kind) => {
