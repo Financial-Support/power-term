@@ -1,7 +1,7 @@
 {
   "name": "power-term",
   "private": true,
-  "version": "0.1.23",
+  "version": "0.1.35",
   "type": "module",
   "scripts": {
     "dev": "vite",
