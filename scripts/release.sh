@@ -70,13 +70,17 @@ step "Building DMG for x86_64-apple-darwin"
 npm run tauri:build -- --target x86_64-apple-darwin
 
 step "Staging release artifacts"
+# Names must match the cask formula's URL pattern:
+#   Power.Term_#{version}_#{arch}.dmg  where arch = aarch64 | x86_64
+# Tauri's intel output is named `..._x64.dmg`; rename to `..._x86_64.dmg`
+# so the cask URL resolves on intel Macs without an extra alias.
 cp "src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Power Term_${VERSION}_aarch64.dmg" \
-   "$RELEASE_DIR/PowerTerm-${VERSION}-aarch64.dmg"
+   "$RELEASE_DIR/Power.Term_${VERSION}_aarch64.dmg"
 cp "src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/Power Term_${VERSION}_x64.dmg" \
-   "$RELEASE_DIR/PowerTerm-${VERSION}-x86_64.dmg"
+   "$RELEASE_DIR/Power.Term_${VERSION}_x86_64.dmg"
 
-SHA_ARM=$(shasum -a 256 "$RELEASE_DIR/PowerTerm-${VERSION}-aarch64.dmg" | awk '{print $1}')
-SHA_X64=$(shasum -a 256 "$RELEASE_DIR/PowerTerm-${VERSION}-x86_64.dmg"  | awk '{print $1}')
+SHA_ARM=$(shasum -a 256 "$RELEASE_DIR/Power.Term_${VERSION}_aarch64.dmg" | awk '{print $1}')
+SHA_X64=$(shasum -a 256 "$RELEASE_DIR/Power.Term_${VERSION}_x86_64.dmg"  | awk '{print $1}')
 green "  arm64:  $SHA_ARM"
 green "  x86_64: $SHA_X64"
 
@@ -94,8 +98,8 @@ gh release create "$TAG" \
   --repo "$TAP_REPO" \
   --title "$TAG" \
   --notes "Binary release for power-term $TAG cask." \
-  "$RELEASE_DIR/PowerTerm-${VERSION}-aarch64.dmg" \
-  "$RELEASE_DIR/PowerTerm-${VERSION}-x86_64.dmg"
+  "$RELEASE_DIR/Power.Term_${VERSION}_aarch64.dmg" \
+  "$RELEASE_DIR/Power.Term_${VERSION}_x86_64.dmg"
 
 step "Updating cask formula in $TAP_REPO"
 git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"
