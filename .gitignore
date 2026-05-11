@@ -26,3 +26,6 @@ vite.config.d.ts
 
 # Local memory / scratch
 .remember/
+
+# Playwright MCP artifacts (screenshots, console logs)
+.playwright-mcp/
