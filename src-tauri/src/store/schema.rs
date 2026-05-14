@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-pub const CURRENT_VERSION: u32 = 9;
+pub const CURRENT_VERSION: u32 = 10;
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     let mut version: u32 = conn
@@ -25,6 +25,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             6 => migration_v7(conn)?,
             7 => migration_v8(conn)?,
             8 => migration_v9(conn)?,
+            9 => migration_v10(conn)?,
             other => {
                 return Err(rusqlite::Error::SqliteFailure(
                     rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
@@ -204,6 +205,23 @@ fn migration_v9(conn: &Connection) -> Result<()> {
         DROP TABLE db_connections;
         ALTER TABLE db_connections_new RENAME TO db_connections;
         CREATE INDEX db_connections_host_id_idx ON db_connections(host_id);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migration_v10(conn: &Connection) -> Result<()> {
+    // Persistent push queue. Each row is one outbound sync operation
+    // serialized as JSON. Survives app restarts so a tombstone created
+    // offline can't be silently dropped and let the next pull resurrect
+    // a row the user deleted on this device.
+    conn.execute_batch(
+        r#"
+        CREATE TABLE pending_ops (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            payload    TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
         "#,
     )?;
     Ok(())

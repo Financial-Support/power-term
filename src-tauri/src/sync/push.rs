@@ -2,7 +2,7 @@ use crate::store::{Db, Forward, Host, Snippet, SshKey};
 use crate::settings::Settings;
 use crate::sync::client::{ClientError, SupabaseClient};
 use crate::sync::encrypt::encrypt;
-use parking_lot::Mutex;
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -108,7 +108,8 @@ pub struct RemoteCredentialRow {
     pub deleted_at: Option<i64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind")]
 pub enum PendingOp {
     UpsertHost(RemoteHostRow),
     DeleteHost { id: String, updated_at: i64 },
@@ -123,17 +124,100 @@ pub enum PendingOp {
     DeleteSshKey { id: String, updated_at: i64 },
 }
 
-#[derive(Debug, Default)]
+/// Persistent outbound sync queue.
+///
+/// Each operation is serialized to JSON and inserted into the
+/// `pending_ops` SQLite table at enqueue time. `flush_queue` reads
+/// rows in order, pushes each to Supabase, and deletes the row only
+/// after a successful push. This way a tombstone created offline (or
+/// any other op that couldn't reach the server immediately) survives
+/// app restarts — the previous in-memory queue would silently drop
+/// these on quit, letting the next pull resurrect deleted rows from
+/// the server's still-alive copy.
 pub struct PushQueue {
-    pending: Mutex<Vec<PendingOp>>,
+    db: Arc<Db>,
 }
 
 impl PushQueue {
-    pub fn new() -> Self { Self::default() }
-    pub fn enqueue(&self, op: PendingOp) { self.pending.lock().push(op); }
-    pub fn drain(&self) -> Vec<PendingOp> { std::mem::take(&mut *self.pending.lock()) }
-    pub fn len(&self) -> usize { self.pending.lock().len() }
-    pub fn is_empty(&self) -> bool { self.pending.lock().is_empty() }
+    pub fn new(db: Arc<Db>) -> Self { Self { db } }
+
+    pub fn enqueue(&self, op: PendingOp) {
+        let payload = match serde_json::to_string(&op) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not serialize pending op — dropping");
+                return;
+            }
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let conn = self.db.lock();
+        if let Err(e) = conn.execute(
+            "INSERT INTO pending_ops (payload, created_at) VALUES (?1, ?2)",
+            params![payload, now],
+        ) {
+            tracing::warn!(error = %e, "could not persist pending op — dropping");
+        }
+    }
+
+    /// Returns `(row_id, op)` for every pending row in insertion order.
+    /// Rows that fail to deserialize are deleted so a single bad row
+    /// can't wedge the queue forever after a schema change.
+    pub fn pending(&self) -> Vec<(i64, PendingOp)> {
+        let conn = self.db.lock();
+        let mut stmt = match conn.prepare("SELECT id, payload FROM pending_ops ORDER BY id ASC") {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not read pending_ops");
+                return Vec::new();
+            }
+        };
+        let rows = match stmt.query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            let payload: String = r.get(1)?;
+            Ok((id, payload))
+        }) {
+            Ok(it) => it,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not query pending_ops");
+                return Vec::new();
+            }
+        };
+        let mut out = Vec::new();
+        let mut bad_ids: Vec<i64> = Vec::new();
+        for r in rows.flatten() {
+            match serde_json::from_str::<PendingOp>(&r.1) {
+                Ok(op) => out.push((r.0, op)),
+                Err(e) => {
+                    tracing::warn!(id = r.0, error = %e, "pending op JSON unreadable — discarding");
+                    bad_ids.push(r.0);
+                }
+            }
+        }
+        drop(stmt);
+        for id in bad_ids {
+            let _ = conn.execute("DELETE FROM pending_ops WHERE id=?1", params![id]);
+        }
+        out
+    }
+
+    pub fn delete(&self, id: i64) {
+        let conn = self.db.lock();
+        if let Err(e) = conn.execute("DELETE FROM pending_ops WHERE id=?1", params![id]) {
+            tracing::warn!(id, error = %e, "could not delete pending op");
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        let conn = self.db.lock();
+        conn.query_row("SELECT COUNT(*) FROM pending_ops", [], |r| r.get::<_, i64>(0))
+            .map(|n| n as usize)
+            .unwrap_or(0)
+    }
+
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
 }
 
 pub fn host_to_row(host: &Host, user_id: &str) -> RemoteHostRow {
@@ -262,19 +346,21 @@ pub fn ssh_key_to_row(
 }
 
 pub async fn flush_queue(client: &SupabaseClient, queue: &Arc<PushQueue>) {
-    let ops = queue.drain();
-    for op in ops {
-        if let Err(e) = push_op(client, &op).await {
+    let ops = queue.pending();
+    for (id, op) in ops {
+        match push_op(client, &op).await {
+            Ok(()) => queue.delete(id),
             // PostgREST 404 PGRST205 means the table itself doesn't exist
-            // on Supabase yet — re-queueing would loop forever, so log
-            // once and drop the op. Operator runs the SQL migration to
+            // on Supabase yet — keeping the op would loop forever, so log
+            // once and drop the row. Operator runs the SQL migration to
             // recover; offline retries can't fix a missing schema.
-            if e.is_table_missing() {
+            Err(e) if e.is_table_missing() => {
                 tracing::warn!(error = %e, "push: target table missing on server — dropping op");
-                continue;
+                queue.delete(id);
             }
-            tracing::warn!(error = %e, "push retry failed — re-enqueuing");
-            queue.enqueue(op);
+            Err(e) => {
+                tracing::warn!(error = %e, "push retry failed — keeping op for next sync");
+            }
         }
     }
 }
@@ -472,16 +558,47 @@ pub async fn push_credential(
 mod tests {
     use super::*;
 
+    fn test_queue() -> PushQueue {
+        let db = Db::open_in_memory().unwrap();
+        crate::store::schema::migrate(&db.lock()).unwrap();
+        PushQueue::new(db)
+    }
+
     #[test]
-    fn push_queue_enqueue_and_drain() {
-        let q = PushQueue::new();
+    fn push_queue_enqueue_persists_through_handles() {
+        let q = test_queue();
         assert_eq!(q.len(), 0);
         q.enqueue(PendingOp::DeleteHost { id: "h1".into(), updated_at: 1000 });
         q.enqueue(PendingOp::DeleteHost { id: "h2".into(), updated_at: 2000 });
         assert_eq!(q.len(), 2);
-        let drained = q.drain();
-        assert_eq!(drained.len(), 2);
+        let pending = q.pending();
+        assert_eq!(pending.len(), 2);
+        // pending() does not consume — same ops still present.
+        assert_eq!(q.len(), 2);
+        for (id, _) in pending {
+            q.delete(id);
+        }
         assert_eq!(q.len(), 0);
+    }
+
+    #[test]
+    fn push_queue_survives_reopen() {
+        // The whole point of moving the queue to SQLite: a tombstone
+        // enqueued before quit must still be there when a new PushQueue
+        // is constructed over the same db.
+        let db = Db::open_in_memory().unwrap();
+        crate::store::schema::migrate(&db.lock()).unwrap();
+        let q1 = PushQueue::new(db.clone());
+        q1.enqueue(PendingOp::DeleteHost { id: "ghost".into(), updated_at: 1234 });
+        drop(q1);
+
+        let q2 = PushQueue::new(db);
+        assert_eq!(q2.len(), 1);
+        let pending = q2.pending();
+        assert!(matches!(
+            &pending[0].1,
+            PendingOp::DeleteHost { id, updated_at } if id == "ghost" && *updated_at == 1234
+        ));
     }
 
     #[test]

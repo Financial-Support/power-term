@@ -72,12 +72,12 @@ pub struct SyncManager {
 }
 
 impl SyncManager {
-    pub fn new() -> Self {
+    pub fn new(db: Arc<Db>) -> Self {
         let access = auth::load_access_token().ok().flatten();
         let user = access.as_deref().and_then(auth::user_from_jwt);
         let mut state = SyncState::default();
         state.user = user;
-        Self { state: Mutex::new(state), queue: Arc::new(PushQueue::new()) }
+        Self { state: Mutex::new(state), queue: Arc::new(PushQueue::new(db)) }
     }
 
     pub fn get_state(&self) -> SyncState {
@@ -165,9 +165,6 @@ impl SyncManager {
     }
 }
 
-impl Default for SyncManager {
-    fn default() -> Self { Self::new() }
-}
 
 // ─── Tauri commands ─────────────────────────────────────────────────────────
 
@@ -326,7 +323,9 @@ mod tests {
 
     #[test]
     fn sync_state_default_is_idle() {
-        let m = SyncManager::new();
+        let db = Db::open_in_memory().unwrap();
+        crate::store::schema::migrate(&db.lock()).unwrap();
+        let m = SyncManager::new(db);
         let s = m.get_state();
         assert_eq!(s.status, SyncStatus::Idle);
         // user may be Some if a token was stored in a previous session —

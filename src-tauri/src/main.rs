@@ -27,7 +27,7 @@ fn main() {
     let tag_color_store = TagColorStore::new(db.clone());
     let db_connection_store = DbConnectionStore::new(db.clone());
     let ssh_key_store = SshKeyStore::new(db.clone());
-    let sync_manager = SyncManager::new();
+    let sync_manager = SyncManager::new(db.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
