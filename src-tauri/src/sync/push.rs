@@ -210,6 +210,39 @@ impl PushQueue {
         }
     }
 
+    /// Ids of all queued `Delete<Kind>` ops. Pull merges consult this so
+    /// a server row whose tombstone hasn't reached the server yet does
+    /// not get re-inserted locally. Without this guard a delete that's
+    /// stuck offline keeps getting un-deleted on every pull.
+    ///
+    /// `kind` is the discriminant string used by `#[serde(tag = "kind")]`
+    /// — `"DeleteHost"`, `"DeleteSnippet"`, etc.
+    pub fn pending_delete_ids(&self, kind: &str) -> std::collections::HashSet<String> {
+        let conn = self.db.lock();
+        let mut out = std::collections::HashSet::new();
+        let mut stmt = match conn.prepare("SELECT payload FROM pending_ops") {
+            Ok(s) => s,
+            Err(_) => return out,
+        };
+        let rows = match stmt.query_map([], |r| r.get::<_, String>(0)) {
+            Ok(it) => it,
+            Err(_) => return out,
+        };
+        for payload in rows.flatten() {
+            let Ok(op) = serde_json::from_str::<PendingOp>(&payload) else { continue };
+            let id = match (&op, kind) {
+                (PendingOp::DeleteHost { id, .. }, "DeleteHost") => Some(id.clone()),
+                (PendingOp::DeleteSnippet { id, .. }, "DeleteSnippet") => Some(id.clone()),
+                (PendingOp::DeleteForward { id, .. }, "DeleteForward") => Some(id.clone()),
+                (PendingOp::DeleteSshKey { id, .. }, "DeleteSshKey") => Some(id.clone()),
+                (PendingOp::DeleteCredential { id, .. }, "DeleteCredential") => Some(id.clone()),
+                _ => None,
+            };
+            if let Some(id) = id { out.insert(id); }
+        }
+        out
+    }
+
     pub fn len(&self) -> usize {
         let conn = self.db.lock();
         conn.query_row("SELECT COUNT(*) FROM pending_ops", [], |r| r.get::<_, i64>(0))

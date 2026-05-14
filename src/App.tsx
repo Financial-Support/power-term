@@ -755,19 +755,28 @@ export function App() {
   const theme = useTheme();
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => {
-    const accent = settings?.accent_color ?? 'system';
+    // Skip until settings have loaded — otherwise the first paint runs
+    // with accent_color = undefined → "system", kicks off an async probe,
+    // and that probe's promise can resolve AFTER the user's real value
+    // arrives and overwrite it with the OS accent.
+    if (settings == null) return;
+    const accent = settings.accent_color ?? 'system';
     const root = document.documentElement;
     if (accent === 'system') {
+      let cancelled = false;
       void resolveSystemAccent().then((resolved) => {
+        if (cancelled) return;
         if (resolved) root.style.setProperty('--accent', resolved);
         else root.style.removeProperty('--accent');
       });
-    } else if (/^#[0-9a-f]{6}$/i.test(accent)) {
+      return () => { cancelled = true; };
+    }
+    if (/^#[0-9a-f]{6}$/i.test(accent)) {
       root.style.setProperty('--accent', accent);
     } else {
       root.style.removeProperty('--accent');
     }
-  }, [settings?.accent_color]);
+  }, [settings?.accent_color, settings]);
 
   // Re-probe whenever the OS appearance/accent might have changed.
   useEffect(() => {

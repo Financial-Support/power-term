@@ -1,6 +1,7 @@
 use crate::store::Db;
 use crate::sync::client::{ClientError, SupabaseClient};
 use crate::sync::encrypt::{decrypt, is_encrypted};
+use crate::sync::push::PushQueue;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -81,19 +82,21 @@ pub enum PullError {
 pub async fn pull_all(
     client: &SupabaseClient,
     db: &Arc<Db>,
+    queue: &Arc<PushQueue>,
     sync_key: Option<&[u8; 32]>,
 ) -> Result<(), PullError> {
-    pull_hosts(client, db).await?;
-    pull_snippets(client, db, sync_key).await?;
-    pull_forwards(client, db).await?;
-    pull_ssh_keys(client, db, sync_key).await?;
-    pull_credentials(client, db, sync_key).await?;
+    pull_hosts(client, db, queue).await?;
+    pull_snippets(client, db, queue, sync_key).await?;
+    pull_forwards(client, db, queue).await?;
+    pull_ssh_keys(client, db, queue, sync_key).await?;
+    pull_credentials(client, db, queue, sync_key).await?;
     Ok(())
 }
 
 async fn pull_ssh_keys(
     client: &SupabaseClient,
     db: &Arc<Db>,
+    queue: &Arc<PushQueue>,
     sync_key: Option<&[u8; 32]>,
 ) -> Result<(), PullError> {
     let rows: Vec<RemoteSshKey> = match client.select("ssh_keys", "select=*").await {
@@ -109,10 +112,15 @@ async fn pull_ssh_keys(
         }
         Err(e) => return Err(PullError::Client(e)),
     };
+    let pending_deletes = queue.pending_delete_ids("DeleteSshKey");
     let conn = db.lock();
     for row in rows {
         if row.deleted_at.is_some() {
             conn.execute("DELETE FROM ssh_keys WHERE id=?1", params![row.id])?;
+            continue;
+        }
+        if pending_deletes.contains(&row.id) {
+            // Local has a queued tombstone for this id — don't resurrect.
             continue;
         }
         // Captured key bytes are stored encrypted on the server when a
@@ -166,12 +174,21 @@ async fn pull_ssh_keys(
     Ok(())
 }
 
-async fn pull_hosts(client: &SupabaseClient, db: &Arc<Db>) -> Result<(), PullError> {
+async fn pull_hosts(
+    client: &SupabaseClient,
+    db: &Arc<Db>,
+    queue: &Arc<PushQueue>,
+) -> Result<(), PullError> {
     let rows: Vec<RemoteHost> = client.select("hosts", "select=*").await?;
+    let pending_deletes = queue.pending_delete_ids("DeleteHost");
     let conn = db.lock();
     for row in rows {
         if row.deleted_at.is_some() {
             conn.execute("DELETE FROM hosts WHERE id=?1", params![row.id])?;
+            continue;
+        }
+        if pending_deletes.contains(&row.id) {
+            // Local has a queued tombstone for this id — don't resurrect.
             continue;
         }
         let local_updated: Option<i64> = conn
@@ -209,13 +226,18 @@ async fn pull_hosts(client: &SupabaseClient, db: &Arc<Db>) -> Result<(), PullErr
 async fn pull_snippets(
     client: &SupabaseClient,
     db: &Arc<Db>,
+    queue: &Arc<PushQueue>,
     sync_key: Option<&[u8; 32]>,
 ) -> Result<(), PullError> {
     let rows: Vec<RemoteSnippet> = client.select("snippets", "select=*").await?;
+    let pending_deletes = queue.pending_delete_ids("DeleteSnippet");
     let conn = db.lock();
     for row in rows {
         if row.deleted_at.is_some() {
             conn.execute("DELETE FROM snippets WHERE id=?1", params![row.id])?;
+            continue;
+        }
+        if pending_deletes.contains(&row.id) {
             continue;
         }
         // Rows that look encrypted require the user's sync key. Without it
@@ -261,12 +283,20 @@ async fn pull_snippets(
     Ok(())
 }
 
-async fn pull_forwards(client: &SupabaseClient, db: &Arc<Db>) -> Result<(), PullError> {
+async fn pull_forwards(
+    client: &SupabaseClient,
+    db: &Arc<Db>,
+    queue: &Arc<PushQueue>,
+) -> Result<(), PullError> {
     let rows: Vec<RemoteForward> = client.select("forwards", "select=*").await?;
+    let pending_deletes = queue.pending_delete_ids("DeleteForward");
     let conn = db.lock();
     for row in rows {
         if row.deleted_at.is_some() {
             conn.execute("DELETE FROM forwards WHERE id=?1", params![row.id])?;
+            continue;
+        }
+        if pending_deletes.contains(&row.id) {
             continue;
         }
         let local_updated: Option<i64> = conn
@@ -300,17 +330,25 @@ async fn pull_forwards(client: &SupabaseClient, db: &Arc<Db>) -> Result<(), Pull
 async fn pull_credentials(
     client: &SupabaseClient,
     db: &Arc<Db>,
+    queue: &Arc<PushQueue>,
     sync_key: Option<&[u8; 32]>,
 ) -> Result<(), PullError> {
     let _ = db; // credentials stored in keychain, not SQLite
     let Some(key) = sync_key else { return Ok(()); };
     let creds: Vec<RemoteCredential> = client.select("credentials", "select=*").await?;
+    let pending_deletes = queue.pending_delete_ids("DeleteCredential");
+    // A pending DeleteHost should also block credential resurrection —
+    // the host id IS the credential id by design (see push_credential).
+    let pending_host_deletes = queue.pending_delete_ids("DeleteHost");
     for cred in creds {
         if cred.deleted_at.is_some() {
             let _ = crate::store::secrets::backend_delete(
                 "com.band.power-term",
                 &format!("host:{}", cred.id),
             );
+            continue;
+        }
+        if pending_deletes.contains(&cred.id) || pending_host_deletes.contains(&cred.id) {
             continue;
         }
         if cred.ciphertext.starts_with("ENCRYPTED:NO_KEY") { continue; }
