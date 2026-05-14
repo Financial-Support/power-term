@@ -14,4 +14,4 @@ pub mod proxy;
 pub mod session;
 
 pub use manager::DbManager;
-pub use session::{DbError, DbSession, QueryResult};
+pub use session::{DbCell, DbColumn, DbError, DbIndex, DbSession, QueryResult, TableMeta};

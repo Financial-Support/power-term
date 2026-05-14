@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-pub const CURRENT_VERSION: u32 = 8;
+pub const CURRENT_VERSION: u32 = 9;
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     let mut version: u32 = conn
@@ -24,6 +24,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             5 => migration_v6(conn)?,
             6 => migration_v7(conn)?,
             7 => migration_v8(conn)?,
+            8 => migration_v9(conn)?,
             other => {
                 return Err(rusqlite::Error::SqliteFailure(
                     rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
@@ -174,6 +175,34 @@ fn migration_v6(conn: &Connection) -> Result<()> {
             updated_at  INTEGER NOT NULL DEFAULT 0,
             last_used_at INTEGER
         );
+        CREATE INDEX db_connections_host_id_idx ON db_connections(host_id);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migration_v9(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE db_connections_new (
+            id          TEXT PRIMARY KEY NOT NULL,
+            host_id     TEXT REFERENCES hosts(id) ON DELETE CASCADE,
+            name        TEXT NOT NULL,
+            engine      TEXT NOT NULL CHECK (engine IN ('mysql', 'postgres', 'sqlite', 'mssql', 'redis')),
+            db_host     TEXT NOT NULL DEFAULT '',
+            db_port     INTEGER NOT NULL DEFAULT 0 CHECK (db_port BETWEEN 0 AND 65535),
+            database    TEXT NOT NULL DEFAULT '',
+            db_user     TEXT NOT NULL DEFAULT '',
+            created_at  INTEGER NOT NULL,
+            updated_at  INTEGER NOT NULL DEFAULT 0,
+            last_used_at INTEGER
+        );
+        INSERT INTO db_connections_new
+            (id, host_id, name, engine, db_host, db_port, database, db_user, created_at, updated_at, last_used_at)
+            SELECT id, host_id, name, engine, db_host, db_port, database, db_user, created_at, updated_at, last_used_at
+            FROM db_connections;
+        DROP TABLE db_connections;
+        ALTER TABLE db_connections_new RENAME TO db_connections;
         CREATE INDEX db_connections_host_id_idx ON db_connections(host_id);
         "#,
     )?;

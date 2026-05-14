@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useHostStore } from '../state/hostStore';
+import { pickLocalFile } from '../lib/dialog';
 import { secretGet } from '../lib/ipc';
 import type { DbConnection, DbConnectionInput, DbEngine } from '../types';
 
@@ -23,7 +24,21 @@ export type PasswordIntent =
 const KEY_PREFIX = 'db:';
 export const dbSecretKey = (id: string) => `${KEY_PREFIX}${id}`;
 
-const DEFAULT_PORTS: Record<DbEngine, number> = { mysql: 3306, postgres: 5432 };
+const DEFAULT_PORTS: Record<DbEngine, number> = {
+  mysql: 3306,
+  postgres: 5432,
+  sqlite: 0,
+  mssql: 1433,
+  redis: 6379,
+};
+
+const ENGINE_LABELS: Record<DbEngine, string> = {
+  postgres: 'PostgreSQL',
+  mysql: 'MySQL',
+  sqlite: 'SQLite',
+  mssql: 'MSSQL',
+  redis: 'Redis',
+};
 
 export function DbConnectionFormModal({ mode, connection, onSave, onCancel, saving }: Props) {
   const hosts = useHostStore((s) => s.hosts);
@@ -68,13 +83,26 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
     if (!portTouched) setDbPort(DEFAULT_PORTS[engine]);
   }, [engine, portTouched]);
 
+  const isSqlite = engine === 'sqlite';
+  const isRedis = engine === 'redis';
+  const usesSshHost = !isSqlite;
+  const usesPassword = !isSqlite;
+  const usesUser = !isSqlite && !isRedis;
+  const databaseLabel = isSqlite ? 'SQLite file path' : isRedis ? 'Redis DB index' : 'Database';
+  const databasePlaceholder = isSqlite ? '/path/to/app.sqlite' : isRedis ? '0' : '';
   const portValid = Number.isInteger(dbPort) && dbPort >= 1 && dbPort <= 65535;
   const valid =
     name.trim() !== '' &&
-    hostId !== '' &&
-    dbHost.trim() !== '' &&
-    dbUser.trim() !== '' &&
-    portValid;
+    (!usesSshHost || hostId !== '') &&
+    (isSqlite || dbHost.trim() !== '') &&
+    (isSqlite || !usesUser || dbUser.trim() !== '') &&
+    (isSqlite || portValid) &&
+    (!isSqlite || database.trim() !== '');
+
+  const browseSqliteDatabase = async () => {
+    const picked = await pickLocalFile();
+    if (picked) setDatabase(picked);
+  };
 
   const submit = () => {
     if (!valid) return;
@@ -89,13 +117,13 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
     else if (wantsForget) intent = { kind: 'forget' };
     onSave(
       {
-        host_id: hostId,
+        host_id: usesSshHost ? hostId : '',
         name: name.trim(),
         engine,
-        db_host: dbHost.trim(),
-        db_port: dbPort,
+        db_host: isSqlite ? '' : dbHost.trim(),
+        db_port: isSqlite ? 0 : dbPort,
         database: database.trim(),
-        db_user: dbUser.trim(),
+        db_user: usesUser ? dbUser.trim() : '',
       },
       intent,
     );
@@ -109,70 +137,112 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
           <label htmlFor="dbf-name">Name</label>
           <input id="dbf-name" value={name} onChange={(e) => setName(e.target.value)} />
 
-          <label htmlFor="dbf-host">SSH host</label>
-          <select id="dbf-host" value={hostId} onChange={(e) => setHostId(e.target.value)}>
-            <option value="" disabled>Select host…</option>
-            {hosts.map((h) => (
-              <option key={h.id} value={h.id}>{h.name} ({h.username}@{h.hostname}:{h.port})</option>
-            ))}
-          </select>
-
           <label htmlFor="dbf-engine">Engine</label>
           <select
             id="dbf-engine"
             value={engine}
-            onChange={(e) => setEngine(e.target.value as DbEngine)}
+            onChange={(e) => {
+              const next = e.target.value as DbEngine;
+              setEngine(next);
+              if (!portTouched) setDbPort(DEFAULT_PORTS[next]);
+            }}
           >
-            <option value="postgres">PostgreSQL</option>
-            <option value="mysql">MySQL</option>
+            {Object.entries(ENGINE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </select>
 
-          <label htmlFor="dbf-dbhost">DB host (from remote)</label>
-          <input
-            id="dbf-dbhost"
-            value={dbHost}
-            onChange={(e) => setDbHost(e.target.value)}
-            placeholder="127.0.0.1"
-          />
+          {usesSshHost && (
+            <>
+              <label htmlFor="dbf-host">SSH host</label>
+              <select id="dbf-host" value={hostId} onChange={(e) => setHostId(e.target.value)}>
+                <option value="" disabled>Select host…</option>
+                {hosts.map((h) => (
+                  <option key={h.id} value={h.id}>{h.name} ({h.username}@{h.hostname}:{h.port})</option>
+                ))}
+              </select>
+            </>
+          )}
 
-          <label htmlFor="dbf-port">DB port</label>
-          <input
-            id="dbf-port"
-            type="number"
-            min={1}
-            max={65535}
-            value={dbPort}
-            onChange={(e) => { setPortTouched(true); setDbPort(Number(e.target.value)); }}
-          />
+          {!isSqlite && (
+            <>
+              <label htmlFor="dbf-dbhost">{isRedis ? 'Redis host (from remote)' : 'DB host (from remote)'}</label>
+              <input
+                id="dbf-dbhost"
+                value={dbHost}
+                onChange={(e) => setDbHost(e.target.value)}
+                placeholder="127.0.0.1"
+              />
 
-          <label htmlFor="dbf-database">Database</label>
-          <input id="dbf-database" value={database} onChange={(e) => setDatabase(e.target.value)} />
+              <label htmlFor="dbf-port">{isRedis ? 'Redis port' : 'DB port'}</label>
+              <input
+                id="dbf-port"
+                type="number"
+                min={1}
+                max={65535}
+                value={dbPort}
+                onChange={(e) => { setPortTouched(true); setDbPort(Number(e.target.value)); }}
+              />
+            </>
+          )}
 
-          <label htmlFor="dbf-user">DB user</label>
-          <input id="dbf-user" value={dbUser} onChange={(e) => setDbUser(e.target.value)} />
+          <label htmlFor="dbf-database">{databaseLabel}</label>
+          {isSqlite ? (
+            <div className="key-path-row">
+              <input
+                id="dbf-database"
+                value={database}
+                onChange={(e) => setDatabase(e.target.value)}
+                placeholder={databasePlaceholder}
+              />
+              <button type="button" className="key-path-browse" onClick={() => void browseSqliteDatabase()}>
+                Browse…
+              </button>
+            </div>
+          ) : (
+            <input
+              id="dbf-database"
+              value={database}
+              onChange={(e) => setDatabase(e.target.value)}
+              placeholder={databasePlaceholder}
+            />
+          )}
 
-          <label htmlFor="dbf-pass">Password</label>
-          <input
-            id="dbf-pass"
-            type="password"
-            value={password}
-            placeholder={hasStored && !passwordDirty ? '••• stored in Keychain' : ''}
-            onChange={(e) => { setPassword(e.target.value); setPasswordDirty(true); }}
-          />
+          {usesUser && (
+            <>
+              <label htmlFor="dbf-user">DB user</label>
+              <input id="dbf-user" value={dbUser} onChange={(e) => setDbUser(e.target.value)} />
+            </>
+          )}
+
+          {usesPassword && (
+            <>
+              <label htmlFor="dbf-pass">Password</label>
+              <input
+                id="dbf-pass"
+                type="password"
+                value={password}
+                placeholder={hasStored && !passwordDirty ? '••• stored in Keychain' : isRedis ? 'optional' : ''}
+                onChange={(e) => { setPassword(e.target.value); setPasswordDirty(true); }}
+              />
+            </>
+          )}
         </div>
 
-        <label className="checkbox" style={{ marginTop: 4 }}>
-          <input
-            type="checkbox"
-            checked={savePassword}
-            onChange={(e) => { setSavePassword(e.target.checked); setSavePasswordDirty(true); }}
-          /> Save password to Keychain
-        </label>
+        {usesPassword && (
+          <label className="checkbox" style={{ marginTop: 4 }}>
+            <input
+              type="checkbox"
+              checked={savePassword}
+              onChange={(e) => { setSavePassword(e.target.checked); setSavePasswordDirty(true); }}
+            /> Save password to Keychain
+          </label>
+        )}
 
         <p className="form-hint">
-          The DB host is resolved on the remote side, so use 127.0.0.1 for a DB
-          running on the SSH host itself. Password is stored in the OS Keychain
-          when the box above is checked.
+          {isSqlite
+            ? 'SQLite connections open a local database file directly.'
+            : 'The DB host is resolved on the remote side, so use 127.0.0.1 for a service running on the SSH host itself. Passwords are stored in the OS Keychain when enabled.'}
         </p>
 
         <div className="modal-actions">

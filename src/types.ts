@@ -189,7 +189,7 @@ export interface SshKeyInput {
   content: string;
 }
 
-export type DbEngine = 'mysql' | 'postgres';
+export type DbEngine = 'mysql' | 'postgres' | 'sqlite' | 'mssql' | 'redis';
 
 export interface DbConnection {
   id: string;
@@ -221,6 +221,33 @@ export interface QueryResult {
   rows_affected: number;
   took_ms: number;
   statements: number;
+}
+
+export interface DbColumn {
+  name: string;
+  data_type: string;
+  nullable: boolean;
+  default_value: string | null;
+  primary_key: boolean;
+}
+
+export interface DbIndex {
+  name: string;
+  columns: string[];
+  unique: boolean;
+  primary: boolean;
+}
+
+export interface TableMeta {
+  table: string;
+  columns: DbColumn[];
+  primary_key: string[];
+  indexes: DbIndex[];
+}
+
+export interface DbCell {
+  column: string;
+  value: string | null;
 }
 
 export interface SyncUser {

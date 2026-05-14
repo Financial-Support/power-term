@@ -19,7 +19,7 @@ export function DbConnectingModal({ connection, step }: Props) {
       <div className="modal db-connecting">
         <div className="db-connecting-header">
           <span className={`db-engine-pill db-engine-${connection.engine}`}>
-            {connection.engine === 'mysql' ? 'MY' : 'PG'}
+            {engineShort(connection.engine)}
           </span>
           <span className="db-connecting-name">{connection.name}</span>
         </div>
@@ -28,11 +28,33 @@ export function DbConnectingModal({ connection, step }: Props) {
           <span className="db-connecting-step">{step ?? 'Connecting…'}</span>
         </div>
         <p className="form-hint" style={{ marginTop: 0 }}>
-          Opening SSH tunnel and authenticating to {connection.engine === 'mysql' ? 'MySQL' : 'PostgreSQL'} as
-          <code> {connection.db_user}</code>
+          {connection.engine === 'sqlite' ? 'Opening local SQLite file' : `Opening SSH tunnel and authenticating to ${engineLabel(connection.engine)}`}
+          {connection.db_user ? <><span> as</span><code> {connection.db_user}</code></> : null}
           {connection.database ? <> on <code>{connection.database}</code></> : null}.
         </p>
       </div>
     </div>
   );
+}
+
+function engineShort(engine: string): string {
+  switch (engine) {
+    case 'mysql': return 'MY';
+    case 'postgres': return 'PG';
+    case 'sqlite': return 'SQ';
+    case 'mssql': return 'MS';
+    case 'redis': return 'RD';
+    default: return engine.slice(0, 2).toUpperCase();
+  }
+}
+
+function engineLabel(engine: string): string {
+  switch (engine) {
+    case 'mysql': return 'MySQL';
+    case 'postgres': return 'PostgreSQL';
+    case 'sqlite': return 'SQLite';
+    case 'mssql': return 'MSSQL';
+    case 'redis': return 'Redis';
+    default: return engine;
+  }
 }

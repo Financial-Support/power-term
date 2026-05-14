@@ -147,6 +147,10 @@ export function App() {
   const closeSftpTabState = useSftpStore((s) => s.closeTab);
 
   const [sidebarSection, setSidebarSection] = useState<SidebarSection>('hosts');
+  const [dbListCollapsed, setDbListCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('db-list-collapsed') === '1';
+  });
+  useEffect(() => { localStorage.setItem('db-list-collapsed', dbListCollapsed ? '1' : '0'); }, [dbListCollapsed]);
   const [railExpanded, setRailExpanded] = useState<boolean>(() => {
     // Persist expanded/collapsed across launches. Default is collapsed
     // (icons only) so the chrome stays compact for users who don't need
@@ -645,6 +649,10 @@ export function App() {
   }, [dbSshPrompt, openDbConnection]);
 
   const requestOpenDb = useCallback(async (connection: DbConnection) => {
+    if (connection.engine === 'sqlite') {
+      await openDbConnection(connection, '');
+      return;
+    }
     // Try keychain first — if a password is saved, skip the prompt and go
     // straight to opening. Surfaces a prompt only when there's nothing to
     // remember or the saved one fails (handled inside openDbConnection).
@@ -655,6 +663,10 @@ export function App() {
         return;
       }
     } catch (e) { console.warn('keychain read failed', e); }
+    if (connection.engine === 'redis') {
+      await openDbConnection(connection, '');
+      return;
+    }
     setDbPasswordPrompt(connection);
   }, [openDbConnection]);
 
@@ -785,7 +797,7 @@ export function App() {
         />
       </TitleBar>
       <div
-        className="body"
+        className={`body${sidebarSection === 'databases' && dbListCollapsed ? ' db-list-collapsed' : ''}`}
         style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` }}
       >
         <IconRail
@@ -796,47 +808,64 @@ export function App() {
           onSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
           onSync={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}
         />
-        <SidebarPanel
-          section={sidebarSection}
-          onConnect={(h) => void connectFromHost(h)}
-          onOpenSftp={(h) => void openSftpFromHost(h)}
-          onAddHost={() => setForm({ kind: 'create' })}
-          onImportSshConfig={() => setSshImportOpen(true)}
-          onEditHost={(h) => setForm({ kind: 'edit', host: h })}
-          onDeleteHost={(h) => setConfirmDelete(h)}
-          onDuplicateHost={(h) => void handleDuplicateHost(h)}
-          snippetsSlot={
-            <SnippetsPanel
-              onAdd={() => setSnippetForm({ kind: 'create' })}
-              onEdit={(snip) => setSnippetForm({ kind: 'edit', snippet: snip })}
-              onDelete={(snip) => setConfirmDeleteSnippet(snip)}
-              onInsert={onInsertSnippet}
+        {!(sidebarSection === 'databases' && dbListCollapsed) && (
+          <>
+            <SidebarPanel
+              section={sidebarSection}
+              onConnect={(h) => void connectFromHost(h)}
+              onOpenSftp={(h) => void openSftpFromHost(h)}
+              onAddHost={() => setForm({ kind: 'create' })}
+              onImportSshConfig={() => setSshImportOpen(true)}
+              onEditHost={(h) => setForm({ kind: 'edit', host: h })}
+              onDeleteHost={(h) => setConfirmDelete(h)}
+              onDuplicateHost={(h) => void handleDuplicateHost(h)}
+              snippetsSlot={
+                <SnippetsPanel
+                  onAdd={() => setSnippetForm({ kind: 'create' })}
+                  onEdit={(snip) => setSnippetForm({ kind: 'edit', snippet: snip })}
+                  onDelete={(snip) => setConfirmDeleteSnippet(snip)}
+                  onInsert={onInsertSnippet}
+                />
+              }
+              forwardsSlot={
+                <ForwardsPanel
+                  onAdd={() => setForwardForm({ kind: 'create' })}
+                  onEdit={(f) => setForwardForm({ kind: 'edit', forward: f })}
+                  onDelete={(f) => setConfirmDeleteForward(f)}
+                />
+              }
+              databasesSlot={
+                <DbConnectionsPanel
+                  onAdd={() => setDbForm({ kind: 'create' })}
+                  onEdit={(c) => setDbForm({ kind: 'edit', connection: c })}
+                  onDelete={(c) => setConfirmDeleteDb(c)}
+                  onOpen={(c) => void requestOpenDb(c)}
+                  onHidePanel={() => setDbListCollapsed(true)}
+                />
+              }
+              keysSlot={
+                <KeysPanel
+                  onAdd={() => setKeyForm({ kind: 'create' })}
+                  onEdit={(k) => setKeyForm({ kind: 'edit', key: k })}
+                  onDelete={(k) => setConfirmDeleteKey(k)}
+                />
+              }
             />
-          }
-          forwardsSlot={
-            <ForwardsPanel
-              onAdd={() => setForwardForm({ kind: 'create' })}
-              onEdit={(f) => setForwardForm({ kind: 'edit', forward: f })}
-              onDelete={(f) => setConfirmDeleteForward(f)}
-            />
-          }
-          databasesSlot={
-            <DbConnectionsPanel
-              onAdd={() => setDbForm({ kind: 'create' })}
-              onEdit={(c) => setDbForm({ kind: 'edit', connection: c })}
-              onDelete={(c) => setConfirmDeleteDb(c)}
-              onOpen={(c) => void requestOpenDb(c)}
-            />
-          }
-          keysSlot={
-            <KeysPanel
-              onAdd={() => setKeyForm({ kind: 'create' })}
-              onEdit={(k) => setKeyForm({ kind: 'edit', key: k })}
-              onDelete={(k) => setConfirmDeleteKey(k)}
-            />
-          }
-        />
-        <SidebarResizeHandle onResize={onSidebarResize} />
+            <SidebarResizeHandle onResize={onSidebarResize} />
+          </>
+        )}
+        {sidebarSection === 'databases' && dbListCollapsed && (
+          <button
+            type="button"
+            className="db-list-reveal"
+            onClick={() => setDbListCollapsed(false)}
+            aria-label="Show database list"
+            title="Show database list"
+          >
+            <span>Databases</span>
+            <strong>›</strong>
+          </button>
+        )}
         <main
           ref={terminalsRef}
           className={`terminals layout-${layoutKind}${broadcast ? ' broadcast-on' : ''}`}

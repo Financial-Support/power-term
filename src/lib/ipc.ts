@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor, DbConnection, DbConnectionInput, QueryResult, SshKey, SshKeyInput } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor, DbConnection, DbConnectionInput, QueryResult, SshKey, SshKeyInput, TableMeta, DbCell } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -301,6 +301,26 @@ export async function dbSessionClose(sessionId: string): Promise<void> {
 }
 export async function dbQuery(sessionId: string, sql: string): Promise<QueryResult> {
   return invoke<QueryResult>('db_query', { sessionId, sql });
+}
+export async function dbDescribeTable(sessionId: string, table: string): Promise<TableMeta> {
+  return invoke<TableMeta>('db_describe_table', { sessionId, table });
+}
+export async function dbUpdateRow(
+  sessionId: string,
+  table: string,
+  key: DbCell[],
+  changes: DbCell[],
+): Promise<QueryResult> {
+  return invoke<QueryResult>('db_update_row', { sessionId, table, key, changes });
+}
+export async function dbInsertRow(sessionId: string, table: string, values: DbCell[]): Promise<QueryResult> {
+  return invoke<QueryResult>('db_insert_row', { sessionId, table, values });
+}
+export async function dbDeleteRow(sessionId: string, table: string, key: DbCell[]): Promise<QueryResult> {
+  return invoke<QueryResult>('db_delete_row', { sessionId, table, key });
+}
+export async function dbExecuteSchema(sessionId: string, sql: string): Promise<QueryResult> {
+  return invoke<QueryResult>('db_execute_schema', { sessionId, sql });
 }
 export async function dbQueryCancel(sessionId: string): Promise<void> {
   await invoke('db_query_cancel', { sessionId });

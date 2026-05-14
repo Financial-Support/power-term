@@ -1146,44 +1146,52 @@ pub async fn db_session_open(
     ssh_passphrase: Option<String>,
 ) -> Result<String, String> {
     let conn_meta = db_store.get(&connection_id).map_err(|e| e.to_string())?;
-    let host = host_store
-        .get(&conn_meta.host_id)
-        .map_err(|e| e.to_string())?;
+    let (target, auth) = if conn_meta.engine == "sqlite" {
+        (
+            SshTarget { host: "localhost".into(), port: 22, user: String::new() },
+            Auth::Agent,
+        )
+    } else {
+        let host = host_store
+            .get(&conn_meta.host_id)
+            .map_err(|e| e.to_string())?;
 
-    // Resolve SSH auth from the host's saved auth method, pulling the
-    // passphrase / password from the OS keyring when needed. Mirrors the
-    // forward_start command's resolution path so behaviour stays consistent
-    // — if SSH auth fails here it fails there too.
-    let target = SshTarget {
-        host: host.hostname.clone(),
-        port: host.port,
-        user: host.username.clone(),
-    };
-    let auth = match host.auth_method.as_str() {
-        "agent" => Auth::Agent,
-        "key" => {
-            let path = host
-                .key_path
-                .filter(|p| !p.trim().is_empty())
-                .ok_or_else(|| "key auth requires a key_path".to_string())?;
-            // Inline override wins when present (non-empty); otherwise fall
-            // back to whatever the keychain has (which may be None — the
-            // load step then surfaces a "key is encrypted" error that the
-            // renderer handles with a re-prompt).
-            let passphrase = ssh_passphrase
-                .filter(|s| !s.is_empty())
-                .or_else(|| crate::store::secrets::get(&host.id).ok().flatten());
-            resolve_key_auth(&ssh_key_store, &path, passphrase)
-        }
-        _ => {
-            let password = crate::store::secrets::get(&host.id)
-                .ok()
-                .flatten()
-                .ok_or_else(|| {
-                    "password auth requires a saved password in the keychain (db MVP)".to_string()
-                })?;
-            Auth::Password { password }
-        }
+        // Resolve SSH auth from the host's saved auth method, pulling the
+        // passphrase / password from the OS keyring when needed. Mirrors the
+        // forward_start command's resolution path so behaviour stays consistent
+        // — if SSH auth fails here it fails there too.
+        let target = SshTarget {
+            host: host.hostname.clone(),
+            port: host.port,
+            user: host.username.clone(),
+        };
+        let auth = match host.auth_method.as_str() {
+            "agent" => Auth::Agent,
+            "key" => {
+                let path = host
+                    .key_path
+                    .filter(|p| !p.trim().is_empty())
+                    .ok_or_else(|| "key auth requires a key_path".to_string())?;
+                // Inline override wins when present (non-empty); otherwise fall
+                // back to whatever the keychain has (which may be None — the
+                // load step then surfaces a "key is encrypted" error that the
+                // renderer handles with a re-prompt).
+                let passphrase = ssh_passphrase
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| crate::store::secrets::get(&host.id).ok().flatten());
+                resolve_key_auth(&ssh_key_store, &path, passphrase)
+            }
+            _ => {
+                let password = crate::store::secrets::get(&host.id)
+                    .ok()
+                    .flatten()
+                    .ok_or_else(|| {
+                        "password auth requires a saved password in the keychain (db MVP)".to_string()
+                    })?;
+                Auth::Password { password }
+            }
+        };
+        (target, auth)
     };
 
     let s = settings.get();
@@ -1235,6 +1243,60 @@ pub async fn db_query(
 }
 
 #[tauri::command]
+pub async fn db_describe_table(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    table: String,
+) -> Result<crate::db::TableMeta, String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    session.describe_table(&table).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn db_update_row(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    table: String,
+    key: Vec<crate::db::DbCell>,
+    changes: Vec<crate::db::DbCell>,
+) -> Result<crate::db::QueryResult, String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    session.update_row(&table, &key, &changes).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn db_insert_row(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    table: String,
+    values: Vec<crate::db::DbCell>,
+) -> Result<crate::db::QueryResult, String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    session.insert_row(&table, &values).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn db_delete_row(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    table: String,
+    key: Vec<crate::db::DbCell>,
+) -> Result<crate::db::QueryResult, String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    session.delete_row(&table, &key).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn db_execute_schema(
+    manager: tauri::State<'_, DbManager>,
+    session_id: String,
+    sql: String,
+) -> Result<crate::db::QueryResult, String> {
+    let session = manager.get(&session_id).map_err(|e| e.to_string())?;
+    session.query(&sql).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn db_query_cancel(
     manager: tauri::State<'_, DbManager>,
     session_id: String,
@@ -1258,6 +1320,9 @@ pub async fn db_list_tables(
              ORDER BY schemaname, tablename"
         }
         "mysql" => "SHOW TABLES",
+        "sqlite" => "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        "mssql" => "SELECT TABLE_SCHEMA + '.' + TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_SCHEMA, TABLE_NAME",
+        "redis" => "KEYS *",
         other => return Err(format!("unknown engine '{other}'")),
     };
     let r = session.query(sql).await.map_err(|e| e.to_string())?;
@@ -1273,10 +1338,15 @@ pub async fn db_list_databases(
     session_id: String,
     engine: String,
 ) -> Result<Vec<String>, String> {
+    if engine == "redis" {
+        return Ok((0..16).map(|n| n.to_string()).collect());
+    }
     let session = manager.get(&session_id).map_err(|e| e.to_string())?;
     let sql = match engine.as_str() {
         "postgres" => "SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY datname",
         "mysql" => "SHOW DATABASES",
+        "sqlite" => "SELECT 'main'",
+        "mssql" => "SELECT name FROM sys.databases WHERE database_id > 4 ORDER BY name",
         other => return Err(format!("unknown engine '{other}'")),
     };
     let r = session.query(sql).await.map_err(|e| e.to_string())?;

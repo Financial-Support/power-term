@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct DbConnectionInput {
     pub host_id: String,
     pub name: String,
-    /// "mysql" | "postgres"
+    /// "mysql" | "postgres" | "sqlite" | "mssql" | "redis"
     pub engine: String,
     pub db_host: String,
     pub db_port: u16,
@@ -153,23 +153,26 @@ fn row_to_conn(row: &Row<'_>) -> rusqlite::Result<DbConnection> {
 }
 
 fn validate(input: &DbConnectionInput) -> Result<(), StoreError> {
-    if input.host_id.trim().is_empty() {
+    if input.engine != "sqlite" && input.host_id.trim().is_empty() {
         return Err(StoreError::Invalid("host_id required".into()));
     }
     if input.name.trim().is_empty() {
         return Err(StoreError::Invalid("name required".into()));
     }
     match input.engine.as_str() {
-        "mysql" | "postgres" => {}
+        "mysql" | "postgres" | "sqlite" | "mssql" | "redis" => {}
         other => return Err(StoreError::Invalid(format!("unknown engine '{other}'"))),
     }
-    if input.db_host.trim().is_empty() {
+    if input.engine != "sqlite" && input.db_host.trim().is_empty() {
         return Err(StoreError::Invalid("db_host required".into()));
     }
-    if input.db_port == 0 {
+    if input.engine != "sqlite" && input.db_port == 0 {
         return Err(StoreError::Invalid("db_port must be 1..=65535".into()));
     }
-    if input.db_user.trim().is_empty() {
+    if input.engine == "sqlite" && input.database.trim().is_empty() {
+        return Err(StoreError::Invalid("sqlite file path required".into()));
+    }
+    if !matches!(input.engine.as_str(), "sqlite" | "redis") && input.db_user.trim().is_empty() {
         return Err(StoreError::Invalid("db_user required".into()));
     }
     Ok(())

@@ -6,13 +6,17 @@ use crate::ssh::auth::Auth;
 use crate::ssh::handshake::{handshake_and_auth, ClientHandler, HandshakeError, SshTarget};
 use parking_lot::Mutex as PLMutex;
 use russh::client::Handle;
+use rusqlite::types::ValueRef as SqliteValueRef;
 use russh::Disconnect;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_postgres::{CancelToken, SimpleQueryMessage};
+use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 
 #[derive(thiserror::Error, Debug)]
 pub enum DbError {
@@ -63,15 +67,53 @@ pub struct QueryResult {
     pub statements: u32,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DbColumn {
+    pub name: String,
+    pub data_type: String,
+    pub nullable: bool,
+    pub default_value: Option<String>,
+    pub primary_key: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DbIndex {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub unique: bool,
+    pub primary: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TableMeta {
+    pub table: String,
+    pub columns: Vec<DbColumn>,
+    pub primary_key: Vec<String>,
+    pub indexes: Vec<DbIndex>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DbCell {
+    pub column: String,
+    pub value: Option<String>,
+}
+
 enum Driver {
     Postgres(tokio_postgres::Client),
     Mysql(mysql_async::Conn),
+    Sqlite(rusqlite::Connection),
+    Redis(RedisSession),
+    Mssql(tiberius::Client<Compat<TcpStream>>),
+}
+
+struct RedisSession {
+    stream: TcpStream,
 }
 
 pub struct DbSession {
     engine: String,
     driver: AsyncMutex<Driver>,
-    _proxy: DbProxy,
+    _proxy: Option<DbProxy>,
     ssh: AsyncMutex<Option<Arc<Handle<ClientHandler>>>>,
     cancel_state: PLMutex<CancelState>,
     creds: Creds,
@@ -111,6 +153,23 @@ impl DbSession {
         db_user: String,
         db_password: String,
     ) -> Result<Self, DbError> {
+        if engine == "sqlite" {
+            let driver = rusqlite::Connection::open(&database)
+                .map_err(|e| DbError::Connect(format!("sqlite: {e}")))?;
+            return Ok(Self {
+                engine: engine.to_string(),
+                driver: AsyncMutex::new(Driver::Sqlite(driver)),
+                _proxy: None,
+                ssh: AsyncMutex::new(None),
+                cancel_state: PLMutex::new(CancelState::Unsupported),
+                creds: Creds {
+                    proxy_port: 0,
+                    user: db_user,
+                    password: db_password,
+                    database: Arc::new(std::sync::Mutex::new(database)),
+                },
+            });
+        }
         let session = handshake_and_auth(
             ssh_target,
             ssh_auth,
@@ -129,13 +188,15 @@ impl DbSession {
         let (driver, cancel_state) = match engine {
             "postgres" => connect_postgres(local_port, &database, &db_user, &db_password).await?,
             "mysql" => connect_mysql(local_port, &database, &db_user, &db_password).await?,
+            "mssql" => connect_mssql(local_port, &database, &db_user, &db_password).await?,
+            "redis" => connect_redis(local_port, &database, &db_user, &db_password).await?,
             other => return Err(DbError::Connect(format!("unknown engine '{other}'"))),
         };
 
         Ok(Self {
             engine: engine.to_string(),
             driver: AsyncMutex::new(driver),
-            _proxy: proxy,
+            _proxy: Some(proxy),
             ssh: AsyncMutex::new(Some(session)),
             cancel_state: PLMutex::new(cancel_state),
             creds: Creds {
@@ -153,11 +214,275 @@ impl DbSession {
         let result = match &mut *driver {
             Driver::Postgres(client) => run_postgres(client, sql).await?,
             Driver::Mysql(conn) => run_mysql(conn, sql).await?,
+            Driver::Sqlite(conn) => run_sqlite(conn, sql)?,
+            Driver::Redis(redis) => run_redis(redis, sql).await?,
+            Driver::Mssql(client) => run_mssql(client, sql).await?,
         };
         Ok(QueryResult {
             took_ms: start.elapsed().as_millis() as u64,
             ..result
         })
+    }
+
+    pub async fn describe_table(&self, table: &str) -> Result<TableMeta, DbError> {
+        match self.engine.as_str() {
+            "postgres" => self.describe_postgres(table).await,
+            "mysql" => self.describe_mysql(table).await,
+            "sqlite" => self.describe_sqlite(table).await,
+            "mssql" => self.describe_mssql(table).await,
+            "redis" => Ok(TableMeta {
+                table: table.to_string(),
+                columns: vec![
+                    DbColumn { name: "key".into(), data_type: "redis-key".into(), nullable: false, default_value: None, primary_key: true },
+                    DbColumn { name: "value".into(), data_type: "redis-value".into(), nullable: true, default_value: None, primary_key: false },
+                ],
+                primary_key: vec!["key".into()],
+                indexes: vec![],
+            }),
+            other => Err(DbError::Query(format!("unknown engine '{other}'"))),
+        }
+    }
+
+    pub async fn update_row(
+        &self,
+        table: &str,
+        key: &[DbCell],
+        changes: &[DbCell],
+    ) -> Result<QueryResult, DbError> {
+        if key.is_empty() {
+            return Err(DbError::Query("cannot update row without primary key values".into()));
+        }
+        if changes.is_empty() {
+            return Ok(QueryResult { columns: vec![], rows: vec![], rows_affected: 0, took_ms: 0, statements: 0 });
+        }
+        let sql = format!(
+            "UPDATE {} SET {} WHERE {}",
+            self.quote_table(table)?,
+            changes.iter()
+                .map(|c| Ok(format!("{} = {}", self.quote_ident(&c.column)?, sql_value(c.value.as_deref()))))
+                .collect::<Result<Vec<_>, DbError>>()?
+                .join(", "),
+            key.iter()
+                .map(|c| Ok(format!("{} {}", self.quote_ident(&c.column)?, sql_predicate(c.value.as_deref()))))
+                .collect::<Result<Vec<_>, DbError>>()?
+                .join(" AND "),
+        );
+        self.query(&sql).await
+    }
+
+    pub async fn insert_row(&self, table: &str, values: &[DbCell]) -> Result<QueryResult, DbError> {
+        if values.is_empty() {
+            return Err(DbError::Query("cannot insert row without values".into()));
+        }
+        let cols = values.iter()
+            .map(|c| self.quote_ident(&c.column))
+            .collect::<Result<Vec<_>, DbError>>()?
+            .join(", ");
+        let vals = values.iter()
+            .map(|c| sql_value(c.value.as_deref()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!("INSERT INTO {} ({cols}) VALUES ({vals})", self.quote_table(table)?);
+        self.query(&sql).await
+    }
+
+    pub async fn delete_row(&self, table: &str, key: &[DbCell]) -> Result<QueryResult, DbError> {
+        if key.is_empty() {
+            return Err(DbError::Query("cannot delete row without primary key values".into()));
+        }
+        let sql = format!(
+            "DELETE FROM {} WHERE {}",
+            self.quote_table(table)?,
+            key.iter()
+                .map(|c| Ok(format!("{} {}", self.quote_ident(&c.column)?, sql_predicate(c.value.as_deref()))))
+                .collect::<Result<Vec<_>, DbError>>()?
+                .join(" AND "),
+        );
+        self.query(&sql).await
+    }
+
+    fn quote_ident(&self, ident: &str) -> Result<String, DbError> {
+        if ident.trim().is_empty() || ident.contains('\0') {
+            return Err(DbError::Query("invalid empty identifier".into()));
+        }
+        Ok(match self.engine.as_str() {
+            "mysql" => format!("`{}`", ident.replace('`', "``")),
+            "mssql" => format!("[{}]", ident.replace(']', "]]")),
+            "sqlite" => format!("\"{}\"", ident.replace('"', "\"\"")),
+            _ => format!("\"{}\"", ident.replace('"', "\"\"")),
+        })
+    }
+
+    fn quote_table(&self, table: &str) -> Result<String, DbError> {
+        let parts: Vec<&str> = table.split('.').filter(|p| !p.trim().is_empty()).collect();
+        if parts.is_empty() || parts.len() > 2 {
+            return Err(DbError::Query(format!("invalid table name '{table}'")));
+        }
+        Ok(parts.into_iter()
+            .map(|p| self.quote_ident(p))
+            .collect::<Result<Vec<_>, DbError>>()?
+            .join("."))
+    }
+
+    async fn describe_postgres(&self, table: &str) -> Result<TableMeta, DbError> {
+        let (schema, tbl) = split_table(table, "public");
+        let columns_sql = format!(
+            "SELECT c.column_name, c.data_type, c.is_nullable, c.column_default, \
+                    CASE WHEN kcu.column_name IS NULL THEN 'NO' ELSE 'YES' END AS primary_key \
+             FROM information_schema.columns c \
+             LEFT JOIN information_schema.table_constraints tc \
+               ON tc.table_schema = c.table_schema AND tc.table_name = c.table_name AND tc.constraint_type = 'PRIMARY KEY' \
+             LEFT JOIN information_schema.key_column_usage kcu \
+               ON kcu.constraint_schema = tc.constraint_schema AND kcu.constraint_name = tc.constraint_name \
+              AND kcu.table_schema = c.table_schema AND kcu.table_name = c.table_name AND kcu.column_name = c.column_name \
+             WHERE c.table_schema = {} AND c.table_name = {} \
+             ORDER BY c.ordinal_position",
+            sql_value(Some(&schema)),
+            sql_value(Some(&tbl)),
+        );
+        let rows = self.query(&columns_sql).await?;
+        let columns = rows.rows.into_iter().map(|r| {
+            let name = cell(&r, 0);
+            let primary_key = cell(&r, 4) == "YES";
+            DbColumn {
+                name,
+                data_type: cell(&r, 1),
+                nullable: cell(&r, 2) == "YES",
+                default_value: r.get(3).cloned().flatten(),
+                primary_key,
+            }
+        }).collect::<Vec<_>>();
+        let indexes_sql = format!(
+            "SELECT i.relname AS index_name, ix.indisunique, ix.indisprimary, \
+                    array_to_string(array_agg(a.attname ORDER BY u.ord), ',') AS columns \
+             FROM pg_class t \
+             JOIN pg_namespace n ON n.oid = t.relnamespace \
+             JOIN pg_index ix ON t.oid = ix.indrelid \
+             JOIN pg_class i ON i.oid = ix.indexrelid \
+             JOIN unnest(ix.indkey) WITH ORDINALITY AS u(attnum, ord) ON TRUE \
+             JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = u.attnum \
+             WHERE n.nspname = {} AND t.relname = {} \
+             GROUP BY i.relname, ix.indisunique, ix.indisprimary \
+             ORDER BY ix.indisprimary DESC, i.relname",
+            sql_value(Some(&schema)),
+            sql_value(Some(&tbl)),
+        );
+        let indexes = self.query(&indexes_sql).await?.rows.into_iter().map(|r| DbIndex {
+            name: cell(&r, 0),
+            unique: cell(&r, 1) == "t",
+            primary: cell(&r, 2) == "t",
+            columns: cell(&r, 3).split(',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect(),
+        }).collect::<Vec<_>>();
+        let primary_key = columns.iter().filter(|c| c.primary_key).map(|c| c.name.clone()).collect();
+        Ok(TableMeta { table: table.to_string(), columns, primary_key, indexes })
+    }
+
+    async fn describe_mysql(&self, table: &str) -> Result<TableMeta, DbError> {
+        let (_schema, tbl) = split_table(table, "");
+        let columns_sql = format!("SHOW COLUMNS FROM {}", self.quote_table(table)?);
+        let columns = self.query(&columns_sql).await?.rows.into_iter().map(|r| {
+            let key = cell(&r, 3);
+            DbColumn {
+                name: cell(&r, 0),
+                data_type: cell(&r, 1),
+                nullable: cell(&r, 2).eq_ignore_ascii_case("YES"),
+                default_value: r.get(4).cloned().flatten(),
+                primary_key: key == "PRI",
+            }
+        }).collect::<Vec<_>>();
+        let indexes_sql = format!("SHOW INDEX FROM {}", self.quote_table(table)?);
+        let mut map: std::collections::BTreeMap<String, DbIndex> = std::collections::BTreeMap::new();
+        for r in self.query(&indexes_sql).await?.rows {
+            let name = cell(&r, 2);
+            let col = cell(&r, 4);
+            let unique = cell(&r, 1) == "0";
+            let primary = name == "PRIMARY";
+            map.entry(name.clone())
+                .and_modify(|idx| idx.columns.push(col.clone()))
+                .or_insert(DbIndex { name, columns: vec![col], unique, primary });
+        }
+        let primary_key = columns.iter().filter(|c| c.primary_key).map(|c| c.name.clone()).collect();
+        Ok(TableMeta { table: if tbl.is_empty() { table.to_string() } else { table.to_string() }, columns, primary_key, indexes: map.into_values().collect() })
+    }
+
+    async fn describe_sqlite(&self, table: &str) -> Result<TableMeta, DbError> {
+        let q = self.quote_ident(table)?;
+        let columns_sql = format!("PRAGMA table_info({q})");
+        let columns = self.query(&columns_sql).await?.rows.into_iter().map(|r| {
+            let pk = cell(&r, 5) != "0";
+            DbColumn {
+                name: cell(&r, 1),
+                data_type: cell(&r, 2),
+                nullable: cell(&r, 3) == "0",
+                default_value: r.get(4).cloned().flatten(),
+                primary_key: pk,
+            }
+        }).collect::<Vec<_>>();
+        let mut indexes = Vec::new();
+        for r in self.query(&format!("PRAGMA index_list({q})")).await?.rows {
+            let name = cell(&r, 1);
+            let unique = cell(&r, 2) == "1";
+            let primary = cell(&r, 3) == "pk";
+            let cols = self.query(&format!("PRAGMA index_info({})", self.quote_ident(&name)?)).await?
+                .rows
+                .into_iter()
+                .map(|row| cell(&row, 2))
+                .filter(|s| !s.is_empty())
+                .collect();
+            indexes.push(DbIndex { name, columns: cols, unique, primary });
+        }
+        let primary_key = columns.iter().filter(|c| c.primary_key).map(|c| c.name.clone()).collect();
+        Ok(TableMeta { table: table.to_string(), columns, primary_key, indexes })
+    }
+
+    async fn describe_mssql(&self, table: &str) -> Result<TableMeta, DbError> {
+        let (schema, tbl) = split_table(table, "dbo");
+        let columns_sql = format!(
+            "SELECT c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, c.COLUMN_DEFAULT, \
+                    CASE WHEN kcu.COLUMN_NAME IS NULL THEN 'NO' ELSE 'YES' END AS primary_key \
+             FROM INFORMATION_SCHEMA.COLUMNS c \
+             LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc \
+               ON tc.TABLE_SCHEMA = c.TABLE_SCHEMA AND tc.TABLE_NAME = c.TABLE_NAME AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY' \
+             LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu \
+               ON kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME \
+              AND kcu.TABLE_SCHEMA = c.TABLE_SCHEMA AND kcu.TABLE_NAME = c.TABLE_NAME AND kcu.COLUMN_NAME = c.COLUMN_NAME \
+             WHERE c.TABLE_SCHEMA = {} AND c.TABLE_NAME = {} \
+             ORDER BY c.ORDINAL_POSITION",
+            sql_value(Some(&schema)),
+            sql_value(Some(&tbl)),
+        );
+        let rows = self.query(&columns_sql).await?;
+        let columns = rows.rows.into_iter().map(|r| {
+            let primary_key = cell(&r, 4) == "YES";
+            DbColumn {
+                name: cell(&r, 0),
+                data_type: cell(&r, 1),
+                nullable: cell(&r, 2) == "YES",
+                default_value: r.get(3).cloned().flatten(),
+                primary_key,
+            }
+        }).collect::<Vec<_>>();
+        let indexes_sql = format!(
+            "SELECT i.name, i.is_unique, i.is_primary_key, STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal) AS columns \
+             FROM sys.indexes i \
+             JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id \
+             JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id \
+             JOIN sys.tables t ON t.object_id = i.object_id \
+             JOIN sys.schemas s ON s.schema_id = t.schema_id \
+             WHERE s.name = {} AND t.name = {} AND i.name IS NOT NULL \
+             GROUP BY i.name, i.is_unique, i.is_primary_key \
+             ORDER BY i.is_primary_key DESC, i.name",
+            sql_value(Some(&schema)),
+            sql_value(Some(&tbl)),
+        );
+        let indexes = self.query(&indexes_sql).await?.rows.into_iter().map(|r| DbIndex {
+            name: cell(&r, 0),
+            unique: cell(&r, 1) == "true" || cell(&r, 1) == "1",
+            primary: cell(&r, 2) == "true" || cell(&r, 2) == "1",
+            columns: cell(&r, 3).split(',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect(),
+        }).collect::<Vec<_>>();
+        let primary_key = columns.iter().filter(|c| c.primary_key).map(|c| c.name.clone()).collect();
+        Ok(TableMeta { table: table.to_string(), columns, primary_key, indexes })
     }
 
     /// Best-effort cancellation of the query currently held under the
@@ -223,6 +548,17 @@ impl DbSession {
                 conn.query_drop(format!("USE `{}`", new_database.replace('`', "``")))
                     .await
                     .map_err(|e| DbError::Query(format!("mysql: {e}")))?;
+            }
+            Driver::Sqlite(_) => {}
+            Driver::Redis(redis) => {
+                let _ = redis_command(redis, &["SELECT".into(), new_database.to_string()]).await?;
+            }
+            Driver::Mssql(client) => {
+                let sql = format!("USE {}", self.quote_ident(new_database)?);
+                client.simple_query(sql).await
+                    .map_err(|e| DbError::Query(format!("mssql: {e}")))?
+                    .into_results().await
+                    .map_err(|e| DbError::Query(format!("mssql: {e}")))?;
             }
         }
         let mut db = self.creds.database.lock().unwrap();
@@ -313,7 +649,9 @@ impl DbSession {
     pub async fn close(&self) -> Result<(), DbError> {
         // Cancel the proxy first so the driver's pending I/O wakes with EOF
         // instead of hanging on a half-closed tunnel.
-        self._proxy.cancel();
+        if let Some(proxy) = &self._proxy {
+            proxy.cancel();
+        }
         let session = self.ssh.lock().await.take();
         if let Some(s) = session {
             // Best-effort: surface no error on disconnect — the channel may
@@ -531,6 +869,328 @@ fn sql_value(v: Option<&str>) -> String {
             format!("'{escaped}'")
         }
     }
+}
+
+// ─── MSSQL ─────────────────────────────────────────────────────────────────
+
+async fn connect_mssql(
+    local_port: u16,
+    database: &str,
+    user: &str,
+    password: &str,
+) -> Result<(Driver, CancelState), DbError> {
+    let mut config = tiberius::Config::new();
+    config.host("127.0.0.1");
+    config.port(local_port);
+    if !database.is_empty() {
+        config.database(database);
+    }
+    config.authentication(tiberius::AuthMethod::sql_server(user, password));
+    // SSH tunnel already protects transport to the remote host. Trusting the
+    // SQL Server cert keeps self-signed internal instances usable.
+    config.trust_cert();
+    let tcp = TcpStream::connect(("127.0.0.1", local_port))
+        .await
+        .map_err(|e| DbError::Connect(format!("mssql tcp: {e}")))?;
+    tcp.set_nodelay(true)
+        .map_err(|e| DbError::Connect(format!("mssql nodelay: {e}")))?;
+    let client = tiberius::Client::connect(config, tcp.compat_write())
+        .await
+        .map_err(|e| DbError::Connect(format!("mssql: {e}")))?;
+    Ok((Driver::Mssql(client), CancelState::Unsupported))
+}
+
+async fn run_mssql(
+    client: &mut tiberius::Client<Compat<TcpStream>>,
+    sql: &str,
+) -> Result<QueryResult, DbError> {
+    let mut stream = client.simple_query(sql)
+        .await
+        .map_err(|e| DbError::Query(format!("mssql: {e}")))?;
+    let columns = stream.columns()
+        .await
+        .map_err(|e| DbError::Query(format!("mssql: {e}")))?
+        .map(|cols| cols.iter().map(|c| c.name().to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let results = stream.into_results()
+        .await
+        .map_err(|e| DbError::Query(format!("mssql: {e}")))?;
+    let mut rows = Vec::new();
+    for row in results.into_iter().flatten() {
+        if rows.is_empty() && columns.is_empty() {
+            // Non-row result set; keep metadata empty.
+        }
+        rows.push(row.cells().map(|(_, data)| mssql_value_to_string(data)).collect());
+    }
+    let rows_affected = if rows.is_empty() { 0 } else { 0 };
+    Ok(QueryResult {
+        columns,
+        rows,
+        rows_affected,
+        took_ms: 0,
+        statements: 1,
+    })
+}
+
+fn mssql_value_to_string(data: &tiberius::ColumnData<'static>) -> Option<String> {
+    use tiberius::ColumnData;
+    match data {
+        ColumnData::Binary(None)
+        | ColumnData::Bit(None)
+        | ColumnData::String(None)
+        | ColumnData::I16(None)
+        | ColumnData::I32(None)
+        | ColumnData::I64(None)
+        | ColumnData::F32(None)
+        | ColumnData::F64(None)
+        | ColumnData::Guid(None)
+        | ColumnData::Numeric(None)
+        | ColumnData::Xml(None) => None,
+        ColumnData::Binary(Some(v)) => Some(format!("<{} bytes binary>", v.len())),
+        ColumnData::Bit(Some(v)) => Some(v.to_string()),
+        ColumnData::String(Some(v)) => Some(v.to_string()),
+        ColumnData::I16(Some(v)) => Some(v.to_string()),
+        ColumnData::I32(Some(v)) => Some(v.to_string()),
+        ColumnData::I64(Some(v)) => Some(v.to_string()),
+        ColumnData::F32(Some(v)) => Some(v.to_string()),
+        ColumnData::F64(Some(v)) => Some(v.to_string()),
+        ColumnData::Guid(Some(v)) => Some(v.to_string()),
+        ColumnData::Numeric(Some(v)) => Some(v.to_string()),
+        ColumnData::Xml(Some(v)) => Some(v.to_string()),
+        other => Some(format!("{other:?}")),
+    }
+}
+
+// ─── SQLite ────────────────────────────────────────────────────────────────
+
+fn run_sqlite(
+    conn: &mut rusqlite::Connection,
+    sql: &str,
+) -> Result<QueryResult, DbError> {
+    let trimmed = sql.trim();
+    if trimmed.is_empty() {
+        return Ok(QueryResult { columns: vec![], rows: vec![], rows_affected: 0, took_ms: 0, statements: 0 });
+    }
+    let mut stmt = match conn.prepare(trimmed) {
+        Ok(stmt) => stmt,
+        Err(_) => {
+            conn.execute_batch(trimmed)
+                .map_err(|e| DbError::Query(format!("sqlite: {e}")))?;
+            return Ok(QueryResult { columns: vec![], rows: vec![], rows_affected: conn.changes(), took_ms: 0, statements: 1 });
+        }
+    };
+    let col_count = stmt.column_count();
+    if col_count == 0 {
+        let n = stmt.execute([])
+            .map_err(|e| DbError::Query(format!("sqlite: {e}")))?;
+        return Ok(QueryResult { columns: vec![], rows: vec![], rows_affected: n as u64, took_ms: 0, statements: 1 });
+    }
+    let columns = stmt.column_names().iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let mapped = stmt.query_map([], |row| {
+        let mut out = Vec::with_capacity(col_count);
+        for i in 0..col_count {
+            out.push(sqlite_value_to_string(row.get_ref(i)?));
+        }
+        Ok(out)
+    }).map_err(|e| DbError::Query(format!("sqlite: {e}")))?;
+    let rows = mapped.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| DbError::Query(format!("sqlite: {e}")))?;
+    Ok(QueryResult { columns, rows, rows_affected: 0, took_ms: 0, statements: 1 })
+}
+
+fn sqlite_value_to_string(v: SqliteValueRef<'_>) -> Option<String> {
+    match v {
+        SqliteValueRef::Null => None,
+        SqliteValueRef::Integer(i) => Some(i.to_string()),
+        SqliteValueRef::Real(f) => Some(f.to_string()),
+        SqliteValueRef::Text(t) => Some(String::from_utf8_lossy(t).into_owned()),
+        SqliteValueRef::Blob(b) => Some(format!("<{} bytes blob>", b.len())),
+    }
+}
+
+// ─── Redis ─────────────────────────────────────────────────────────────────
+
+async fn connect_redis(
+    local_port: u16,
+    database: &str,
+    user: &str,
+    password: &str,
+) -> Result<(Driver, CancelState), DbError> {
+    let stream = TcpStream::connect(("127.0.0.1", local_port))
+        .await
+        .map_err(|e| DbError::Connect(format!("redis: {e}")))?;
+    let mut session = RedisSession { stream };
+    if !password.is_empty() {
+        let mut args = vec!["AUTH".to_string()];
+        if !user.is_empty() {
+            args.push(user.to_string());
+        }
+        args.push(password.to_string());
+        let _ = redis_command(&mut session, &args).await?;
+    }
+    if !database.trim().is_empty() {
+        let _ = redis_command(&mut session, &["SELECT".into(), database.trim().into()]).await?;
+    }
+    Ok((Driver::Redis(session), CancelState::Unsupported))
+}
+
+async fn run_redis(
+    session: &mut RedisSession,
+    sql: &str,
+) -> Result<QueryResult, DbError> {
+    let args = shell_words(sql);
+    if args.is_empty() {
+        return Ok(QueryResult { columns: vec![], rows: vec![], rows_affected: 0, took_ms: 0, statements: 0 });
+    }
+    let resp = redis_command(session, &args).await?;
+    let rows = match resp {
+        RespValue::Array(items) => items.into_iter().map(|v| vec![Some(resp_to_string(v))]).collect(),
+        other => vec![vec![Some(resp_to_string(other))]],
+    };
+    Ok(QueryResult { columns: vec!["response".into()], rows, rows_affected: 0, took_ms: 0, statements: 1 })
+}
+
+async fn redis_command(session: &mut RedisSession, args: &[String]) -> Result<RespValue, DbError> {
+    let mut buf = format!("*{}\r\n", args.len()).into_bytes();
+    for arg in args {
+        buf.extend_from_slice(format!("${}\r\n", arg.as_bytes().len()).as_bytes());
+        buf.extend_from_slice(arg.as_bytes());
+        buf.extend_from_slice(b"\r\n");
+    }
+    session.stream.write_all(&buf).await
+        .map_err(|e| DbError::Query(format!("redis write: {e}")))?;
+    read_resp(&mut session.stream).await
+}
+
+#[derive(Debug)]
+enum RespValue {
+    Simple(String),
+    Integer(i64),
+    Bulk(Option<Vec<u8>>),
+    Array(Vec<RespValue>),
+}
+
+async fn read_resp(stream: &mut TcpStream) -> Result<RespValue, DbError> {
+    let prefix = read_byte(stream).await?;
+    match prefix {
+        b'+' => Ok(RespValue::Simple(read_line(stream).await?)),
+        b'-' => {
+            let e = read_line(stream).await?;
+            Err(DbError::Query(format!("redis: {e}")))
+        }
+        b':' => {
+            let n = read_line(stream).await?.parse().unwrap_or(0);
+            Ok(RespValue::Integer(n))
+        }
+        b'$' => {
+            let len: i64 = read_line(stream).await?.parse().unwrap_or(-1);
+            if len < 0 {
+                return Ok(RespValue::Bulk(None));
+            }
+            let mut data = vec![0u8; len as usize + 2];
+            stream.read_exact(&mut data).await
+                .map_err(|e| DbError::Query(format!("redis read: {e}")))?;
+            data.truncate(len as usize);
+            Ok(RespValue::Bulk(Some(data)))
+        }
+        b'*' => {
+            let len: i64 = read_line(stream).await?.parse().unwrap_or(0);
+            let mut items = Vec::new();
+            for _ in 0..len.max(0) {
+                items.push(Box::pin(read_resp(stream)).await?);
+            }
+            Ok(RespValue::Array(items))
+        }
+        other => Err(DbError::Query(format!("redis: unexpected RESP byte {other}"))),
+    }
+}
+
+async fn read_byte(stream: &mut TcpStream) -> Result<u8, DbError> {
+    let mut b = [0u8; 1];
+    stream.read_exact(&mut b).await
+        .map_err(|e| DbError::Query(format!("redis read: {e}")))?;
+    Ok(b[0])
+}
+
+async fn read_line(stream: &mut TcpStream) -> Result<String, DbError> {
+    let mut out = Vec::new();
+    loop {
+        let b = read_byte(stream).await?;
+        if b == b'\r' {
+            let lf = read_byte(stream).await?;
+            if lf == b'\n' { break; }
+            out.push(b);
+            out.push(lf);
+        } else {
+            out.push(b);
+        }
+    }
+    Ok(String::from_utf8_lossy(&out).into_owned())
+}
+
+fn resp_to_string(v: RespValue) -> String {
+    match v {
+        RespValue::Simple(s) => s,
+        RespValue::Integer(i) => i.to_string(),
+        RespValue::Bulk(None) => "NULL".into(),
+        RespValue::Bulk(Some(b)) => String::from_utf8_lossy(&b).into_owned(),
+        RespValue::Array(items) => items.into_iter().map(resp_to_string).collect::<Vec<_>>().join("\n"),
+    }
+}
+
+fn shell_words(input: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quote: Option<char> = None;
+    let mut escape = false;
+    for ch in input.chars() {
+        if escape {
+            cur.push(ch);
+            escape = false;
+            continue;
+        }
+        if ch == '\\' {
+            escape = true;
+            continue;
+        }
+        if let Some(q) = quote {
+            if ch == q { quote = None; } else { cur.push(ch); }
+            continue;
+        }
+        if ch == '\'' || ch == '"' {
+            quote = Some(ch);
+        } else if ch.is_whitespace() {
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+        } else {
+            cur.push(ch);
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+fn sql_predicate(v: Option<&str>) -> String {
+    match v {
+        None => "IS NULL".to_string(),
+        Some(_) => format!("= {}", sql_value(v)),
+    }
+}
+
+fn split_table(table: &str, default_schema: &str) -> (String, String) {
+    let mut parts = table.splitn(2, '.');
+    let first = parts.next().unwrap_or("").to_string();
+    match parts.next() {
+        Some(second) => (first, second.to_string()),
+        None => (default_schema.to_string(), first),
+    }
+}
+
+fn cell(row: &[Option<String>], idx: usize) -> String {
+    row.get(idx).cloned().flatten().unwrap_or_default()
 }
 
 fn value_to_string(v: &mysql_async::Value) -> Option<String> {

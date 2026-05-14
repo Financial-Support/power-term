@@ -30,7 +30,7 @@ export function DbPasswordPrompt({ connection, onSubmit, onCancel }: Props) {
       <div className="modal modal-form">
         <h2>Connect to {connection.name}</h2>
         <p className="form-hint">
-          {connection.engine === 'mysql' ? 'MySQL' : 'PostgreSQL'} as <code>{connection.db_user}</code>
+          {engineLabel(connection.engine)}{connection.db_user ? <> as <code>{connection.db_user}</code></> : null}
           {connection.database ? <> on <code>{connection.database}</code></> : null}.
         </p>
         <div className="form-grid">
@@ -51,4 +51,15 @@ export function DbPasswordPrompt({ connection, onSubmit, onCancel }: Props) {
       </div>
     </div>
   );
+}
+
+function engineLabel(engine: string): string {
+  switch (engine) {
+    case 'mysql': return 'MySQL';
+    case 'postgres': return 'PostgreSQL';
+    case 'redis': return 'Redis';
+    case 'mssql': return 'MSSQL';
+    case 'sqlite': return 'SQLite';
+    default: return engine;
+  }
 }

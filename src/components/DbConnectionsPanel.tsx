@@ -8,6 +8,7 @@ interface Props {
   onEdit: (c: DbConnection) => void;
   onDelete: (c: DbConnection) => void;
   onOpen: (c: DbConnection) => void;
+  onHidePanel?: () => void;
 }
 
 /**
@@ -16,7 +17,7 @@ interface Props {
  * feel uniform. The Open action delegates to the App-level handler so it
  * can prompt for the DB password and spin up a session tab.
  */
-export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen }: Props) {
+export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen, onHidePanel }: Props) {
   const connections = useDbConnectionStore((s) => s.connections);
   const error = useDbConnectionStore((s) => s.error);
   const load = useDbConnectionStore((s) => s.load);
@@ -44,6 +45,17 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen }: Props) {
           <span className="sp-caret">{collapsed ? '▸' : '▾'}</span>
           <span className="db-panel-title">Databases</span>
         </button>
+        {onHidePanel && (
+          <button
+            type="button"
+            className="db-panel-hide"
+            onClick={onHidePanel}
+            aria-label="Hide database list"
+            title="Hide database list"
+          >
+            ‹
+          </button>
+        )}
       </div>
       {error && <p className="sp-error">{error}</p>}
       {!collapsed && (
@@ -60,7 +72,7 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen }: Props) {
                     onClick={() => onOpen(c)}
                     aria-label={`open ${c.name}`}
                   >
-                    <span className={`db-engine-pill db-engine-${c.engine}`}>{c.engine === 'mysql' ? 'MY' : 'PG'}</span>
+                    <span className={`db-engine-pill db-engine-${c.engine}`}>{engineShort(c.engine)}</span>
                     <span className="db-name">{c.name}</span>
                     <span className="db-host">{hostName(c.host_id)}</span>
                   </button>
@@ -93,4 +105,15 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen }: Props) {
       )}
     </div>
   );
+}
+
+function engineShort(engine: string): string {
+  switch (engine) {
+    case 'mysql': return 'MY';
+    case 'postgres': return 'PG';
+    case 'sqlite': return 'SQ';
+    case 'mssql': return 'MS';
+    case 'redis': return 'RD';
+    default: return engine.slice(0, 2).toUpperCase();
+  }
 }
