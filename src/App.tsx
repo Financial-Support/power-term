@@ -208,10 +208,15 @@ export function App() {
 
   useEffect(() => {
     const { fetchStatus, pull } = useSyncStore.getState();
-    fetchStatus().then(() => {
-      if (useSyncStore.getState().syncState?.user) {
-        void pull();
-      }
+    fetchStatus().then(async () => {
+      if (!useSyncStore.getState().syncState?.user) return;
+      await pull();
+      // Pull may have inserted, updated, or (with the tombstone guard)
+      // hard-deleted local rows. Refresh the lists so the UI matches
+      // the DB instead of showing rows the user can no longer act on.
+      void useHostStore.getState().load();
+      void useSnippetStore.getState().load();
+      void useForwardStore.getState().load();
     });
   }, []);
 

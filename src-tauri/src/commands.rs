@@ -345,7 +345,14 @@ pub async fn hosts_delete(
     sync: tauri::State<'_, SyncManager>,
     id: String,
 ) -> Result<(), String> {
-    store.delete(&id).map_err(|e| e.to_string())?;
+    // Idempotent: a sync pull can race ahead and remove a row whose
+    // tombstone is still queued, leaving the UI showing a host that's
+    // already gone from the DB. The user's click should still drop the
+    // server-side copy, so swallow NotFound and continue.
+    match store.delete(&id) {
+        Ok(()) | Err(crate::store::StoreError::NotFound(_)) => {}
+        Err(e) => return Err(e.to_string()),
+    }
     if let Err(e) = store::secrets::delete(&id) {
         tracing::warn!(host_id = %id, error = ?e, "failed to delete secret on host delete");
     }
@@ -611,7 +618,10 @@ pub async fn snippets_delete(
     sync: tauri::State<'_, SyncManager>,
     id: String,
 ) -> Result<(), String> {
-    store.delete(&id).map_err(|e| e.to_string())?;
+    match store.delete(&id) {
+        Ok(()) | Err(crate::store::StoreError::NotFound(_)) => {}
+        Err(e) => return Err(e.to_string()),
+    }
     let updated_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -718,7 +728,10 @@ pub async fn forwards_delete(
     app: tauri::AppHandle,
     id: String,
 ) -> Result<(), String> {
-    store.delete(&id).map_err(|e| e.to_string())?;
+    match store.delete(&id) {
+        Ok(()) | Err(crate::store::StoreError::NotFound(_)) => {}
+        Err(e) => return Err(e.to_string()),
+    }
     let _ = manager.stop(app, &id);
     let updated_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1071,7 +1084,10 @@ pub async fn ssh_keys_delete(
     sync: tauri::State<'_, SyncManager>,
     id: String,
 ) -> Result<(), String> {
-    store.delete(&id).map_err(|e| e.to_string())?;
+    match store.delete(&id) {
+        Ok(()) | Err(crate::store::StoreError::NotFound(_)) => {}
+        Err(e) => return Err(e.to_string()),
+    }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
