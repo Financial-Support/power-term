@@ -120,7 +120,9 @@ async fn pull_ssh_keys(
             continue;
         }
         if pending_deletes.contains(&row.id) {
-            // Local has a queued tombstone for this id — don't resurrect.
+            // Local has a queued tombstone for this id — don't resurrect,
+            // and clean up any row a previous pull put back.
+            conn.execute("DELETE FROM ssh_keys WHERE id=?1", params![row.id])?;
             continue;
         }
         // Captured key bytes are stored encrypted on the server when a
@@ -188,7 +190,10 @@ async fn pull_hosts(
             continue;
         }
         if pending_deletes.contains(&row.id) {
-            // Local has a queued tombstone for this id — don't resurrect.
+            // Local has a queued tombstone for this id — don't resurrect,
+            // and clean up any row a previous pull (before this guard
+            // existed) put back into the table.
+            conn.execute("DELETE FROM hosts WHERE id=?1", params![row.id])?;
             continue;
         }
         let local_updated: Option<i64> = conn
@@ -238,6 +243,7 @@ async fn pull_snippets(
             continue;
         }
         if pending_deletes.contains(&row.id) {
+            conn.execute("DELETE FROM snippets WHERE id=?1", params![row.id])?;
             continue;
         }
         // Rows that look encrypted require the user's sync key. Without it
@@ -297,6 +303,7 @@ async fn pull_forwards(
             continue;
         }
         if pending_deletes.contains(&row.id) {
+            conn.execute("DELETE FROM forwards WHERE id=?1", params![row.id])?;
             continue;
         }
         let local_updated: Option<i64> = conn
@@ -349,6 +356,10 @@ async fn pull_credentials(
             continue;
         }
         if pending_deletes.contains(&cred.id) || pending_host_deletes.contains(&cred.id) {
+            let _ = crate::store::secrets::backend_delete(
+                "com.band.power-term",
+                &format!("host:{}", cred.id),
+            );
             continue;
         }
         if cred.ciphertext.starts_with("ENCRYPTED:NO_KEY") { continue; }
