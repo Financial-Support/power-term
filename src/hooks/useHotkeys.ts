@@ -13,7 +13,10 @@ export function useHotkeys({ onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomRe
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
-      const { tabs, activeTabId, setActive } = useSessionStore.getState();
+      const { tabs, activeTabId, activePaneIndex, setActive } = useSessionStore.getState();
+      // Tab navigation is scoped to the focused pane — each pane keeps its
+      // own independent strip of tabs.
+      const paneTabs = tabs.filter((t) => t.paneIndex === activePaneIndex);
       if (e.key === '=' || e.key === '+') { e.preventDefault(); onZoomIn(); return; }
       if (e.key === '-') { e.preventDefault(); onZoomOut(); return; }
       if (e.key === '0') { e.preventDefault(); onZoomReset(); return; }
@@ -25,22 +28,24 @@ export function useHotkeys({ onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomRe
       }
       if (e.shiftKey && e.key === '{') {
         e.preventDefault();
-        const idx = tabs.findIndex((t) => t.id === activeTabId);
-        const prev = tabs[(idx - 1 + tabs.length) % tabs.length];
+        if (paneTabs.length === 0) return;
+        const idx = paneTabs.findIndex((t) => t.id === activeTabId);
+        const prev = paneTabs[(idx - 1 + paneTabs.length) % paneTabs.length];
         if (prev) setActive(prev.id);
         return;
       }
       if (e.shiftKey && e.key === '}') {
         e.preventDefault();
-        const idx = tabs.findIndex((t) => t.id === activeTabId);
-        const next = tabs[(idx + 1) % tabs.length];
+        if (paneTabs.length === 0) return;
+        const idx = paneTabs.findIndex((t) => t.id === activeTabId);
+        const next = paneTabs[(idx + 1) % paneTabs.length];
         if (next) setActive(next.id);
         return;
       }
       const digit = Number(e.key);
       if (Number.isInteger(digit) && digit >= 1 && digit <= 9) {
         e.preventDefault();
-        const tab = tabs[digit - 1];
+        const tab = paneTabs[digit - 1];
         if (tab) setActive(tab.id);
       }
     };

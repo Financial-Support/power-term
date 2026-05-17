@@ -25,10 +25,16 @@ const DEFAULT_SPLITS: SplitState = {
   gridRow: 0.5,
 };
 
+/** Tab ids belonging to pane `p`, in their global array order. Each pane
+ * keeps its own independent group of tabs; this is the per-pane tab strip. */
+const paneIds = (tabs: Tab[], p: number) =>
+  tabs.filter((t) => t.paneIndex === p).map((t) => t.id);
+
 interface State {
   tabs: Tab[];
   activeTabId: string | null;
   layoutKind: LayoutKind;
+  /** Per pane: the id of the tab currently shown in that pane (or null). */
   layoutSlots: (string | null)[];
   activePaneIndex: number;
   splits: SplitState;
@@ -44,12 +50,12 @@ interface State {
   setSplit: (patch: Partial<SplitState>) => void;
   resetSplits: () => void;
   setBroadcast: (on: boolean) => void;
-  reorderTab: (sourceId: string, targetId: string, position: 'before' | 'after') => void;
-  /** Move tab to a specific index in the post-removal array (0..tabs.length-1). */
-  moveTabTo: (sourceId: string, newIndex: number) => void;
+  /** Move a tab to `targetPane`, inserting it at `index` within that pane's
+   * own tab strip (drag-reorder within a pane, or drag across panes). */
+  moveTabToPane: (tabId: string, targetPane: number, index: number) => void;
 }
 
-export const useSessionStore = create<State>((set, get) => ({
+export const useSessionStore = create<State>((set) => ({
   tabs: [],
   activeTabId: null,
   layoutKind: 'solo',
@@ -59,38 +65,47 @@ export const useSessionStore = create<State>((set, get) => ({
   broadcast: false,
 
   addTab: (ptyId, title, kind = 'local', hostId) => {
-    const tab: Tab = { id: newId(), ptyId, title, kind, hostId };
+    const id = newId();
     set((s) => {
+      const paneIndex = s.activePaneIndex;
+      const tab: Tab = { id, ptyId, title, kind, hostId, paneIndex };
       const slots = [...s.layoutSlots];
-      while (slots.length <= s.activePaneIndex) slots.push(null);
-      slots[s.activePaneIndex] = tab.id;
-      return { tabs: [...s.tabs, tab], layoutSlots: slots, activeTabId: tab.id };
+      while (slots.length <= paneIndex) slots.push(null);
+      slots[paneIndex] = id;
+      return { tabs: [...s.tabs, tab], layoutSlots: slots, activeTabId: id };
     });
-    return tab.id;
+    return id;
   },
 
   closeTab: (id) => {
-    const { tabs, layoutKind, layoutSlots, activePaneIndex } = get();
-    const idx = tabs.findIndex((t) => t.id === id);
-    if (idx < 0) return;
-    const nextTabs = tabs.filter((t) => t.id !== id);
-    let slots = layoutSlots.map((slotId) => (slotId === id ? null : slotId));
-
-    if (layoutKind === 'solo' && slots[0] === null && nextTabs.length > 0) {
-      const neighbour = nextTabs[idx] ?? nextTabs[idx - 1] ?? null;
-      slots = [neighbour?.id ?? null];
-    }
-
-    const activeTabId = slots[activePaneIndex] ?? null;
-    set({ tabs: nextTabs, layoutSlots: slots, activeTabId });
+    set((s) => {
+      const tab = s.tabs.find((t) => t.id === id);
+      if (!tab) return s;
+      const p = tab.paneIndex;
+      const idxInPane = paneIds(s.tabs, p).indexOf(id);
+      const nextTabs = s.tabs.filter((t) => t.id !== id);
+      const slots = [...s.layoutSlots];
+      // Closing a pane's visible tab reveals its neighbour *within that
+      // pane* (next tab, else previous) — like closing a browser tab.
+      if (slots[p] === id) {
+        const remaining = paneIds(nextTabs, p);
+        slots[p] = remaining[idxInPane] ?? remaining[idxInPane - 1] ?? null;
+      }
+      const activeTabId = slots[s.activePaneIndex] ?? null;
+      return { tabs: nextTabs, layoutSlots: slots, activeTabId };
+    });
   },
 
   setActive: (id) => {
     set((s) => {
+      const tab = s.tabs.find((t) => t.id === id);
+      if (!tab) return s;
+      const p = tab.paneIndex;
       const slots = [...s.layoutSlots];
-      while (slots.length <= s.activePaneIndex) slots.push(null);
-      slots[s.activePaneIndex] = id;
-      return { layoutSlots: slots, activeTabId: id };
+      while (slots.length <= p) slots.push(null);
+      slots[p] = id;
+      // Activating a tab also focuses the pane it lives in.
+      return { layoutSlots: slots, activePaneIndex: p, activeTabId: id };
     });
   },
 
@@ -107,16 +122,32 @@ export const useSessionStore = create<State>((set, get) => ({
   setLayout: (kind) => {
     set((s) => {
       const count = COUNTS[kind];
-      const newSlots: (string | null)[] = Array.from({ length: count }, (_, i) =>
-        i < s.layoutSlots.length ? s.layoutSlots[i] : null,
+      // Tabs in panes that no longer exist merge into the last surviving
+      // pane (e.g. collapsing to solo gathers every tab into pane 0). No
+      // tab is ever lost when the layout shrinks.
+      const tabs = s.tabs.map((t) =>
+        t.paneIndex >= count ? { ...t, paneIndex: count - 1 } : t,
       );
-      if (newSlots[0] === null && s.activeTabId) newSlots[0] = s.activeTabId;
+      const slots: (string | null)[] = [];
+      for (let i = 0; i < count; i++) {
+        const old = s.layoutSlots[i];
+        const stillValid =
+          old != null && tabs.some((t) => t.id === old && t.paneIndex === i);
+        slots[i] = stillValid ? old : (paneIds(tabs, i)[0] ?? null);
+      }
+      // Keep the previously-active tab on screen in whatever pane it
+      // ended up in after the merge.
+      if (s.activeTabId) {
+        const act = tabs.find((t) => t.id === s.activeTabId);
+        if (act) slots[act.paneIndex] = s.activeTabId;
+      }
       const activePaneIndex = Math.min(s.activePaneIndex, count - 1);
       return {
+        tabs,
         layoutKind: kind,
-        layoutSlots: newSlots,
+        layoutSlots: slots,
         activePaneIndex,
-        activeTabId: newSlots[activePaneIndex] ?? null,
+        activeTabId: slots[activePaneIndex] ?? null,
       };
     });
   },
@@ -132,10 +163,15 @@ export const useSessionStore = create<State>((set, get) => ({
   assignSlot: (index, tabId) => {
     set((s) => {
       if (index < 0 || index >= COUNTS[s.layoutKind]) return s;
-      const slots = [...s.layoutSlots];
+      // Reassigning a tab to a slot also moves it into that pane's group
+      // and clears it from any other slot so a tab is never in two panes.
+      const tabs = s.tabs.map((t) =>
+        t.id === tabId ? { ...t, paneIndex: index } : t,
+      );
+      const slots = s.layoutSlots.map((sid) => (sid === tabId ? null : sid));
       slots[index] = tabId;
       const activeTabId = slots[s.activePaneIndex] ?? null;
-      return { layoutSlots: slots, activeTabId };
+      return { tabs, layoutSlots: slots, activeTabId };
     });
   },
 
@@ -143,32 +179,48 @@ export const useSessionStore = create<State>((set, get) => ({
   resetSplits: () => set({ splits: DEFAULT_SPLITS }),
   setBroadcast: (on) => set({ broadcast: on }),
 
-  reorderTab: (sourceId, targetId, position) => {
+  moveTabToPane: (tabId, targetPane, index) => {
     set((s) => {
-      if (sourceId === targetId) return s;
-      const from = s.tabs.findIndex((t) => t.id === sourceId);
-      const to = s.tabs.findIndex((t) => t.id === targetId);
-      if (from < 0 || to < 0) return s;
-      const next = s.tabs.slice();
-      const [moved] = next.splice(from, 1);
-      let insertAt = next.findIndex((t) => t.id === targetId);
-      if (insertAt < 0) return s;
-      if (position === 'after') insertAt += 1;
-      next.splice(insertAt, 0, moved);
-      return { tabs: next };
-    });
-  },
+      const tab = s.tabs.find((t) => t.id === tabId);
+      if (!tab) return s;
+      const count = COUNTS[s.layoutKind];
+      if (targetPane < 0 || targetPane >= count) return s;
+      const sourcePane = tab.paneIndex;
 
-  moveTabTo: (sourceId, newIndex) => {
-    set((s) => {
-      const from = s.tabs.findIndex((t) => t.id === sourceId);
-      if (from < 0) return s;
-      const next = s.tabs.slice();
-      const [moved] = next.splice(from, 1);
-      const clamped = Math.max(0, Math.min(newIndex, next.length));
-      if (clamped === from) return s;
-      next.splice(clamped, 0, moved);
-      return { tabs: next };
+      const without = s.tabs.filter((t) => t.id !== tabId);
+      const targetExisting = paneIds(without, targetPane);
+      const clamped = Math.max(0, Math.min(index, targetExisting.length));
+
+      // Translate the within-pane index into a splice position in the
+      // flat array (per-pane order is just the filtered array order).
+      let pos: number;
+      if (targetExisting.length === 0) {
+        pos = without.length;
+      } else if (clamped >= targetExisting.length) {
+        const ref = targetExisting[targetExisting.length - 1];
+        pos = without.findIndex((t) => t.id === ref) + 1;
+      } else {
+        const ref = targetExisting[clamped];
+        pos = without.findIndex((t) => t.id === ref);
+      }
+
+      const prevSrcIdx = paneIds(s.tabs, sourcePane).indexOf(tabId);
+      const next = without.slice();
+      next.splice(pos, 0, { ...tab, paneIndex: targetPane });
+
+      const slots = [...s.layoutSlots];
+      slots[targetPane] = tabId;
+      if (sourcePane !== targetPane && slots[sourcePane] === tabId) {
+        const srcRemaining = paneIds(next, sourcePane);
+        slots[sourcePane] =
+          srcRemaining[Math.min(prevSrcIdx, srcRemaining.length - 1)] ?? null;
+      }
+      return {
+        tabs: next,
+        layoutSlots: slots,
+        activePaneIndex: targetPane,
+        activeTabId: tabId,
+      };
     });
   },
 }));

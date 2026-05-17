@@ -180,16 +180,70 @@ describe('sessionStore', () => {
       expect(s.activeTabId).toBe(tab1Id);
     });
 
-    it('closeTab in multi-pane mode nulls the slot without changing other slots', () => {
+    it('closeTab empties only its own pane, leaving other panes untouched', () => {
+      useSessionStore.getState().addTab('pty-1', 'a'); // pane 0
+      useSessionStore.getState().setLayout('2col');
+      useSessionStore.getState().setActivePane(1);
+      useSessionStore.getState().addTab('pty-2', 'b'); // pane 1
+      const before = useSessionStore.getState();
+      const a = before.tabs.find((t) => t.ptyId === 'pty-1')!;
+      const b = before.tabs.find((t) => t.ptyId === 'pty-2')!;
+      expect(before.layoutSlots[0]).toBe(a.id);
+      expect(before.layoutSlots[1]).toBe(b.id);
+
+      useSessionStore.getState().closeTab(b.id); // pane 1's only tab
+      const s = useSessionStore.getState();
+      expect(s.layoutSlots[0]).toBe(a.id); // pane 0 untouched
+      expect(s.layoutSlots[1]).toBeNull(); // pane 1 now empty
+    });
+  });
+
+  describe('per-pane tab groups', () => {
+    it('addTab assigns the tab to the active pane', () => {
+      useSessionStore.getState().setLayout('2col');
+      useSessionStore.getState().setActivePane(1);
+      const id = useSessionStore.getState().addTab('pty-1', 'a');
+      const s = useSessionStore.getState();
+      expect(s.tabs.find((t) => t.id === id)!.paneIndex).toBe(1);
+      expect(s.layoutSlots[1]).toBe(id);
+      expect(s.layoutSlots[0]).toBeNull();
+    });
+
+    it('collapsing the layout merges every tab into pane 0', () => {
+      useSessionStore.getState().setLayout('2col');
+      const a = useSessionStore.getState().addTab('pty-1', 'a'); // pane 0
+      useSessionStore.getState().setActivePane(1);
+      const b = useSessionStore.getState().addTab('pty-2', 'b'); // pane 1
+      useSessionStore.getState().setLayout('solo');
+      const s = useSessionStore.getState();
+      expect(s.tabs.find((t) => t.id === a)!.paneIndex).toBe(0);
+      expect(s.tabs.find((t) => t.id === b)!.paneIndex).toBe(0);
+      expect(s.layoutSlots).toHaveLength(1);
+    });
+
+    it('moveTabToPane moves a tab into another pane and reveals a neighbour', () => {
+      useSessionStore.getState().setLayout('2col');
+      const a = useSessionStore.getState().addTab('pty-1', 'a'); // pane 0
+      useSessionStore.getState().setActivePane(1);
+      const b = useSessionStore.getState().addTab('pty-2', 'b'); // pane 1
+
+      useSessionStore.getState().moveTabToPane(a, 1, 0); // a -> pane 1, first
+      const s = useSessionStore.getState();
+      expect(s.tabs.find((t) => t.id === a)!.paneIndex).toBe(1);
+      expect(s.tabs.filter((t) => t.paneIndex === 1).map((t) => t.id)).toEqual([a, b]);
+      expect(s.layoutSlots[0]).toBeNull(); // pane 0 had no other tab
+      expect(s.layoutSlots[1]).toBe(a); // dropped tab becomes visible
+      expect(s.activePaneIndex).toBe(1);
+      expect(s.activeTabId).toBe(a);
+    });
+
+    it('moveTabToPane reorders within the same pane', () => {
       useSessionStore.getState().addTab('pty-1', 'a');
       useSessionStore.getState().addTab('pty-2', 'b');
-      const { tabs } = useSessionStore.getState();
-      useSessionStore.getState().setLayout('2col');
-      useSessionStore.getState().assignSlot(1, tabs[0].id);
-      useSessionStore.getState().closeTab(tabs[1].id); // tab in slot 0
-      const s = useSessionStore.getState();
-      expect(s.layoutSlots[0]).toBeNull();
-      expect(s.layoutSlots[1]).toBe(tabs[0].id);
+      const c = useSessionStore.getState().addTab('pty-3', 'c');
+      useSessionStore.getState().moveTabToPane(c, 0, 0); // c to the front
+      const ids = useSessionStore.getState().tabs.map((t) => t.ptyId);
+      expect(ids).toEqual(['pty-3', 'pty-1', 'pty-2']);
     });
   });
 });

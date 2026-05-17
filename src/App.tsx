@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+  type DragStartEvent,
+  type DragEndEvent,
+} from '@dnd-kit/core';
 import { TitleBar } from './components/TitleBar';
 import { TabBar } from './components/TabBar';
 import { Terminal } from './components/Terminal';
@@ -117,10 +127,54 @@ export function App() {
   const activePaneIndex = useSessionStore((s) => s.activePaneIndex);
   const setLayout = useSessionStore((s) => s.setLayout);
   const setActivePane = useSessionStore((s) => s.setActivePane);
+  const moveTabToPane = useSessionStore((s) => s.moveTabToPane);
   const splits = useSessionStore((s) => s.splits);
   const setSplit = useSessionStore((s) => s.setSplit);
   const broadcast = useSessionStore((s) => s.broadcast);
   const terminalsRef = useRef<HTMLElement>(null);
+
+  // The tab currently being dragged between/within pane strips (drives the
+  // drag overlay). A single DndContext spans every pane so a tab can be
+  // dropped into another pane's strip.
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  const handleTabDragStart = useCallback((e: DragStartEvent) => {
+    setDraggingTabId(String(e.active.id));
+  }, []);
+
+  const handleTabDragEnd = useCallback((e: DragEndEvent) => {
+    setDraggingTabId(null);
+    const { active, over } = e;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overData = over.data.current as
+      | { type?: string; paneIndex?: number }
+      | undefined;
+    if (!overData || typeof overData.paneIndex !== 'number') return;
+    const targetPane = overData.paneIndex;
+
+    const all = useSessionStore.getState().tabs;
+    const targetIds = all.filter((t) => t.paneIndex === targetPane).map((t) => t.id);
+    let index: number;
+    if (overData.type === 'pane') {
+      // Dropped on empty strip area → append to that pane.
+      index = targetIds.filter((id) => id !== activeId).length;
+    } else {
+      // Dropped on a tab. Within the same pane this index (computed against
+      // the list *including* the dragged tab) yields correct arrayMove
+      // semantics in both directions; across panes it inserts before it.
+      index = targetIds.indexOf(String(over.id));
+      if (index < 0) return;
+    }
+    moveTabToPane(activeId, targetPane, index);
+  }, [moveTabToPane]);
+
+  const draggingTab = draggingTabId
+    ? tabs.find((t) => t.id === draggingTabId)
+    : null;
 
   const loadHosts = useHostStore((s) => s.load);
   const createHost = useHostStore((s) => s.create);
@@ -804,11 +858,9 @@ export function App() {
   return (
     <div className="app">
       <TitleBar onLayoutChange={(kind) => void fillNullSlots(kind)} onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}>
-        <TabBar
-          onNew={() => void newLocalTab()}
-          onClose={(id) => void handleClose(id)}
-          onReconnect={(id) => void handleReconnect(id)}
-        />
+        {/* Tabs now live inside each pane; this keeps the title bar's
+            draggable area filling the space the strip used to occupy. */}
+        <div className="titlebar-spacer" />
       </TitleBar>
       <div
         className={`body${sidebarSection === 'databases' && dbListCollapsed ? ' db-list-collapsed' : ''}`}
@@ -885,9 +937,19 @@ export function App() {
           className={`terminals layout-${layoutKind}${broadcast ? ' broadcast-on' : ''}`}
           style={terminalsGridStyle(layoutKind, splits)}
         >
+          {/* One DndContext spans every pane strip so a tab can be dragged
+              between panes (and reordered within one). */}
+          <DndContext
+            sensors={dndSensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleTabDragStart}
+            onDragEnd={handleTabDragEnd}
+            onDragCancel={() => setDraggingTabId(null)}
+          >
           {/* All non-SFTP tabs always mounted at this stable parent so xterm
               state survives slot reassignment. CSS `order` places each visible
-              terminal in its layout slot; non-slot tabs are display:none. */}
+              terminal in its layout slot; non-slot tabs are display:none. The
+              per-pane tab strip renders inside the slot's visible tab. */}
           {tabs.filter((t) => t.kind !== 'sftp' && t.kind !== 'db').map((t) => {
             const slotIdx = layoutSlots.indexOf(t.id);
             const inSlot = slotIdx >= 0;
@@ -898,7 +960,17 @@ export function App() {
                 style={inSlot ? { order: slotIdx } : { display: 'none' }}
                 onClick={() => { if (inSlot) setActivePane(slotIdx); }}
               >
-                <Terminal tab={t} visible={inSlot} active={inSlot && slotIdx === activePaneIndex} onAutoClose={handleClose} />
+                {inSlot && (
+                  <TabBar
+                    paneIndex={slotIdx}
+                    onNew={(p) => { setActivePane(p); void newLocalTab(); }}
+                    onClose={(id) => void handleClose(id)}
+                    onReconnect={(id) => void handleReconnect(id)}
+                  />
+                )}
+                <div className="pane-body">
+                  <Terminal tab={t} visible={inSlot} active={inSlot && slotIdx === activePaneIndex} onAutoClose={handleClose} />
+                </div>
               </div>
             );
           })}
@@ -914,8 +986,16 @@ export function App() {
                 style={{ order: i }}
                 onClick={() => setActivePane(i)}
               >
-                <div className="sftp-mount" style={{ width: '100%', height: '100%', display: 'flex' }}>
-                  <SftpDualBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
+                <TabBar
+                  paneIndex={i}
+                  onNew={(p) => { setActivePane(p); void newLocalTab(); }}
+                  onClose={(id) => void handleClose(id)}
+                  onReconnect={(id) => void handleReconnect(id)}
+                />
+                <div className="pane-body">
+                  <div className="sftp-mount" style={{ width: '100%', height: '100%', display: 'flex' }}>
+                    <SftpDualBrowser tabId={tab.id} onClose={() => void handleClose(tab.id)} />
+                  </div>
                 </div>
               </div>
             );
@@ -934,19 +1014,28 @@ export function App() {
                 style={{ order: i }}
                 onClick={() => setActivePane(i)}
               >
-                <DbBrowser
-                  tabId={tab.id}
-                  sessionId={session.sessionId}
-                  connection={session.connection}
-                  onClose={() => void handleClose(tab.id)}
+                <TabBar
+                  paneIndex={i}
+                  onNew={(p) => { setActivePane(p); void newLocalTab(); }}
+                  onClose={(id) => void handleClose(id)}
+                  onReconnect={(id) => void handleReconnect(id)}
                 />
+                <div className="pane-body">
+                  <DbBrowser
+                    tabId={tab.id}
+                    sessionId={session.sessionId}
+                    connection={session.connection}
+                    onClose={() => void handleClose(tab.id)}
+                  />
+                </div>
               </div>
             );
           })}
           {/* Empty-slot placeholders. With zero tabs total we render a full
               Welcome pane with quick actions + recent hosts; otherwise it's
               an empty slot in a multi-pane layout, so a compact "+ new"
-              placeholder is enough. */}
+              placeholder is enough. The strip still renders so a tab can be
+              dragged into the empty pane. */}
           {layoutSlots.map((tabId, i) => {
             if (tabId) return null;
             const isWelcome = tabs.length === 0;
@@ -957,28 +1046,47 @@ export function App() {
                 style={{ order: i }}
                 onClick={() => setActivePane(i)}
               >
-                {isWelcome ? (
-                  <WelcomePane
-                    onNewLocal={() => { setActivePane(i); void newLocalTab(); }}
-                    onOpenPalette={() => setPaletteOpen(true)}
-                    onOpenSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
-                    onConnectHost={(h) => { setActivePane(i); void connectFromHost(h); }}
-                  />
-                ) : (
-                  <div className="pane-empty">
-                    <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
-                      +
-                    </button>
-                    <div className="pane-empty-hints">
-                      <div className="pane-empty-hint"><kbd>⌘T</kbd><span>New local tab</span></div>
-                      <div className="pane-empty-hint"><kbd>⌘K</kbd><span>Find host or snippet</span></div>
-                      <div className="pane-empty-hint"><kbd>⌘,</kbd><span>Settings</span></div>
+                <TabBar
+                  paneIndex={i}
+                  onNew={(p) => { setActivePane(p); void newLocalTab(); }}
+                  onClose={(id) => void handleClose(id)}
+                  onReconnect={(id) => void handleReconnect(id)}
+                />
+                <div className="pane-body">
+                  {isWelcome ? (
+                    <WelcomePane
+                      onNewLocal={() => { setActivePane(i); void newLocalTab(); }}
+                      onOpenPalette={() => setPaletteOpen(true)}
+                      onOpenSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
+                      onConnectHost={(h) => { setActivePane(i); void connectFromHost(h); }}
+                    />
+                  ) : (
+                    <div className="pane-empty">
+                      <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
+                        +
+                      </button>
+                      <div className="pane-empty-hints">
+                        <div className="pane-empty-hint"><kbd>⌘T</kbd><span>New local tab</span></div>
+                        <div className="pane-empty-hint"><kbd>⌘K</kbd><span>Find host or snippet</span></div>
+                        <div className="pane-empty-hint"><kbd>⌘,</kbd><span>Settings</span></div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}
+          <DragOverlay dropAnimation={null}>
+            {draggingTab ? (
+              <div className="tab active tab-drag-overlay">
+                <span className="tab-status-dot tab-status-local" aria-hidden />
+                <span className="tab-title">
+                  {draggingTab.kind === 'sftp' ? `SFTP - ${draggingTab.title}` : draggingTab.title}
+                </span>
+              </div>
+            ) : null}
+          </DragOverlay>
+          </DndContext>
           {/* Drag handles between panes (overlaid; do not affect grid). */}
           {layoutKind === '2col' && (
             <Splitter orientation="vertical" value={splits.col2} parentRef={terminalsRef}

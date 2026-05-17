@@ -1,12 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  DndContext,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  type DragEndEvent,
-} from '@dnd-kit/core';
+import { useDroppable } from '@dnd-kit/core';
 import {
   SortableContext,
   horizontalListSortingStrategy,
@@ -17,7 +10,10 @@ import { useSessionStore } from '../state/sessionStore';
 import type { Tab } from '../types';
 
 interface Props {
-  onNew: () => void;
+  /** Which split pane this strip belongs to. The strip only shows tabs
+   * that live in this pane; a tab can be dragged into another pane's strip. */
+  paneIndex: number;
+  onNew: (paneIndex: number) => void;
   onClose: (id: string) => void;
   onReconnect?: (id: string) => void;
 }
@@ -60,7 +56,7 @@ function SortableTab({
   onReconnect,
 }: SortableTabProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: tab.id, disabled: isEditing });
+    useSortable({ id: tab.id, disabled: isEditing, data: { type: 'tab', paneIndex: tab.paneIndex } });
 
   // Any termination — clean exit code OR a signal like "network_error" —
   // counts as "no longer connected". The previous check was exitCode-only,
@@ -145,8 +141,9 @@ function SortableTab({
  *
  * Numbers are assigned in *creation order* (parsed from the id's monotonic
  * counter prefix, e.g. "tab-7-…") — NOT the current store order — so
- * dragging a tab to a new slot never swaps "Local 1" ↔ "Local 2". The
- * suffix stays glued to whichever tab the user originally opened first. */
+ * dragging a tab to a new slot or pane never swaps "Local 1" ↔ "Local 2".
+ * Collisions are resolved across *all* tabs (every pane) so two panes
+ * never both show a bare "Local". */
 function buildDisplayTitles(tabs: Tab[]): Map<string, string> {
   const totals = new Map<string, number>();
   for (const t of tabs) totals.set(t.title, (totals.get(t.title) ?? 0) + 1);
@@ -175,22 +172,25 @@ function buildDisplayTitles(tabs: Tab[]): Map<string, string> {
   return out;
 }
 
-export function TabBar({ onNew, onClose, onReconnect }: Props) {
-  const tabs = useSessionStore((s) => s.tabs);
-  const activeTabId = useSessionStore((s) => s.activeTabId);
+export function TabBar({ paneIndex, onNew, onClose, onReconnect }: Props) {
+  const allTabs = useSessionStore((s) => s.tabs);
+  const slotTabId = useSessionStore((s) => s.layoutSlots[paneIndex] ?? null);
   const setActive = useSessionStore((s) => s.setActive);
   const rename = useSessionStore((s) => s.rename);
-  const moveTabTo = useSessionStore((s) => s.moveTabTo);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
 
-  // 4px activation distance: a plain click stays a click; intentional drags
-  // only start once the cursor has moved enough.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-  );
+  // Tabs that belong to *this* pane, in their strip order.
+  const tabs = allTabs.filter((t) => t.paneIndex === paneIndex);
+
+  // The whole strip is a drop target so a tab can be dragged onto a pane
+  // with no tabs (or empty area past the last tab).
+  const { setNodeRef: setDropRef } = useDroppable({
+    id: `pane-drop-${paneIndex}`,
+    data: { type: 'pane', paneIndex },
+  });
 
   // Dismiss the context menu on Esc or any click outside it.
   useEffect(() => {
@@ -225,49 +225,41 @@ export function TabBar({ onNew, onClose, onReconnect }: Props) {
     setEditingId(tabId);
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const newIndex = tabs.findIndex((t) => t.id === over.id);
-    if (newIndex < 0) return;
-    moveTabTo(String(active.id), newIndex);
-  };
-
-  const displayTitles = buildDisplayTitles(tabs);
+  const displayTitles = buildDisplayTitles(allTabs);
 
   return (
-    <div className="tabbar" role="tablist">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext items={tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
-            const isEditing = tab.id === editingId;
-            return (
-              <SortableTab
-                key={tab.id}
-                tab={tab}
-                displayTitle={displayTitles.get(tab.id) ?? tab.title}
-                isActive={isActive}
-                isEditing={isEditing}
-                draft={draft}
-                setDraft={setDraft}
-                onActivate={() => setActive(tab.id)}
-                onCommitRename={(title) => { rename(tab.id, title); setEditingId(null); }}
-                onCancelRename={() => setEditingId(null)}
-                onBeginRename={() => beginRename(tab.id)}
-                onContextMenu={(x, y) => setCtxMenu({ tabId: tab.id, x, y })}
-                onClose={() => onClose(tab.id)}
-                onReconnect={onReconnect ? () => onReconnect(tab.id) : undefined}
-              />
-            );
-          })}
-        </SortableContext>
-      </DndContext>
-      <button type="button" className="tab-new" aria-label="New tab" title="New tab (⌘T)" onClick={onNew}>+</button>
+    <div ref={setDropRef} className="pane-tabbar" role="tablist">
+      <SortableContext items={tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>
+        {tabs.map((tab) => {
+          const isActive = tab.id === slotTabId;
+          const isEditing = tab.id === editingId;
+          return (
+            <SortableTab
+              key={tab.id}
+              tab={tab}
+              displayTitle={displayTitles.get(tab.id) ?? tab.title}
+              isActive={isActive}
+              isEditing={isEditing}
+              draft={draft}
+              setDraft={setDraft}
+              onActivate={() => setActive(tab.id)}
+              onCommitRename={(title) => { rename(tab.id, title); setEditingId(null); }}
+              onCancelRename={() => setEditingId(null)}
+              onBeginRename={() => beginRename(tab.id)}
+              onContextMenu={(x, y) => setCtxMenu({ tabId: tab.id, x, y })}
+              onClose={() => onClose(tab.id)}
+              onReconnect={onReconnect ? () => onReconnect(tab.id) : undefined}
+            />
+          );
+        })}
+      </SortableContext>
+      <button
+        type="button"
+        className="tab-new"
+        aria-label="New tab"
+        title="New tab (⌘T)"
+        onClick={() => onNew(paneIndex)}
+      >+</button>
 
       {ctxMenu && (() => {
         const menuTab = tabs.find((t) => t.id === ctxMenu.tabId);

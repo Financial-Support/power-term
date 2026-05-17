@@ -33,6 +33,10 @@ export interface Tab {
    * dot and surface a Reconnect action. */
   exitSignal?: string | null;
   hostId?: string;
+  /** Which split pane this tab belongs to. Each pane keeps its own
+   * independent group of tabs; `layoutSlots[paneIndex]` is the one
+   * currently shown. Tabs can be dragged between panes. */
+  paneIndex: number;
 }
 
 export type LayoutKind = 'solo' | '2col' | '2row' | '3col' | '2x2';
