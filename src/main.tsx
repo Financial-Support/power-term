@@ -14,6 +14,17 @@ if (/Mac OS X|Macintosh/.test(ua)) root.classList.add('platform-mac');
 else if (/Windows/.test(ua)) root.classList.add('platform-windows');
 else if (/Linux/.test(ua)) root.classList.add('platform-linux');
 
+// Suppress the WebView's built-in right-click menu (the "Reload" /
+// inspect menu) — this is a desktop app, not a web page. Editable
+// fields keep their native menu so right-click paste still works
+// there; the app's own context menus (tab strip, file rows, …) call
+// preventDefault and render their own UI, so they're unaffected.
+document.addEventListener('contextmenu', (e) => {
+  const target = e.target as HTMLElement | null;
+  if (target?.closest('input, textarea, [contenteditable="true"]')) return;
+  e.preventDefault();
+});
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
