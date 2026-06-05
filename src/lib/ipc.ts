@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor, DbConnection, DbConnectionInput, QueryResult, SshKey, SshKeyInput, TableMeta, DbCell } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, SftpTransferProgress, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor, DbConnection, DbConnectionInput, QueryResult, SshKey, SshKeyInput, TableMeta, DbCell } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -199,11 +199,17 @@ export async function sftpRename(sftpId: string, from: string, to: string): Prom
 }
 
 export async function sftpDownload(sftpId: string, remote: string, local: string): Promise<number> {
-  return invoke<number>('sftp_download', { sftpId, remote, local });
+  return invoke<number>('sftp_download', { sftpId, remote, local, transferId: makeTransferId() });
 }
 
 export async function sftpUpload(sftpId: string, local: string, remote: string): Promise<number> {
-  return invoke<number>('sftp_upload', { sftpId, local, remote });
+  return invoke<number>('sftp_upload', { sftpId, local, remote, transferId: makeTransferId() });
+}
+
+export async function onSftpTransferProgress(
+  cb: (payload: SftpTransferProgress) => void,
+): Promise<UnlistenFn> {
+  return listen<SftpTransferProgress>('sftp://transfer-progress', (event) => cb(event.payload));
 }
 
 export async function snippetsList(): Promise<Snippet[]> {
@@ -298,6 +304,13 @@ export async function dbSessionOpen(
 }
 export async function dbSessionClose(sessionId: string): Promise<void> {
   await invoke('db_session_close', { sessionId });
+}
+
+function makeTransferId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `transfer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 export async function dbQuery(sessionId: string, sql: string): Promise<QueryResult> {
   return invoke<QueryResult>('db_query', { sessionId, sql });

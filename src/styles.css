@@ -3011,6 +3011,183 @@ html, body, #root { height: 100%; margin: 0; }
   outline-offset: -1px;
 }
 
+/* ─── SFTP transfer status ──────────────────────────────────────────────── */
+.transfer-status {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.transfer-status-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  width: 28px; height: 28px;
+  padding: 0; border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.1s, color 0.1s;
+}
+.transfer-status-btn:hover,
+.transfer-status-btn.active {
+  color: var(--fg);
+  background: var(--bg-hover);
+}
+.transfer-status-btn.has-error {
+  color: #f87171;
+}
+.transfer-status-badge {
+  position: absolute;
+  top: 2px; right: 1px;
+  min-width: 13px; height: 13px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+.transfer-status-btn.has-error .transfer-status-badge {
+  background: #f87171;
+  color: #1f100f;
+}
+.spinning-transfer {
+  animation: transfer-pulse 1.2s ease-in-out infinite;
+}
+@keyframes transfer-pulse {
+  0%, 100% { opacity: 0.75; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1px); }
+}
+.transfer-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: -72px;
+  width: 340px;
+  max-width: min(340px, calc(100vw - 24px));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-med);
+  border-radius: 10px;
+  box-shadow: 0 16px 42px rgba(0,0,0,0.58);
+  z-index: 120;
+  overflow: hidden;
+}
+.transfer-popover-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.transfer-popover-head button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+.transfer-popover-head button:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--bg-hover);
+}
+.transfer-popover-head button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.transfer-empty {
+  padding: 18px 12px;
+  text-align: center;
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+.transfer-list {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 5px;
+}
+.transfer-row {
+  padding: 8px 8px 7px;
+  border-radius: 7px;
+  background: transparent;
+}
+.transfer-row + .transfer-row {
+  margin-top: 3px;
+}
+.transfer-row:hover {
+  background: var(--bg-hover);
+}
+.transfer-row-main {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+.transfer-row-icon {
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--accent-text);
+  font-size: 14px;
+}
+.transfer-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: 12.5px;
+}
+.transfer-row-state {
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-family: "SF Mono", Menlo, monospace;
+}
+.transfer-row-sub {
+  display: flex; justify-content: space-between; gap: 10px;
+  margin: 4px 0 6px 25px;
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-family: "SF Mono", Menlo, monospace;
+}
+.transfer-progress-bar {
+  height: 3px;
+  margin-left: 25px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+.transfer-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}
+.transfer-row-done .transfer-progress-bar span {
+  background: var(--success);
+}
+.transfer-row-error .transfer-progress-bar span {
+  background: #f87171;
+}
+.transfer-row-error .transfer-row-state {
+  color: #f87171;
+}
+.transfer-error {
+  margin: 6px 0 0 25px;
+  color: #f87171;
+  font-size: 11px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 /* ─── Layout picker ─────────────────────────────────────────────────────── */
 .layout-picker-wrap {
   position: relative;

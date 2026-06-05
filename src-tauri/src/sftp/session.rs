@@ -38,6 +38,17 @@ pub struct SftpEntry {
     pub symlink_target: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct SftpTransferProgress {
+    pub transfer_id: String,
+    pub direction: String,
+    pub path: String,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    pub state: String,
+    pub error: Option<String>,
+}
+
 fn handshake_to_sftp_err(e: HandshakeError) -> SftpError {
     match e {
         HandshakeError::Connect(s) => SftpError::Connect(s),
@@ -195,31 +206,68 @@ impl SftpSession {
     /// Public download entry point. Stats `remote` and dispatches to the
     /// directory- or file-recursive variant. Returns total bytes copied.
     pub async fn download(&self, remote: &str, local: &Path) -> Result<u64, SftpError> {
+        self.download_with_progress(remote, local, &mut |_, _| {}).await
+    }
+
+    /// Download with byte progress. For directories, the total is computed
+    /// before copying so the renderer can show a stable percentage.
+    pub async fn download_with_progress(
+        &self,
+        remote: &str,
+        local: &Path,
+        progress: &mut (dyn FnMut(u64, u64) + Send),
+    ) -> Result<u64, SftpError> {
+        let total_size = self.remote_total_size(remote).await?;
+        let mut copied: u64 = 0;
         let meta = {
             let sftp = self.sftp.lock().await;
             sftp.metadata(remote.to_string())
                 .await
                 .map_err(map_sftp_err)?
         };
-        if meta.is_dir() {
-            self.download_dir(remote, local).await
+        let result = if meta.is_dir() {
+            self.download_dir_progress(remote, local, total_size, &mut copied, progress).await
         } else {
-            self.download_file(remote, local).await
-        }
+            self.download_file_progress(remote, local, total_size, &mut copied, progress).await
+        }?;
+        progress(copied, total_size);
+        Ok(result)
     }
 
     /// Public upload entry point. Stats `local` and dispatches to the
     /// directory- or file-recursive variant. Returns total bytes copied.
     pub async fn upload(&self, local: &Path, remote: &str) -> Result<u64, SftpError> {
-        let meta = tokio::fs::metadata(local).await?;
-        if meta.is_dir() {
-            self.upload_dir(local, remote).await
-        } else {
-            self.upload_file(local, remote).await
-        }
+        self.upload_with_progress(local, remote, &mut |_, _| {}).await
     }
 
-    async fn download_file(&self, remote: &str, local: &Path) -> Result<u64, SftpError> {
+    /// Upload with byte progress. For directories, the total is computed
+    /// before copying so the renderer can show a stable percentage.
+    pub async fn upload_with_progress(
+        &self,
+        local: &Path,
+        remote: &str,
+        progress: &mut (dyn FnMut(u64, u64) + Send),
+    ) -> Result<u64, SftpError> {
+        let total_size = local_total_size(local).await?;
+        let mut copied: u64 = 0;
+        let meta = tokio::fs::metadata(local).await?;
+        let result = if meta.is_dir() {
+            self.upload_dir_progress(local, remote, total_size, &mut copied, progress).await
+        } else {
+            self.upload_file_progress(local, remote, total_size, &mut copied, progress).await
+        }?;
+        progress(copied, total_size);
+        Ok(result)
+    }
+
+    async fn download_file_progress(
+        &self,
+        remote: &str,
+        local: &Path,
+        total_size: u64,
+        copied: &mut u64,
+        progress: &mut (dyn FnMut(u64, u64) + Send),
+    ) -> Result<u64, SftpError> {
         let sftp = self.sftp.lock().await;
         let mut remote_file = sftp.open(remote.to_string()).await.map_err(map_sftp_err)?;
         if let Some(parent) = local.parent() {
@@ -238,12 +286,21 @@ impl SftpSession {
             }
             local_file.write_all(&buf[..n]).await?;
             total += n as u64;
+            *copied += n as u64;
+            progress(*copied, total_size);
         }
         local_file.flush().await?;
         Ok(total)
     }
 
-    async fn upload_file(&self, local: &Path, remote: &str) -> Result<u64, SftpError> {
+    async fn upload_file_progress(
+        &self,
+        local: &Path,
+        remote: &str,
+        total_size: u64,
+        copied: &mut u64,
+        progress: &mut (dyn FnMut(u64, u64) + Send),
+    ) -> Result<u64, SftpError> {
         let sftp = self.sftp.lock().await;
         let mut local_file = tokio::fs::File::open(local).await?;
         let mut remote_file = sftp
@@ -265,6 +322,8 @@ impl SftpSession {
                 .await
                 .map_err(|e| SftpError::Any(format!("remote write: {e}")))?;
             total += n as u64;
+            *copied += n as u64;
+            progress(*copied, total_size);
         }
         remote_file
             .shutdown()
@@ -277,7 +336,14 @@ impl SftpSession {
     /// queue rather than async recursion so each operation locks the sftp
     /// mutex for the smallest possible window. Symlinks are skipped to
     /// avoid following links out of the intended subtree.
-    async fn download_dir(&self, remote: &str, local: &Path) -> Result<u64, SftpError> {
+    async fn download_dir_progress(
+        &self,
+        remote: &str,
+        local: &Path,
+        total_size: u64,
+        copied: &mut u64,
+        progress: &mut (dyn FnMut(u64, u64) + Send),
+    ) -> Result<u64, SftpError> {
         tokio::fs::create_dir_all(local).await?;
         let mut total: u64 = 0;
         let mut queue: Vec<(String, PathBuf)> =
@@ -293,7 +359,7 @@ impl SftpSession {
                         queue.push((r, l));
                     }
                     "file" => {
-                        total += self.download_file(&r, &l).await?;
+                        total += self.download_file_progress(&r, &l, total_size, copied, progress).await?;
                     }
                     _ => { /* skip symlinks and unknown kinds */ }
                 }
@@ -306,7 +372,14 @@ impl SftpSession {
     /// root is created best-effort — an "already exists" error is ignored
     /// so partial-resume / merge-into-existing-folder works naturally;
     /// any other failure surfaces when the first contained file open fails.
-    async fn upload_dir(&self, local: &Path, remote: &str) -> Result<u64, SftpError> {
+    async fn upload_dir_progress(
+        &self,
+        local: &Path,
+        remote: &str,
+        total_size: u64,
+        copied: &mut u64,
+        progress: &mut (dyn FnMut(u64, u64) + Send),
+    ) -> Result<u64, SftpError> {
         let _ = self.try_mkdir(remote).await;
         let mut total: u64 = 0;
         let mut queue: Vec<(PathBuf, String)> =
@@ -322,7 +395,7 @@ impl SftpSession {
                     let _ = self.try_mkdir(&r).await;
                     queue.push((l, r));
                 } else if ft.is_file() {
-                    total += self.upload_file(&l, &r).await?;
+                    total += self.upload_file_progress(&l, &r, total_size, copied, progress).await?;
                 }
                 // skip symlinks
             }
@@ -346,6 +419,33 @@ impl SftpSession {
             .map_err(map_sftp_err)
     }
 
+    async fn remote_total_size(&self, remote: &str) -> Result<u64, SftpError> {
+        let meta = {
+            let sftp = self.sftp.lock().await;
+            sftp.metadata(remote.to_string())
+                .await
+                .map_err(map_sftp_err)?
+        };
+        if !meta.is_dir() {
+            return Ok(meta.size.unwrap_or(0));
+        }
+
+        let mut total: u64 = 0;
+        let mut stack = vec![remote.to_string()];
+        while let Some(dir) = stack.pop() {
+            let entries = self.list(&dir).await?;
+            for e in entries {
+                let child = format!("{}/{}", dir.trim_end_matches('/'), e.name);
+                match e.kind.as_str() {
+                    "dir" => stack.push(child),
+                    "file" => total += e.size,
+                    _ => {}
+                }
+            }
+        }
+        Ok(total)
+    }
+
     pub async fn close(&self) -> Result<(), SftpError> {
         // Don't error if either close fails — disconnect path is best-effort.
         let sftp = self.sftp.lock().await;
@@ -355,6 +455,28 @@ impl SftpSession {
         let _ = ssh.disconnect(Disconnect::ByApplication, "", "").await;
         Ok(())
     }
+}
+
+async fn local_total_size(path: &Path) -> Result<u64, SftpError> {
+    let meta = tokio::fs::metadata(path).await?;
+    if !meta.is_dir() {
+        return Ok(meta.len());
+    }
+
+    let mut total: u64 = 0;
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let mut rd = tokio::fs::read_dir(&dir).await?;
+        while let Some(entry) = rd.next_entry().await? {
+            let ft = entry.file_type().await?;
+            if ft.is_dir() {
+                stack.push(entry.path());
+            } else if ft.is_file() {
+                total += entry.metadata().await?.len();
+            }
+        }
+    }
+    Ok(total)
 }
 
 fn attrs_to_entry(name: String, attrs: &russh_sftp::protocol::FileAttributes) -> SftpEntry {

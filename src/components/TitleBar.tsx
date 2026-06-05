@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSessionStore } from '../state/sessionStore';
 import { SyncStatus } from './SyncStatus';
+import { SftpTransferStatus } from './SftpTransferStatus';
 import type { LayoutKind } from '../types';
 
 interface Props {
@@ -168,6 +169,7 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
       </div>
       {children}
       <div className="titlebar-drag-right" />
+      <SftpTransferStatus />
       <SyncStatus onErrorClick={onOpenSyncSettings} onClick={onOpenSyncSettings} />
       <button
         type="button"

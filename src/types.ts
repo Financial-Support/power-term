@@ -112,6 +112,16 @@ export interface SftpEntry {
   symlink_target: string | null;
 }
 
+export interface SftpTransferProgress {
+  transfer_id: string;
+  direction: 'upload' | 'download';
+  path: string;
+  bytes_done: number;
+  bytes_total: number;
+  state: 'running' | 'done' | 'error';
+  error: string | null;
+}
+
 export type SftpOpenResult =
   | { status: 'connected'; id: string }
   | { status: 'needs_fingerprint'; fingerprint: string; host: string; key_type: string }

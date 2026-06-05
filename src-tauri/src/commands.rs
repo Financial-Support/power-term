@@ -4,7 +4,7 @@ use crate::sync::SyncManager;
 use crate::sync::push::PendingOp;
 use base64::Engine;
 use std::path::PathBuf;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 /// Resolve the user's macOS accent colour to a `#RRGGBB` literal so the
 /// renderer can drive every accent-derived shade through `color-mix()`.
@@ -552,24 +552,87 @@ pub async fn sftp_rename(
 
 #[tauri::command]
 pub async fn sftp_download(
+    app: tauri::AppHandle,
     manager: tauri::State<'_, SftpManager>,
     sftp_id: String,
     remote: String,
     local: String,
+    transfer_id: Option<String>,
 ) -> Result<u64, String> {
     let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
-    s.download(&remote, std::path::Path::new(&local)).await.map_err(|e| e.to_string())
+    let transfer_id = transfer_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    emit_sftp_progress(&app, &transfer_id, "download", &remote, 0, 0, "running", None);
+    let mut last_done = 0;
+    let mut last_total = 0;
+    let result = s.download_with_progress(&remote, std::path::Path::new(&local), &mut |done, total| {
+        last_done = done;
+        last_total = total;
+        emit_sftp_progress(&app, &transfer_id, "download", &remote, done, total, "running", None);
+    }).await;
+    match result {
+        Ok(bytes) => {
+            emit_sftp_progress(&app, &transfer_id, "download", &remote, bytes, bytes, "done", None);
+            Ok(bytes)
+        }
+        Err(e) => {
+            let err = e.to_string();
+            emit_sftp_progress(&app, &transfer_id, "download", &remote, last_done, last_total, "error", Some(&err));
+            Err(err)
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn sftp_upload(
+    app: tauri::AppHandle,
     manager: tauri::State<'_, SftpManager>,
     sftp_id: String,
     local: String,
     remote: String,
+    transfer_id: Option<String>,
 ) -> Result<u64, String> {
     let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
-    s.upload(std::path::Path::new(&local), &remote).await.map_err(|e| e.to_string())
+    let transfer_id = transfer_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    emit_sftp_progress(&app, &transfer_id, "upload", &remote, 0, 0, "running", None);
+    let mut last_done = 0;
+    let mut last_total = 0;
+    let result = s.upload_with_progress(std::path::Path::new(&local), &remote, &mut |done, total| {
+        last_done = done;
+        last_total = total;
+        emit_sftp_progress(&app, &transfer_id, "upload", &remote, done, total, "running", None);
+    }).await;
+    match result {
+        Ok(bytes) => {
+            emit_sftp_progress(&app, &transfer_id, "upload", &remote, bytes, bytes, "done", None);
+            Ok(bytes)
+        }
+        Err(e) => {
+            let err = e.to_string();
+            emit_sftp_progress(&app, &transfer_id, "upload", &remote, last_done, last_total, "error", Some(&err));
+            Err(err)
+        }
+    }
+}
+
+fn emit_sftp_progress(
+    app: &tauri::AppHandle,
+    transfer_id: &str,
+    direction: &str,
+    path: &str,
+    bytes_done: u64,
+    bytes_total: u64,
+    state: &str,
+    error: Option<&str>,
+) {
+    let _ = app.emit("sftp://transfer-progress", crate::sftp::SftpTransferProgress {
+        transfer_id: transfer_id.to_string(),
+        direction: direction.to_string(),
+        path: path.to_string(),
+        bytes_done,
+        bytes_total,
+        state: state.to_string(),
+        error: error.map(|e| e.to_string()),
+    });
 }
 
 #[tauri::command]

@@ -2,7 +2,7 @@ pub mod manager;
 pub mod session;
 
 pub use manager::SftpManager;
-pub use session::{SftpEntry, SftpSession};
+pub use session::{SftpEntry, SftpSession, SftpTransferProgress};
 
 pub type SftpId = String;
 
