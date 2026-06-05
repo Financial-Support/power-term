@@ -206,6 +206,10 @@ export async function sftpUpload(sftpId: string, local: string, remote: string):
   return invoke<number>('sftp_upload', { sftpId, local, remote, transferId: makeTransferId() });
 }
 
+export async function sftpCancelTransfer(transferId: string): Promise<void> {
+  await invoke('sftp_cancel_transfer', { transferId });
+}
+
 export async function onSftpTransferProgress(
   cb: (payload: SftpTransferProgress) => void,
 ): Promise<UnlistenFn> {

@@ -205,6 +205,7 @@ fn main() {
             power_term::commands::sftp_rename,
             power_term::commands::sftp_download,
             power_term::commands::sftp_upload,
+            power_term::commands::sftp_cancel_transfer,
             power_term::commands::forwards_list,
             power_term::commands::forwards_create,
             power_term::commands::forwards_update,

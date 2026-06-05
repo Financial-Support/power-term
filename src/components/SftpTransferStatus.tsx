@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { onSftpTransferProgress } from '../lib/ipc';
+import { onSftpTransferProgress, sftpCancelTransfer } from '../lib/ipc';
 import type { SftpTransferProgress } from '../types';
 
 type TransferRecord = SftpTransferProgress & {
@@ -66,6 +66,14 @@ export function SftpTransferStatus() {
     saveHistory(running);
   };
 
+  const cancelTransfer = async (transferId: string) => {
+    try {
+      await sftpCancelTransfer(transferId);
+    } catch (err) {
+      console.warn('cancel transfer failed', err);
+    }
+  };
+
   return (
     <div className="transfer-status" data-no-drag ref={wrapRef}>
       <button
@@ -94,7 +102,7 @@ export function SftpTransferStatus() {
           ) : (
             <div className="transfer-list">
               {sorted.map((r) => (
-                <TransferRow key={r.transfer_id} record={r} />
+                <TransferRow key={r.transfer_id} record={r} onCancel={cancelTransfer} />
               ))}
             </div>
           )}
@@ -104,7 +112,7 @@ export function SftpTransferStatus() {
   );
 }
 
-function TransferRow({ record }: { record: TransferRecord }) {
+function TransferRow({ record, onCancel }: { record: TransferRecord; onCancel: (transferId: string) => Promise<void> }) {
   const pct = record.bytes_total > 0
     ? Math.min(100, Math.round((record.bytes_done / record.bytes_total) * 100))
     : record.state === 'done' ? 100 : 0;
@@ -114,14 +122,22 @@ function TransferRow({ record }: { record: TransferRecord }) {
     ? `${pct}%`
     : record.state === 'done'
       ? 'Done'
-      : 'Failed';
+      : record.state === 'cancelled'
+        ? 'Cancelled'
+        : 'Failed';
 
   return (
     <div className={`transfer-row transfer-row-${record.state}`}>
       <div className="transfer-row-main">
         <span className="transfer-row-icon" aria-hidden>{record.direction === 'upload' ? '↑' : '↓'}</span>
         <span className="transfer-row-name" title={record.path}>{name}</span>
-        <span className="transfer-row-state">{stateText}</span>
+        {record.state === 'running' ? (
+          <button type="button" className="transfer-cancel" onClick={() => void onCancel(record.transfer_id)}>
+            Cancel
+          </button>
+        ) : (
+          <span className="transfer-row-state">{stateText}</span>
+        )}
       </div>
       <div className="transfer-row-sub">
         <span>{verb}</span>
@@ -174,7 +190,7 @@ function isTransferRecord(value: unknown): value is TransferRecord {
     typeof r.path === 'string' &&
     typeof r.bytes_done === 'number' &&
     typeof r.bytes_total === 'number' &&
-    (r.state === 'running' || r.state === 'done' || r.state === 'error') &&
+    (r.state === 'running' || r.state === 'done' || r.state === 'error' || r.state === 'cancelled') &&
     typeof r.started_at === 'number' &&
     typeof r.updated_at === 'number',
   );

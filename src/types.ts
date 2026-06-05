@@ -118,7 +118,7 @@ export interface SftpTransferProgress {
   path: string;
   bytes_done: number;
   bytes_total: number;
-  state: 'running' | 'done' | 'error';
+  state: 'running' | 'done' | 'error' | 'cancelled';
   error: string | null;
 }
 

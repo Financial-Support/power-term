@@ -561,6 +561,7 @@ pub async fn sftp_download(
 ) -> Result<u64, String> {
     let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
     let transfer_id = transfer_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let cancel_token = manager.start_transfer(&transfer_id);
     emit_sftp_progress(&app, &transfer_id, "download", &remote, 0, 0, "running", None);
     let mut last_done = 0;
     let mut last_total = 0;
@@ -568,7 +569,9 @@ pub async fn sftp_download(
         last_done = done;
         last_total = total;
         emit_sftp_progress(&app, &transfer_id, "download", &remote, done, total, "running", None);
+        !cancel_token.load(std::sync::atomic::Ordering::Relaxed)
     }).await;
+    manager.finish_transfer(&transfer_id);
     match result {
         Ok(bytes) => {
             emit_sftp_progress(&app, &transfer_id, "download", &remote, bytes, bytes, "done", None);
@@ -576,7 +579,11 @@ pub async fn sftp_download(
         }
         Err(e) => {
             let err = e.to_string();
-            emit_sftp_progress(&app, &transfer_id, "download", &remote, last_done, last_total, "error", Some(&err));
+            if err.contains("transfer cancelled") {
+                emit_sftp_progress(&app, &transfer_id, "download", &remote, last_done, last_total, "cancelled", None);
+            } else {
+                emit_sftp_progress(&app, &transfer_id, "download", &remote, last_done, last_total, "error", Some(&err));
+            }
             Err(err)
         }
     }
@@ -593,6 +600,7 @@ pub async fn sftp_upload(
 ) -> Result<u64, String> {
     let s = manager.get(&sftp_id).map_err(|e| e.to_string())?;
     let transfer_id = transfer_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let cancel_token = manager.start_transfer(&transfer_id);
     emit_sftp_progress(&app, &transfer_id, "upload", &remote, 0, 0, "running", None);
     let mut last_done = 0;
     let mut last_total = 0;
@@ -600,7 +608,9 @@ pub async fn sftp_upload(
         last_done = done;
         last_total = total;
         emit_sftp_progress(&app, &transfer_id, "upload", &remote, done, total, "running", None);
+        !cancel_token.load(std::sync::atomic::Ordering::Relaxed)
     }).await;
+    manager.finish_transfer(&transfer_id);
     match result {
         Ok(bytes) => {
             emit_sftp_progress(&app, &transfer_id, "upload", &remote, bytes, bytes, "done", None);
@@ -608,9 +618,25 @@ pub async fn sftp_upload(
         }
         Err(e) => {
             let err = e.to_string();
-            emit_sftp_progress(&app, &transfer_id, "upload", &remote, last_done, last_total, "error", Some(&err));
+            if err.contains("transfer cancelled") {
+                emit_sftp_progress(&app, &transfer_id, "upload", &remote, last_done, last_total, "cancelled", None);
+            } else {
+                emit_sftp_progress(&app, &transfer_id, "upload", &remote, last_done, last_total, "error", Some(&err));
+            }
             Err(err)
         }
+    }
+}
+
+#[tauri::command]
+pub fn sftp_cancel_transfer(
+    manager: tauri::State<'_, SftpManager>,
+    transfer_id: String,
+) -> Result<(), String> {
+    if manager.cancel_transfer(&transfer_id) {
+        Ok(())
+    } else {
+        Err(format!("unknown transfer '{transfer_id}'"))
     }
 }
 

@@ -4,15 +4,22 @@ use crate::ssh::auth::Auth;
 use crate::ssh::known_hosts::KnownHosts;
 use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 pub struct SftpManager {
     sessions: Mutex<HashMap<SftpId, Arc<SftpSession>>>,
+    transfers: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 impl SftpManager {
-    pub fn new() -> Self { Self { sessions: Mutex::new(HashMap::new()) } }
+    pub fn new() -> Self {
+        Self {
+            sessions: Mutex::new(HashMap::new()),
+            transfers: Mutex::new(HashMap::new()),
+        }
+    }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn open(
@@ -38,6 +45,25 @@ impl SftpManager {
     pub fn get(&self, id: &SftpId) -> Result<Arc<SftpSession>, SftpError> {
         self.sessions.lock().get(id).cloned()
             .ok_or_else(|| SftpError::Unknown(id.clone()))
+    }
+
+    pub fn start_transfer(&self, transfer_id: &str) -> Arc<AtomicBool> {
+        let token = Arc::new(AtomicBool::new(false));
+        self.transfers.lock().insert(transfer_id.to_string(), token.clone());
+        token
+    }
+
+    pub fn cancel_transfer(&self, transfer_id: &str) -> bool {
+        if let Some(token) = self.transfers.lock().get(transfer_id) {
+            token.store(true, Ordering::Relaxed);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn finish_transfer(&self, transfer_id: &str) {
+        self.transfers.lock().remove(transfer_id);
     }
 
     pub async fn close(&self, id: &SftpId) -> Result<(), SftpError> {

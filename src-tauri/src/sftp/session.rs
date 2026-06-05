@@ -206,7 +206,7 @@ impl SftpSession {
     /// Public download entry point. Stats `remote` and dispatches to the
     /// directory- or file-recursive variant. Returns total bytes copied.
     pub async fn download(&self, remote: &str, local: &Path) -> Result<u64, SftpError> {
-        self.download_with_progress(remote, local, &mut |_, _| {}).await
+        self.download_with_progress(remote, local, &mut |_, _| true).await
     }
 
     /// Download with byte progress. For directories, the total is computed
@@ -215,7 +215,7 @@ impl SftpSession {
         &self,
         remote: &str,
         local: &Path,
-        progress: &mut (dyn FnMut(u64, u64) + Send),
+        progress: &mut (dyn FnMut(u64, u64) -> bool + Send),
     ) -> Result<u64, SftpError> {
         let total_size = self.remote_total_size(remote).await?;
         let mut copied: u64 = 0;
@@ -230,14 +230,14 @@ impl SftpSession {
         } else {
             self.download_file_progress(remote, local, total_size, &mut copied, progress).await
         }?;
-        progress(copied, total_size);
+        let _ = progress(copied, total_size);
         Ok(result)
     }
 
     /// Public upload entry point. Stats `local` and dispatches to the
     /// directory- or file-recursive variant. Returns total bytes copied.
     pub async fn upload(&self, local: &Path, remote: &str) -> Result<u64, SftpError> {
-        self.upload_with_progress(local, remote, &mut |_, _| {}).await
+        self.upload_with_progress(local, remote, &mut |_, _| true).await
     }
 
     /// Upload with byte progress. For directories, the total is computed
@@ -246,7 +246,7 @@ impl SftpSession {
         &self,
         local: &Path,
         remote: &str,
-        progress: &mut (dyn FnMut(u64, u64) + Send),
+        progress: &mut (dyn FnMut(u64, u64) -> bool + Send),
     ) -> Result<u64, SftpError> {
         let total_size = local_total_size(local).await?;
         let mut copied: u64 = 0;
@@ -256,7 +256,7 @@ impl SftpSession {
         } else {
             self.upload_file_progress(local, remote, total_size, &mut copied, progress).await
         }?;
-        progress(copied, total_size);
+        let _ = progress(copied, total_size);
         Ok(result)
     }
 
@@ -266,7 +266,7 @@ impl SftpSession {
         local: &Path,
         total_size: u64,
         copied: &mut u64,
-        progress: &mut (dyn FnMut(u64, u64) + Send),
+        progress: &mut (dyn FnMut(u64, u64) -> bool + Send),
     ) -> Result<u64, SftpError> {
         let sftp = self.sftp.lock().await;
         let mut remote_file = sftp.open(remote.to_string()).await.map_err(map_sftp_err)?;
@@ -287,7 +287,9 @@ impl SftpSession {
             local_file.write_all(&buf[..n]).await?;
             total += n as u64;
             *copied += n as u64;
-            progress(*copied, total_size);
+            if !progress(*copied, total_size) {
+                return Err(SftpError::Any("transfer cancelled".into()));
+            }
         }
         local_file.flush().await?;
         Ok(total)
@@ -299,7 +301,7 @@ impl SftpSession {
         remote: &str,
         total_size: u64,
         copied: &mut u64,
-        progress: &mut (dyn FnMut(u64, u64) + Send),
+        progress: &mut (dyn FnMut(u64, u64) -> bool + Send),
     ) -> Result<u64, SftpError> {
         let sftp = self.sftp.lock().await;
         let mut local_file = tokio::fs::File::open(local).await?;
@@ -323,7 +325,9 @@ impl SftpSession {
                 .map_err(|e| SftpError::Any(format!("remote write: {e}")))?;
             total += n as u64;
             *copied += n as u64;
-            progress(*copied, total_size);
+            if !progress(*copied, total_size) {
+                return Err(SftpError::Any("transfer cancelled".into()));
+            }
         }
         remote_file
             .shutdown()
@@ -342,7 +346,7 @@ impl SftpSession {
         local: &Path,
         total_size: u64,
         copied: &mut u64,
-        progress: &mut (dyn FnMut(u64, u64) + Send),
+        progress: &mut (dyn FnMut(u64, u64) -> bool + Send),
     ) -> Result<u64, SftpError> {
         tokio::fs::create_dir_all(local).await?;
         let mut total: u64 = 0;
@@ -378,7 +382,7 @@ impl SftpSession {
         remote: &str,
         total_size: u64,
         copied: &mut u64,
-        progress: &mut (dyn FnMut(u64, u64) + Send),
+        progress: &mut (dyn FnMut(u64, u64) -> bool + Send),
     ) -> Result<u64, SftpError> {
         let _ = self.try_mkdir(remote).await;
         let mut total: u64 = 0;
