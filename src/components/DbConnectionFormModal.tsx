@@ -3,6 +3,7 @@ import { useHostStore } from '../state/hostStore';
 import { pickLocalFile } from '../lib/dialog';
 import { secretGet } from '../lib/ipc';
 import type { DbConnection, DbConnectionInput, DbEngine } from '../types';
+import { CloseIcon, DatabaseIcon } from './AppIcons';
 
 interface Props {
   mode: 'create' | 'edit';
@@ -132,7 +133,17 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
   return (
     <div className="modal-backdrop" role="dialog" aria-label="db connection form">
       <div className="modal modal-form">
-        <h2>{mode === 'create' ? 'Add database connection' : 'Edit database connection'}</h2>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><DatabaseIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">Connection</span>
+            <h2>{mode === 'create' ? 'Add database' : 'Edit database'}</h2>
+            <p className="form-title-meta">{ENGINE_LABELS[engine]}</p>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close database connection form" title="Close" onClick={onCancel}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
         <div className="form-grid">
           <label htmlFor="dbf-name">Name</label>
           <input id="dbf-name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -154,9 +165,9 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
 
           {usesSshHost && (
             <>
-              <label htmlFor="dbf-host">SSH host</label>
+              <label htmlFor="dbf-host">Host</label>
               <select id="dbf-host" value={hostId} onChange={(e) => setHostId(e.target.value)}>
-                <option value="" disabled>Select host…</option>
+                <option value="" disabled>Choose host</option>
                 {hosts.map((h) => (
                   <option key={h.id} value={h.id}>{h.name} ({h.username}@{h.hostname}:{h.port})</option>
                 ))}
@@ -166,7 +177,7 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
 
           {!isSqlite && (
             <>
-              <label htmlFor="dbf-dbhost">{isRedis ? 'Redis host (from remote)' : 'DB host (from remote)'}</label>
+              <label htmlFor="dbf-dbhost">{isRedis ? 'Redis host' : 'DB host'}</label>
               <input
                 id="dbf-dbhost"
                 value={dbHost}
@@ -222,7 +233,7 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
                 id="dbf-pass"
                 type="password"
                 value={password}
-                placeholder={hasStored && !passwordDirty ? '••• stored in Keychain' : isRedis ? 'optional' : ''}
+                placeholder={hasStored && !passwordDirty ? '••• saved' : isRedis ? 'optional' : ''}
                 onChange={(e) => { setPassword(e.target.value); setPasswordDirty(true); }}
               />
             </>
@@ -230,19 +241,19 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
         </div>
 
         {usesPassword && (
-          <label className="checkbox" style={{ marginTop: 4 }}>
+          <label className="checkbox checkbox-compact">
             <input
               type="checkbox"
               checked={savePassword}
               onChange={(e) => { setSavePassword(e.target.checked); setSavePasswordDirty(true); }}
-            /> Save password to Keychain
+            /> Save password
           </label>
         )}
 
         <p className="form-hint">
           {isSqlite
-            ? 'SQLite connections open a local database file directly.'
-            : 'The DB host is resolved on the remote side, so use 127.0.0.1 for a service running on the SSH host itself. Passwords are stored in the OS Keychain when enabled.'}
+            ? 'Open a local SQLite file directly.'
+            : 'The DB host resolves on the remote side. Use 127.0.0.1 for services running on the SSH host.'}
         </p>
 
         <div className="modal-actions">

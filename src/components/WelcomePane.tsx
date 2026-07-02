@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useHostStore } from '../state/hostStore';
 import type { Host } from '../types';
+import { BrandIcon, ChevronRightIcon, SearchIcon, ServerIcon, SettingsIcon, TerminalIcon } from './AppIcons';
 
 interface Props {
   onNewLocal: () => void;
@@ -24,42 +25,41 @@ export function WelcomePane({
     <div className="welcome">
       <div className="welcome-inner">
         <div className="welcome-mark" aria-hidden>
-          <svg width="48" height="48" viewBox="0 0 20 20" fill="none">
-            <rect x="1" y="1" width="18" height="18" rx="5"
-              stroke="currentColor" strokeWidth="1.4" strokeOpacity="0.85" />
-            <path d="M11.2 4 L6.2 11.2 H10 L8.8 16 L13.8 8.8 H10 Z" fill="currentColor" />
-          </svg>
+          <BrandIcon size={48} />
         </div>
         <h1 className="welcome-title">Power Term</h1>
-        <p className="welcome-subtitle">Pick something below or start typing.</p>
+        <p className="welcome-subtitle">Open a shell or connect to a host.</p>
 
         <div className="welcome-actions">
           <button type="button" className="welcome-action" onClick={onNewLocal}>
-            <span className="welcome-action-kbd"><kbd>⌘</kbd><kbd>T</kbd></span>
+            <span className="welcome-action-icon" aria-hidden><TerminalIcon size={16} /></span>
             <span className="welcome-action-label">
               <span className="welcome-action-title">New local tab</span>
-              <span className="welcome-action-desc">Open a fresh shell</span>
+              <span className="welcome-action-desc">Local shell</span>
             </span>
+            <span className="welcome-action-arrow" aria-hidden><ChevronRightIcon size={14} /></span>
           </button>
           <button type="button" className="welcome-action" onClick={onOpenPalette}>
-            <span className="welcome-action-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
+            <span className="welcome-action-icon" aria-hidden><SearchIcon size={16} /></span>
             <span className="welcome-action-label">
-              <span className="welcome-action-title">Find host or snippet</span>
-              <span className="welcome-action-desc">Open the command palette</span>
+              <span className="welcome-action-title">Hosts and snippets</span>
+              <span className="welcome-action-desc">Search</span>
             </span>
+            <span className="welcome-action-arrow" aria-hidden><ChevronRightIcon size={14} /></span>
           </button>
           <button type="button" className="welcome-action" onClick={onOpenSettings}>
-            <span className="welcome-action-kbd"><kbd>⌘</kbd><kbd>,</kbd></span>
+            <span className="welcome-action-icon" aria-hidden><SettingsIcon size={16} /></span>
             <span className="welcome-action-label">
               <span className="welcome-action-title">Settings</span>
-              <span className="welcome-action-desc">Theme, accent, sync &amp; more</span>
+              <span className="welcome-action-desc">Preferences</span>
             </span>
+            <span className="welcome-action-arrow" aria-hidden><ChevronRightIcon size={14} /></span>
           </button>
         </div>
 
         {recents.length > 0 && (
           <div className="welcome-recents">
-            <div className="welcome-recents-heading">Recent hosts</div>
+            <div className="welcome-recents-heading">Recent</div>
             <div className="welcome-recents-list">
               {recents.map((h) => (
                 <button
@@ -68,11 +68,12 @@ export function WelcomePane({
                   className="welcome-recent"
                   onClick={() => onConnectHost(h)}
                 >
-                  <span className="welcome-recent-dot" aria-hidden />
+                  <span className="welcome-recent-dot" aria-hidden><ServerIcon size={12} /></span>
                   <span className="welcome-recent-name">{h.name}</span>
                   <span className="welcome-recent-target">
                     {h.username}@{h.hostname}{h.port !== 22 ? `:${h.port}` : ''}
                   </span>
+                  <span className="welcome-recent-arrow" aria-hidden><ChevronRightIcon size={12} /></span>
                 </button>
               ))}
             </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -8,6 +8,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useSessionStore } from '../state/sessionStore';
 import type { Tab } from '../types';
+import { ChevronRightIcon, CloseIcon, PencilIcon, PlusIcon, RefreshIcon, TrashIcon } from './AppIcons';
+import { ContextMenu, type MenuEntry } from './ContextMenu';
 
 interface Props {
   /** Which split pane this strip belongs to. The strip only shows tabs
@@ -120,7 +122,7 @@ function SortableTab({
           onClick={(e) => { e.stopPropagation(); onReconnect?.(); }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          ↻
+          <RefreshIcon size={12} />
         </button>
       )}
       <button
@@ -130,7 +132,7 @@ function SortableTab({
         onClick={(e) => { e.stopPropagation(); onClose(); }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        ×
+        <CloseIcon size={10} />
       </button>
     </div>
   );
@@ -192,22 +194,6 @@ export function TabBar({ paneIndex, onNew, onClose, onReconnect }: Props) {
     data: { type: 'pane', paneIndex },
   });
 
-  // Dismiss the context menu on Esc or any click outside it.
-  useEffect(() => {
-    if (!ctxMenu) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target?.closest('.tab-ctx-menu')) setCtxMenu(null);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCtxMenu(null); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [ctxMenu]);
-
   const closeOthers = (keepId: string) => {
     for (const t of tabs) if (t.id !== keepId) onClose(t.id);
   };
@@ -257,9 +243,9 @@ export function TabBar({ paneIndex, onNew, onClose, onReconnect }: Props) {
         type="button"
         className="tab-new"
         aria-label="New tab"
-        title="New tab (⌘T)"
+        title="New tab"
         onClick={() => onNew(paneIndex)}
-      >+</button>
+      ><PlusIcon size={12} /></button>
 
       {ctxMenu && (() => {
         const menuTab = tabs.find((t) => t.id === ctxMenu.tabId);
@@ -267,42 +253,43 @@ export function TabBar({ paneIndex, onNew, onClose, onReconnect }: Props) {
         const idx = tabs.findIndex((t) => t.id === ctxMenu.tabId);
         const hasOthers = tabs.length > 1;
         const hasRight = idx >= 0 && idx < tabs.length - 1;
+        const items: MenuEntry[] = [
+          {
+            label: 'Rename',
+            icon: <PencilIcon size={14} />,
+            onClick: () => beginRename(ctxMenu.tabId),
+          },
+          {
+            label: 'Close',
+            icon: <CloseIcon size={14} />,
+            onClick: () => onClose(ctxMenu.tabId),
+          },
+          {
+            label: 'Close Others',
+            icon: <CloseIcon size={14} />,
+            disabled: !hasOthers,
+            onClick: () => closeOthers(ctxMenu.tabId),
+          },
+          {
+            label: 'Close to the Right',
+            icon: <ChevronRightIcon size={14} />,
+            disabled: !hasRight,
+            onClick: () => closeToRight(ctxMenu.tabId),
+          },
+          {
+            label: 'Close All',
+            icon: <TrashIcon size={14} />,
+            danger: true,
+            onClick: closeAll,
+          },
+        ];
         return (
-          <div
-            className="tab-ctx-menu"
-            role="menu"
-            style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y }}
-            data-no-drag
-          >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { beginRename(ctxMenu.tabId); setCtxMenu(null); }}
-            >Rename</button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { onClose(ctxMenu.tabId); setCtxMenu(null); }}
-            >Close</button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!hasOthers}
-              onClick={() => { closeOthers(ctxMenu.tabId); setCtxMenu(null); }}
-            >Close Others</button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!hasRight}
-              onClick={() => { closeToRight(ctxMenu.tabId); setCtxMenu(null); }}
-            >Close to the Right</button>
-            <button
-              type="button"
-              role="menuitem"
-              className="tab-ctx-danger"
-              onClick={() => { closeAll(); setCtxMenu(null); }}
-            >Close All</button>
-          </div>
+          <ContextMenu
+            x={ctxMenu.x}
+            y={ctxMenu.y}
+            items={items}
+            onClose={() => setCtxMenu(null)}
+          />
         );
       })()}
     </div>

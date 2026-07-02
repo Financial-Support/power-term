@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useHostStore } from '../state/hostStore';
 import { defaultColor, useTagStore } from '../state/tagStore';
+import { CloseIcon, SearchIcon } from './AppIcons';
 import { TagChip } from './TagChip';
 
 interface Props {
@@ -98,23 +99,28 @@ export function TagsMultiPicker({ value, onChange, id }: Props) {
                 className="tag-picker-chip-x"
                 aria-label={`Remove ${name}`}
                 onClick={() => remove(name)}
-              >×</button>
+              ><CloseIcon size={11} /></button>
             </span>
           );
         })}
       </div>
 
-      <input
-        id={id}
-        ref={inputRef}
-        className="tag-picker-input"
-        type="text"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={value.length === 0 ? 'Add tag…' : 'Add another tag…'}
-        aria-label="Add tag"
-      />
+      <div className="tag-picker-input-row">
+        <span className="tag-picker-input-icon" aria-hidden>
+          <SearchIcon size={12} />
+        </span>
+        <input
+          id={id}
+          ref={inputRef}
+          className="tag-picker-input"
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={value.length === 0 ? 'Add tag…' : 'Add another tag…'}
+          aria-label="Add tag"
+        />
+      </div>
 
       {(suggestions.length > 0 || canCreate) && (
         <div className="tag-picker-suggest">

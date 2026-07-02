@@ -10,7 +10,7 @@ vi.mock('./SyncTab', () => ({
 }));
 
 const defaults: Settings = {
-  shell: null, font_family: 'SF Mono', font_size: 14, theme: 'auto',
+  shell: null, font_family: 'JetBrains Mono', font_size: 14, theme: 'auto',
   cursor_blink: true, cursor_style: 'block', accent_color: 'system', scrollback_lines: 10000,
   ssh_connect_timeout_secs: 10, ssh_keepalive_interval_secs: 30,
   terminal_theme: 'default', updated_at: 0,
@@ -23,7 +23,7 @@ beforeEach(() => {
 describe('SettingsModal', () => {
   it('renders with current settings pre-filled', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    expect((screen.getByLabelText(/font family/i) as HTMLInputElement).value).toBe('SF Mono');
+    expect((screen.getByLabelText(/font family/i) as HTMLInputElement).value).toBe('JetBrains Mono');
     expect((screen.getByLabelText(/font size/i) as HTMLInputElement).value).toBe('14');
   });
 

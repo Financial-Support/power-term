@@ -3,7 +3,7 @@ import { LocalBrowser, type DragPayload } from './LocalBrowser';
 import { FileBrowser } from './FileBrowser';
 import { Splitter } from './Splitter';
 import { useSftpStore } from '../state/sftpStore';
-import { sftpDownload, sftpUpload } from '../lib/ipc';
+import { isSftpTransferCancelledError, sftpDownload, sftpUpload } from '../lib/ipc';
 
 interface Props {
   tabId: string;
@@ -35,7 +35,12 @@ export function SftpDualBrowser({ tabId, onClose }: Props) {
   const handleRemoteToLocal = async (payload: DragPayload, targetCwd: string) => {
     if (payload.kind !== 'remote' || !payload.sftpId) return;
     const localPath = joinPath(targetCwd, payload.name);
-    await sftpDownload(payload.sftpId, payload.path, localPath);
+    try {
+      await sftpDownload(payload.sftpId, payload.path, localPath);
+    } catch (err) {
+      if (!isSftpTransferCancelledError(err)) throw err;
+      return;
+    }
     refreshLocal();
   };
 
@@ -44,7 +49,12 @@ export function SftpDualBrowser({ tabId, onClose }: Props) {
     targetCwd: string,
     sftpId: string,
   ) => {
-    await sftpUpload(sftpId, payload.path, joinPath(targetCwd, payload.name));
+    try {
+      await sftpUpload(sftpId, payload.path, joinPath(targetCwd, payload.name));
+    } catch (err) {
+      if (!isSftpTransferCancelledError(err)) throw err;
+      return;
+    }
     void reload(tabId);
   };
 
@@ -56,12 +66,22 @@ export function SftpDualBrowser({ tabId, onClose }: Props) {
     const localCwd = containerRef.current?.querySelector<HTMLElement>('.local-browser')
       ?.dataset.cwd;
     if (!localCwd) return;
-    await sftpDownload(tab.sftpId, remotePath, joinPath(localCwd, name));
+    try {
+      await sftpDownload(tab.sftpId, remotePath, joinPath(localCwd, name));
+    } catch (err) {
+      if (!isSftpTransferCancelledError(err)) throw err;
+      return;
+    }
     refreshLocal();
   };
 
   const copyLocalToRemoteCwd = async (localPath: string, name: string) => {
-    await sftpUpload(tab.sftpId, localPath, joinPath(tab.cwd, name));
+    try {
+      await sftpUpload(tab.sftpId, localPath, joinPath(tab.cwd, name));
+    } catch (err) {
+      if (!isSftpTransferCancelledError(err)) throw err;
+      return;
+    }
     void reload(tabId);
   };
 

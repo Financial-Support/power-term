@@ -28,7 +28,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             shell: None,
-            font_family: "SF Mono".to_string(),
+            font_family: "JetBrains Mono".to_string(),
             font_size: 14,
             theme: "auto".to_string(),
             cursor_blink: true,

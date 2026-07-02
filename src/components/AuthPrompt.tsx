@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AuthRequest } from '../types';
+import { CloseIcon, LockIcon, ServerIcon } from './AppIcons';
 
 interface Props {
   user: string;
@@ -51,12 +52,22 @@ export function AuthPrompt({ user, host, triedAgent, errorMessage, initialAuth, 
 
   return (
     <div className="modal-backdrop" role="dialog" aria-label="ssh auth">
-      <div className="modal">
-        <h2>Authenticate to {user}@{host}</h2>
+      <div className="modal modal-form">
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><LockIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">SSH auth</span>
+            <h2>Connect to {user}@{host}</h2>
+            <p className="form-title-meta"><ServerIcon size={11} /> {host}</p>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close SSH auth prompt" title="Close" onClick={onCancel}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
         {errorMessage && <p className="error">{errorMessage}</p>}
         <fieldset className="auth-method">
-          <label><input type="radio" name="auth" checked={method === 'agent'} onChange={() => setMethod('agent')} /> SSH agent</label>
-          <label><input type="radio" name="auth" checked={method === 'key'} onChange={() => setMethod('key')} /> Private key file</label>
+          <label><input type="radio" name="auth" checked={method === 'agent'} onChange={() => setMethod('agent')} /> Agent</label>
+          <label><input type="radio" name="auth" checked={method === 'key'} onChange={() => setMethod('key')} /> Key file</label>
           <label><input type="radio" name="auth" checked={method === 'password'} onChange={() => setMethod('password')} /> Password</label>
         </fieldset>
         {method === 'key' && (

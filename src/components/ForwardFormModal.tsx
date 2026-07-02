@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useHostStore } from '../state/hostStore';
 import type { Forward, ForwardInput, ForwardKind } from '../types';
+import { CloseIcon, ForwardIcon } from './AppIcons';
 
 interface Props {
   mode: 'create' | 'edit';
@@ -48,14 +49,23 @@ export function ForwardFormModal({ mode, forward, onSave, onCancel, saving }: Pr
   return (
     <div className="modal-backdrop" role="dialog" aria-label="forward form" aria-modal="true">
       <div className="modal modal-form">
-        <h2>{mode === 'create' ? 'Add forward' : 'Edit forward'}</h2>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><ForwardIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">Forward</span>
+            <h2>{mode === 'create' ? 'Add forward' : 'Edit forward'}</h2>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close forward form" title="Close" onClick={onCancel}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
         <div className="form-grid">
           <label htmlFor="ffm-name">Name</label>
           <input id="ffm-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
 
           <label htmlFor="ffm-host">Host</label>
           <select id="ffm-host" value={hostId} onChange={(e) => setHostId(e.target.value)}>
-            <option value="">Select a host…</option>
+            <option value="">Choose host</option>
             {hosts.map((h) => (
               <option key={h.id} value={h.id}>{h.name}</option>
             ))}

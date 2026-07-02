@@ -21,6 +21,18 @@ import {
 import { readTextFile, writeTextFile } from '../lib/ipc';
 import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
 import type { DbCell, DbColumn, DbConnection, QueryResult, TableMeta } from '../types';
+import { ConfirmModal } from './ConfirmModal';
+import {
+  AlertCircleIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  DatabaseIcon,
+  DownloadIcon,
+  PencilIcon,
+  PlusIcon,
+  RefreshIcon,
+} from './AppIcons';
 
 interface Props {
   tabId: string;
@@ -40,6 +52,49 @@ interface Pagination {
 
 type DbBrowserView = 'data' | 'structure' | 'indexes';
 type DirtyCells = Record<string, string | null>;
+interface SchemaDangerRequest {
+  title: string;
+  message: string;
+  sql: string;
+}
+type SchemaDialog =
+  | {
+    kind: 'add-column';
+    engine: DbConnection['engine'];
+    table: string;
+    name: string;
+    dataType: string;
+    nullable: boolean;
+    defaultValue: string;
+  }
+  | {
+    kind: 'rename-table';
+    engine: DbConnection['engine'];
+    table: string;
+    nextName: string;
+  }
+  | {
+    kind: 'rename-column';
+    engine: DbConnection['engine'];
+    table: string;
+    columnName: string;
+    nextName: string;
+  }
+  | {
+    kind: 'set-default';
+    engine: DbConnection['engine'];
+    table: string;
+    columnName: string;
+    defaultValue: string;
+  }
+  | {
+    kind: 'create-index';
+    engine: DbConnection['engine'];
+    table: string;
+    columnsText: string;
+    name: string;
+    unique: boolean;
+  };
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 1000];
 const DEFAULT_PAGE_SIZE = 50;
@@ -94,6 +149,8 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
   const [schemaSql, setSchemaSql] = useState<string | null>(null);
   const [schemaBusy, setSchemaBusy] = useState(false);
   const [deleteRowConfirm, setDeleteRowConfirm] = useState<(string | null)[] | null>(null);
+  const [schemaDanger, setSchemaDanger] = useState<SchemaDangerRequest | null>(null);
+  const [schemaDialog, setSchemaDialog] = useState<SchemaDialog | null>(null);
   // Refs so the freshly-built SQL doesn't race the React state update — the
   // pagination handlers compute the SQL string and feed it directly to
   // `runSql`, bypassing the editor → state round-trip.
@@ -473,55 +530,55 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
 
   return (
     <div className="db-browser" data-tab-id={tabId} onKeyDown={onKeyDown}>
-      <div className="db-browser-toolbar">
+      <div className="db-browser-toolbar db-content-header">
         <div className="db-connection-summary">
-          <span className={`db-engine-pill db-engine-${connection.engine}`}>
-            {engineShort(connection.engine)}
-          </span>
-          <div className="db-connection-text">
-            <span className="db-browser-name">{connection.name}</span>
-            <span className="db-browser-meta">
-              {connection.db_user}@{connection.db_host}:{connection.db_port}
-              {connection.database ? ` / ${connection.database}` : ''}
+          <div className="db-title-row">
+            <span className={`db-engine-pill db-type-badge db-engine-${connection.engine}`}>
+              {engineShort(connection.engine)}
             </span>
+            <span className="db-browser-name db-title-name">{connection.name}</span>
           </div>
+          <span className="db-browser-meta db-connection-string">
+            {connection.db_user}@{connection.db_host}:{connection.db_port}
+            {connection.database ? ` / ${connection.database}` : ''}
+          </span>
         </div>
-        <div className="db-browser-actions">
+        <div className="db-browser-actions db-header-actions">
           {running ? (
             <button
               type="button"
               className="db-stop"
               onClick={() => void stop()}
-              title="Cancel running query (⌘.)"
-            >Stop ⌘.</button>
+              title="Stop query"
+            >Stop</button>
           ) : (
             <button
               type="button"
               className="db-run primary"
               onClick={() => void runManual()}
               disabled={running}
-              title="Run query (⌘⏎)"
-            >Run ⌘⏎</button>
+              title="Run query"
+            >Run</button>
           )}
           <button
             type="button"
             className="db-disconnect"
             onClick={() => void closeSession()}
-            title="Disconnect and close tab"
+            title="Disconnect"
           >Disconnect</button>
           <button
             type="button"
             className="db-export"
             onClick={() => void handleExportClick()}
             disabled={exportState !== 'idle'}
-            title="Export database as SQL dump"
+            title="Export"
           >Export</button>
           <button
             type="button"
             className="db-import"
             onClick={() => void handleImportSelect()}
             disabled={importing}
-            title="Import SQL file"
+            title="Import SQL"
           >{importing ? 'Importing…' : 'Import'}</button>
         </div>
       </div>
@@ -529,10 +586,15 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
       {importConfirm && (
         <div className="modal-backdrop" role="dialog" aria-label="import confirmation">
           <div className="modal modal-warning">
-            <h2>⚠ Import SQL file</h2>
+            <div className="modal-title-row">
+              <span className="modal-title-icon danger" aria-hidden><AlertCircleIcon size={14} /></span>
+              <div className="modal-title-copy">
+                <span className="modal-eyebrow">Danger zone</span>
+                <h2>Import SQL</h2>
+              </div>
+            </div>
             <p>
-              This will execute all SQL statements from the selected file.
-              Make sure you have a backup before proceeding.
+              This runs the selected SQL file against the current database.
             </p>
             <div className="modal-actions">
               <button type="button" onClick={() => { setImportConfirm(false); setImportPath(null); }}>Cancel</button>
@@ -545,26 +607,35 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
       {exportState === 'options' && (
         <div className="modal-backdrop" role="dialog" aria-label="export options">
           <div className="modal">
-            <h2>Export SQL Dump</h2>
-            <p>Choose what to include in the dump:</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <div className="modal-title-row">
+              <span className="modal-title-icon" aria-hidden><DownloadIcon size={14} /></span>
+              <div className="modal-title-copy">
+                <h2>Export SQL</h2>
+                <p className="form-title-meta"><DatabaseIcon size={11} /> {currentDatabase || connection.database}</p>
+              </div>
+              <button type="button" className="modal-close-btn" aria-label="Close export options" title="Close" onClick={() => setExportState('idle')}>
+                <CloseIcon size={14} />
+              </button>
+            </div>
+            <p>Include</p>
+            <div className="db-export-options">
+              <label className="db-export-option">
                 <input
                   type="radio"
                   name="export-mode"
                   checked={!exportIncludeData}
                   onChange={() => setExportIncludeData(false)}
                 />
-                Structure only (CREATE TABLE)
+                Structure only
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+              <label className="db-export-option">
                 <input
                   type="radio"
                   name="export-mode"
                   checked={exportIncludeData}
                   onChange={() => setExportIncludeData(true)}
                 />
-                Structure + Data (CREATE TABLE + INSERT)
+                Structure + data
               </label>
             </div>
             <div className="modal-actions">
@@ -577,10 +648,16 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
 
       {exportState === 'running' && (
         <div className="modal-backdrop" role="dialog" aria-label="exporting">
-          <div className="modal" style={{ textAlign: 'center' }}>
+          <div className="modal db-modal-center">
             {exportError ? (
               <>
-                <h2>Export Failed</h2>
+                <div className="modal-title-row db-modal-title-center">
+                  <span className="modal-title-icon danger" aria-hidden><AlertCircleIcon size={14} /></span>
+                  <div className="modal-title-copy db-modal-copy-center">
+                    <span className="modal-eyebrow">Export</span>
+                    <h2>Export Failed</h2>
+                  </div>
+                </div>
                 <p className="error">{exportError}</p>
                 <div className="modal-actions">
                   <button type="button" onClick={() => { setExportState('idle'); setExportError(null); }}>Close</button>
@@ -588,9 +665,15 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
               </>
             ) : (
               <>
-                <h2>Exporting…</h2>
-                <p>Generating SQL dump, please wait.</p>
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+                <div className="modal-title-row db-modal-title-center">
+                  <span className="modal-title-icon" aria-hidden><RefreshIcon size={14} /></span>
+                  <div className="modal-title-copy db-modal-copy-center">
+                    <span className="modal-eyebrow">Export</span>
+                    <h2>Exporting…</h2>
+                  </div>
+                </div>
+                <p>Preparing dump…</p>
+                <div className="db-modal-spinner-wrap">
                   <span className="db-spinner" />
                 </div>
               </>
@@ -600,25 +683,25 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
       )}
 
       <div className="db-body">
-        <aside className="db-schema">
-          <div className="db-schema-block">
+        <aside className="db-schema db-tables-pane">
+          <div className="db-schema-block db-select-section">
             <div className="db-schema-header">
               <span>Database</span>
             </div>
             <select
-              className="db-schema-select"
+              className="db-schema-select db-dropdown-select"
               value={currentDatabase}
               onChange={(e) => { void switchDb(e.target.value); }}
               disabled={switchingDb || databasesLoading || databases === null || databases.length === 0}
             >
-              {!currentDatabase && <option value="">Select database…</option>}
+              {!currentDatabase && <option value="">Choose database</option>}
               {(databases ?? []).map((db) => (
                 <option key={db} value={db}>{db}</option>
               ))}
             </select>
           </div>
           <div className="db-schema-block grow">
-            <div className="db-schema-header">
+            <div className="db-schema-header db-tables-header">
               <span>Tables</span>
               <span className="db-schema-count">{filteredTables.length}</span>
               <button
@@ -627,26 +710,28 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
                 aria-label="Refresh tables"
                 onClick={() => void loadTables()}
                 disabled={tablesLoading || switchingDb}
-              >⟳</button>
+              ><RefreshIcon size={13} /></button>
             </div>
-            <input
-              className="db-schema-filter"
-              type="text"
-              placeholder="Filter…"
-              value={tableFilter}
-              onChange={(e) => setTableFilter(e.target.value)}
-            />
+            <div className="db-filter-box">
+              <input
+                className="db-schema-filter"
+                type="text"
+                placeholder="Filter…"
+                value={tableFilter}
+                onChange={(e) => setTableFilter(e.target.value)}
+              />
+            </div>
           <div className="db-schema-list">
-            {tablesLoading && <div className="db-schema-empty">Loading…</div>}
+            {tablesLoading && <div className="db-schema-empty">Loading</div>}
             {tablesError && <div className="db-schema-error">{tablesError}</div>}
             {!tablesLoading && tables !== null && filteredTables.length === 0 && (
-              <div className="db-schema-empty">{tables.length === 0 ? 'No tables.' : 'No matches.'}</div>
+              <div className="db-schema-empty">{tables.length === 0 ? 'No tables' : 'No matches'}</div>
             )}
             {filteredTables.map((t) => (
               <button
                 key={t}
                 type="button"
-                className={`db-schema-table${pagination?.table === t ? ' active' : ''}`}
+                className={`db-schema-table db-table-item${pagination?.table === t ? ' active' : ''}`}
                 onClick={() => onTableClick(t)}
                 title={`SELECT * FROM ${t} (paginated)`}
               >{t}</button>
@@ -657,8 +742,8 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
 
         <div className="db-main">
           {activeTable && tableMeta && (
-            <div className="db-table-toolbar">
-              <div className="db-table-tabs" role="tablist" aria-label="table view">
+            <div className="db-table-toolbar db-workspace-tabs">
+              <div className="db-table-tabs db-tabs-row" role="tablist" aria-label="table view">
                 <button type="button" className={view === 'data' ? 'active' : ''} onClick={() => setView('data')}>Data</button>
                 {connection.engine !== 'redis' && (
                   <>
@@ -667,11 +752,11 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
                   </>
                 )}
               </div>
-              <span className="db-table-current">{activeTable}</span>
+              <span className="db-table-current db-breadcrumb-label">{activeTable}</span>
               {view === 'data' && connection.engine !== 'redis' && (
-                <div className="db-table-actions">
+                <div className="db-table-actions db-tab-actions">
                   <button type="button" onClick={openInsert} disabled={editing}>Insert row</button>
-                  <button type="button" className="primary" onClick={() => void saveDirtyRows()} disabled={editing || Object.keys(dirtyCells).length === 0}>
+                  <button type="button" className="primary save-btn" onClick={() => void saveDirtyRows()} disabled={editing || Object.keys(dirtyCells).length === 0}>
                     {editing ? 'Saving…' : Object.keys(dirtyCells).length ? `Save ${Object.keys(dirtyCells).length}` : 'Save'}
                   </button>
                   <button type="button" onClick={() => setDirtyCells({})} disabled={editing || Object.keys(dirtyCells).length === 0}>Revert</button>
@@ -680,9 +765,9 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
             </div>
           )}
 
-          <div className="db-editor-host" ref={editorHostRef} style={{ display: view === 'data' ? undefined : 'none' }} />
+          <div className={`db-editor-host${view === 'data' ? '' : ' is-hidden'}`} ref={editorHostRef} />
           {view === 'data' && (
-            <>
+            <div className="db-results-wrapper">
               {pagination && (
                 <PaginationBar
                   pagination={pagination}
@@ -707,11 +792,11 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
                 )}
                 {!error && !result && !running && (
                   <div className="db-result-empty">
-                    Run a query (⌘⏎) to see results. Click a table on the left to paginate it.
+                    No results
                   </div>
                 )}
               </div>
-            </>
+            </div>
           )}
 
           {view === 'structure' && tableMeta && connection.engine !== 'redis' && (
@@ -719,6 +804,8 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
               meta={tableMeta}
               engine={connection.engine}
               onPreview={setSchemaSql}
+              onDangerPreview={setSchemaDanger}
+              onOpenDialog={setSchemaDialog}
             />
           )}
 
@@ -726,14 +813,31 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
             <IndexesPanel
               meta={tableMeta}
               engine={connection.engine}
-              onPreview={setSchemaSql}
+              onDangerPreview={setSchemaDanger}
+              onOpenDialog={setSchemaDialog}
             />
           )}
 
           {insertOpen && tableMeta && (
             <div className="modal-backdrop" role="dialog" aria-label="insert row">
               <div className="modal modal-form">
-                <h2>Insert row</h2>
+                <div className="modal-title-row">
+                  <span className="modal-title-icon" aria-hidden><PlusIcon size={14} /></span>
+                  <div className="modal-title-copy">
+                    <h2>Insert row</h2>
+                    <p className="form-title-meta"><DatabaseIcon size={11} /> {activeTable}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="modal-close-btn"
+                    aria-label="Close insert row"
+                    title="Close"
+                    onClick={() => { setInsertOpen(false); setInsertError(null); }}
+                    disabled={editing}
+                  >
+                    <CloseIcon size={14} />
+                  </button>
+                </div>
                 <div className="db-insert-grid">
                   {tableMeta.columns.map((c) => (
                     <label key={c.name} className="db-insert-field">
@@ -746,7 +850,7 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
                     </label>
                   ))}
                 </div>
-                <p className="form-hint">Leave a field empty to let the database default apply. Type &lt;NULL&gt; to insert SQL NULL.</p>
+                <p className="form-hint">Blank fields use database defaults. Use &lt;NULL&gt; for SQL NULL.</p>
                 {insertError && <div className="db-insert-error">{insertError}</div>}
                 <div className="modal-actions">
                   <button type="button" onClick={() => { setInsertOpen(false); setInsertError(null); }} disabled={editing}>Cancel</button>
@@ -759,7 +863,13 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
           {deleteRowConfirm && activeTable && tableMeta && (
             <div className="modal-backdrop" role="dialog" aria-label="confirm delete row">
               <div className="modal modal-warning">
-                <h2>Delete row</h2>
+                <div className="modal-title-row">
+                  <span className="modal-title-icon danger" aria-hidden><AlertCircleIcon size={14} /></span>
+                  <div className="modal-title-copy">
+                    <span className="modal-eyebrow">Danger zone</span>
+                    <h2>Delete row</h2>
+                  </div>
+                </div>
                 <p>
                   Delete this row from <code>{activeTable}</code>? This cannot be undone.
                 </p>
@@ -781,10 +891,41 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
             </div>
           )}
 
+          {schemaDanger && (
+            <ConfirmModal
+              title={schemaDanger.title}
+              message={schemaDanger.message}
+              confirmLabel="Review SQL"
+              destructive
+              onConfirm={() => {
+                setSchemaSql(schemaDanger.sql);
+                setSchemaDanger(null);
+              }}
+              onCancel={() => setSchemaDanger(null)}
+            />
+          )}
+
+          {schemaDialog && (
+            <SchemaDialogModal
+              dialog={schemaDialog}
+              onClose={() => setSchemaDialog(null)}
+              onConfirm={(sql) => {
+                setSchemaSql(sql);
+                setSchemaDialog(null);
+              }}
+            />
+          )}
+
           {schemaSql && (
             <div className="modal-backdrop" role="dialog" aria-label="confirm schema change">
               <div className="modal modal-warning">
-                <h2>Confirm schema change</h2>
+                <div className="modal-title-row">
+                  <span className="modal-title-icon danger" aria-hidden><AlertCircleIcon size={14} /></span>
+                  <div className="modal-title-copy">
+                    <span className="modal-eyebrow">Danger zone</span>
+                    <h2>Confirm schema change</h2>
+                  </div>
+                </div>
                 <p>This will run the SQL below against the live database.</p>
                 <pre className="db-schema-preview"><code>{schemaSql}</code></pre>
                 <div className="modal-actions">
@@ -798,7 +939,7 @@ export function DbBrowser({ tabId, sessionId, connection, onClose }: Props) {
           )}
           {view !== 'data' && error && <div className="db-error">{error}</div>}
           {view !== 'data' && !tableMeta && (
-            <div className="db-result-empty">Select a table to inspect or edit its schema.</div>
+            <div className="db-result-empty">No table selected</div>
           )}
         </div>
       </div>
@@ -825,26 +966,29 @@ function PaginationBar({ pagination, rowsReturned, running, onPrev, onNext, onPa
   const start = pagination.page * pagination.pageSize + 1;
   const end = pagination.page * pagination.pageSize + rowsReturned;
   return (
-    <div className="db-paginate">
-      <span className="db-paginate-table">{pagination.table}</span>
-      <span className="db-paginate-spacer" />
-      <span className="db-paginate-range">
-        {rowsReturned > 0 ? `${start}–${end}` : 'no rows'}
-      </span>
-      <button type="button" onClick={onPrev} disabled={pagination.page === 0 || running} aria-label="Previous page">‹</button>
-      <span className="db-paginate-page">page {pagination.page + 1}</span>
-      <button type="button" onClick={onNext} disabled={!hasMore || running} aria-label="Next page">›</button>
-      <select
-        className="db-paginate-size"
-        value={pagination.pageSize}
-        onChange={(e) => onPageSizeChange(Number(e.target.value))}
-        disabled={running}
-        aria-label="Rows per page"
-      >
-        {PAGE_SIZE_OPTIONS.map((n) => (
-          <option key={n} value={n}>{n} / page</option>
-        ))}
-      </select>
+    <div className="db-paginate db-results-header">
+      <span className="db-paginate-table db-results-title">{pagination.table}</span>
+      <div className="db-results-pagination">
+        <span className="db-paginate-range db-pagination-info">
+          {rowsReturned > 0 ? `${start}–${end}` : 'no rows'}
+        </span>
+        <button className="db-page-btn" type="button" onClick={onPrev} disabled={pagination.page === 0 || running} aria-label="Previous page"><ChevronLeftIcon size={12} /></button>
+        <span className="db-paginate-page db-page-indicator">page {pagination.page + 1}</span>
+        <button className="db-page-btn" type="button" onClick={onNext} disabled={!hasMore || running} aria-label="Next page"><ChevronRightIcon size={12} /></button>
+        <span className="db-page-size-selector">
+          <select
+            className="db-paginate-size"
+            value={pagination.pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            disabled={running}
+            aria-label="Rows per page"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>{n} / page</option>
+            ))}
+          </select>
+        </span>
+      </div>
     </div>
   );
 }
@@ -892,7 +1036,7 @@ function ResultGrid({
       <div className="db-result-meta">
         {rows.length} row{rows.length === 1 ? '' : 's'} · {took_ms} ms{stmts}
       </div>
-      <div className="db-grid-wrap">
+      <div className="db-grid-wrap db-grid-scroll-area">
         <table className="db-grid">
           <thead>
             <tr>
@@ -947,34 +1091,41 @@ function StructurePanel({
   meta,
   engine,
   onPreview,
+  onDangerPreview,
+  onOpenDialog,
 }: {
   meta: TableMeta;
   engine: DbConnection['engine'];
   onPreview: (sql: string) => void;
+  onDangerPreview: (req: SchemaDangerRequest) => void;
+  onOpenDialog: (dialog: SchemaDialog) => void;
 }) {
   const qTable = quoteTable(meta.table, engine);
   const addColumn = () => {
-    const name = prompt('Column name');
-    if (!name) return;
-    const type = prompt('Column type', engine === 'mysql' ? 'varchar(255)' : 'text');
-    if (!type) return;
-    const nullable = confirm('Allow NULL values?');
-    const def = prompt('Default value SQL expression (blank for none)', '');
-    const columnSql = `${quoteIdent(name, engine)} ${type}${nullable ? '' : ' NOT NULL'}${def ? ` DEFAULT ${def}` : ''}`;
-    onPreview(engine === 'mssql'
-      ? `ALTER TABLE ${qTable} ADD ${columnSql};`
-      : `ALTER TABLE ${qTable} ADD COLUMN ${columnSql};`);
+    onOpenDialog({
+      kind: 'add-column',
+      engine,
+      table: meta.table,
+      name: '',
+      dataType: engine === 'mysql' ? 'varchar(255)' : 'text',
+      nullable: true,
+      defaultValue: '',
+    });
   };
   const renameTable = () => {
-    const next = prompt('New table name', lastIdent(meta.table));
-    if (!next) return;
-    if (engine === 'postgres') onPreview(`ALTER TABLE ${qTable} RENAME TO ${quoteIdent(next, engine)};`);
-    else if (engine === 'mssql') onPreview(`EXEC sp_rename ${sqlStringLiteral(meta.table, true)}, ${sqlStringLiteral(next, true)}, 'OBJECT';`);
-    else onPreview(`RENAME TABLE ${qTable} TO ${quoteIdent(next, engine)};`);
+    onOpenDialog({
+      kind: 'rename-table',
+      engine,
+      table: meta.table,
+      nextName: lastIdent(meta.table),
+    });
   };
   const dropTable = () => {
-    if (!confirm(`Drop table ${meta.table}? This can destroy data.`)) return;
-    onPreview(`DROP TABLE ${qTable};`);
+    onDangerPreview({
+      title: 'Drop table',
+      message: `Drop ${meta.table}? This can destroy data.`,
+      sql: `DROP TABLE ${qTable};`,
+    });
   };
   return (
     <div className="db-structure">
@@ -998,7 +1149,14 @@ function StructurePanel({
               <td>{c.default_value ?? ''}</td>
               <td>{c.primary_key ? 'YES' : ''}</td>
               <td>
-                <ColumnActions column={c} table={meta.table} engine={engine} onPreview={onPreview} />
+                <ColumnActions
+                  column={c}
+                  table={meta.table}
+                  engine={engine}
+                  onPreview={onPreview}
+                  onDangerPreview={onDangerPreview}
+                  onOpenDialog={onOpenDialog}
+                />
               </td>
             </tr>
           ))}
@@ -1013,39 +1171,35 @@ function ColumnActions({
   table,
   engine,
   onPreview,
+  onDangerPreview,
+  onOpenDialog,
 }: {
   column: DbColumn;
   table: string;
   engine: DbConnection['engine'];
   onPreview: (sql: string) => void;
+  onDangerPreview: (req: SchemaDangerRequest) => void;
+  onOpenDialog: (dialog: SchemaDialog) => void;
 }) {
   const qTable = quoteTable(table, engine);
   const qCol = quoteIdent(column.name, engine);
   const rename = () => {
-    const next = prompt('New column name', column.name);
-    if (!next || next === column.name) return;
-    if (engine === 'mssql') {
-      onPreview(`EXEC sp_rename ${sqlStringLiteral(`${table}.${column.name}`, true)}, ${sqlStringLiteral(next, true)}, 'COLUMN';`);
-      return;
-    }
-    onPreview(`ALTER TABLE ${qTable} RENAME COLUMN ${qCol} TO ${quoteIdent(next, engine)};`);
+    onOpenDialog({
+      kind: 'rename-column',
+      engine,
+      table,
+      columnName: column.name,
+      nextName: column.name,
+    });
   };
   const setDefault = () => {
-    const def = prompt('Default value SQL expression (blank to drop default)', column.default_value ?? '');
-    if (def === null) return;
-    if (engine === 'postgres') {
-      onPreview(def ? `ALTER TABLE ${qTable} ALTER COLUMN ${qCol} SET DEFAULT ${def};` : `ALTER TABLE ${qTable} ALTER COLUMN ${qCol} DROP DEFAULT;`);
-    } else if (engine === 'mssql') {
-      const dropDefault = mssqlDropDefaultSql(table, column.name, engine);
-      if (!def) {
-        onPreview(dropDefault);
-        return;
-      }
-      const constraintName = `df_${lastIdent(table)}_${column.name}`;
-      onPreview(`${dropDefault}\nALTER TABLE ${qTable} ADD CONSTRAINT ${quoteIdent(constraintName, engine)} DEFAULT ${def} FOR ${qCol};`);
-    } else {
-      onPreview(`ALTER TABLE ${qTable} ALTER COLUMN ${qCol} SET DEFAULT ${def || 'NULL'};`);
-    }
+    onOpenDialog({
+      kind: 'set-default',
+      engine,
+      table,
+      columnName: column.name,
+      defaultValue: column.default_value ?? '',
+    });
   };
   const toggleNull = () => {
     if (engine === 'postgres') {
@@ -1058,8 +1212,11 @@ function ColumnActions({
       : `ALTER TABLE ${qTable} MODIFY COLUMN ${qCol} ${column.data_type} ${nullable};`);
   };
   const drop = () => {
-    if (!confirm(`Drop column ${column.name}? This can destroy data.`)) return;
-    onPreview(`ALTER TABLE ${qTable} DROP COLUMN ${qCol};`);
+    onDangerPreview({
+      title: 'Drop column',
+      message: `Drop ${column.name}? This can destroy data.`,
+      sql: `ALTER TABLE ${qTable} DROP COLUMN ${qCol};`,
+    });
   };
   return (
     <div className="db-row-actions">
@@ -1074,22 +1231,24 @@ function ColumnActions({
 function IndexesPanel({
   meta,
   engine,
-  onPreview,
+  onDangerPreview,
+  onOpenDialog,
 }: {
   meta: TableMeta;
   engine: DbConnection['engine'];
-  onPreview: (sql: string) => void;
+  onDangerPreview: (req: SchemaDangerRequest) => void;
+  onOpenDialog: (dialog: SchemaDialog) => void;
 }) {
   const qTable = quoteTable(meta.table, engine);
   const createIndex = () => {
-    const colsRaw = prompt('Columns, comma separated');
-    if (!colsRaw) return;
-    const cols = colsRaw.split(',').map((s) => s.trim()).filter(Boolean);
-    if (cols.length === 0) return;
-    const name = prompt('Index name', `idx_${lastIdent(meta.table)}_${cols.join('_')}`);
-    if (!name) return;
-    const unique = confirm('Create UNIQUE index?');
-    onPreview(`CREATE ${unique ? 'UNIQUE ' : ''}INDEX ${quoteIdent(name, engine)} ON ${qTable} (${cols.map((c) => quoteIdent(c, engine)).join(', ')});`);
+    onOpenDialog({
+      kind: 'create-index',
+      engine,
+      table: meta.table,
+      columnsText: '',
+      name: `idx_${lastIdent(meta.table)}_`,
+      unique: false,
+    });
   };
   return (
     <div className="db-structure">
@@ -1111,10 +1270,13 @@ function IndexesPanel({
                   className="danger"
                   disabled={idx.primary}
                   onClick={() => {
-                    if (!confirm(`Drop index ${idx.name}?`)) return;
-                    onPreview(engine === 'postgres'
-                      ? `DROP INDEX ${quoteIdent(idx.name, engine)};`
-                      : `DROP INDEX ${quoteIdent(idx.name, engine)} ON ${qTable};`);
+                    onDangerPreview({
+                      title: 'Drop index',
+                      message: `Drop ${idx.name}?`,
+                      sql: engine === 'postgres'
+                        ? `DROP INDEX ${quoteIdent(idx.name, engine)};`
+                        : `DROP INDEX ${quoteIdent(idx.name, engine)} ON ${qTable};`,
+                    });
                   }}
                 >Drop</button>
               </td>
@@ -1124,6 +1286,218 @@ function IndexesPanel({
       </table>
     </div>
   );
+}
+
+function SchemaDialogModal({
+  dialog,
+  onClose,
+  onConfirm,
+}: {
+  dialog: SchemaDialog;
+  onClose: () => void;
+  onConfirm: (sql: string) => void;
+}) {
+  const [draft, setDraft] = useState<SchemaDialog>(dialog);
+
+  useEffect(() => {
+    setDraft(dialog);
+  }, [dialog]);
+
+  const sql = buildSchemaDialogSql(draft);
+  const canSubmit = sql !== null;
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-label="schema action">
+      <div className="modal modal-form">
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><PencilIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <h2>{schemaDialogTitle(draft)}</h2>
+            <p className="form-title-meta"><DatabaseIcon size={11} /> {draft.table}</p>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close schema action" title="Close" onClick={onClose}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
+
+        {draft.kind === 'add-column' && (
+          <>
+            <div className="form-grid">
+              <label htmlFor="db-schema-column-name">Column name</label>
+              <input
+                id="db-schema-column-name"
+                autoFocus
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
+
+              <label htmlFor="db-schema-column-type">Data type</label>
+              <input
+                id="db-schema-column-type"
+                value={draft.dataType}
+                onChange={(e) => setDraft({ ...draft, dataType: e.target.value })}
+              />
+
+              <label htmlFor="db-schema-column-default">Default SQL</label>
+              <input
+                id="db-schema-column-default"
+                value={draft.defaultValue}
+                onChange={(e) => setDraft({ ...draft, defaultValue: e.target.value })}
+                placeholder="optional"
+              />
+            </div>
+            <label className="checkbox checkbox-compact">
+              <input
+                type="checkbox"
+                checked={draft.nullable}
+                onChange={(e) => setDraft({ ...draft, nullable: e.target.checked })}
+              />
+              Allow NULL
+            </label>
+          </>
+        )}
+
+        {draft.kind === 'rename-table' && (
+          <div className="form-grid">
+            <label htmlFor="db-schema-rename-table">Table name</label>
+            <input
+              id="db-schema-rename-table"
+              autoFocus
+              value={draft.nextName}
+              onChange={(e) => setDraft({ ...draft, nextName: e.target.value })}
+            />
+          </div>
+        )}
+
+        {draft.kind === 'rename-column' && (
+          <div className="form-grid">
+            <label htmlFor="db-schema-rename-column">Column name</label>
+            <input
+              id="db-schema-rename-column"
+              autoFocus
+              value={draft.nextName}
+              onChange={(e) => setDraft({ ...draft, nextName: e.target.value })}
+            />
+          </div>
+        )}
+
+        {draft.kind === 'set-default' && (
+          <div className="form-grid">
+            <label htmlFor="db-schema-default-value">Default SQL</label>
+            <input
+              id="db-schema-default-value"
+              autoFocus
+              value={draft.defaultValue}
+              onChange={(e) => setDraft({ ...draft, defaultValue: e.target.value })}
+              placeholder="Leave blank to drop default"
+            />
+          </div>
+        )}
+
+        {draft.kind === 'create-index' && (
+          <>
+            <div className="form-grid">
+              <label htmlFor="db-schema-index-columns">Columns</label>
+              <input
+                id="db-schema-index-columns"
+                autoFocus
+                value={draft.columnsText}
+                onChange={(e) => setDraft({ ...draft, columnsText: e.target.value })}
+                placeholder="first_name, last_name"
+              />
+
+              <label htmlFor="db-schema-index-name">Index name</label>
+              <input
+                id="db-schema-index-name"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
+            </div>
+            <label className="checkbox checkbox-compact">
+              <input
+                type="checkbox"
+                checked={draft.unique}
+                onChange={(e) => setDraft({ ...draft, unique: e.target.checked })}
+              />
+              Unique index
+            </label>
+          </>
+        )}
+
+        <div className="modal-actions">
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button type="button" className="primary" onClick={() => { if (sql) onConfirm(sql); }} disabled={!canSubmit}>
+            Review SQL
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function schemaDialogTitle(dialog: SchemaDialog): string {
+  switch (dialog.kind) {
+    case 'add-column': return 'Add column';
+    case 'rename-table': return 'Rename table';
+    case 'rename-column': return 'Rename column';
+    case 'set-default': return 'Column default';
+    case 'create-index': return 'Create index';
+  }
+}
+
+function buildSchemaDialogSql(dialog: SchemaDialog): string | null {
+  switch (dialog.kind) {
+    case 'add-column': {
+      const name = dialog.name.trim();
+      const dataType = dialog.dataType.trim();
+      const def = dialog.defaultValue.trim();
+      if (!name || !dataType) return null;
+      const qTable = quoteTable(dialog.table, dialog.engine);
+      const columnSql = `${quoteIdent(name, dialog.engine)} ${dataType}${dialog.nullable ? '' : ' NOT NULL'}${def ? ` DEFAULT ${def}` : ''}`;
+      return dialog.engine === 'mssql'
+        ? `ALTER TABLE ${qTable} ADD ${columnSql};`
+        : `ALTER TABLE ${qTable} ADD COLUMN ${columnSql};`;
+    }
+    case 'rename-table': {
+      const next = dialog.nextName.trim();
+      if (!next) return null;
+      const qTable = quoteTable(dialog.table, dialog.engine);
+      if (dialog.engine === 'postgres') return `ALTER TABLE ${qTable} RENAME TO ${quoteIdent(next, dialog.engine)};`;
+      if (dialog.engine === 'mssql') return `EXEC sp_rename ${sqlStringLiteral(dialog.table, true)}, ${sqlStringLiteral(next, true)}, 'OBJECT';`;
+      return `RENAME TABLE ${qTable} TO ${quoteIdent(next, dialog.engine)};`;
+    }
+    case 'rename-column': {
+      const next = dialog.nextName.trim();
+      if (!next || next === dialog.columnName) return null;
+      const qTable = quoteTable(dialog.table, dialog.engine);
+      if (dialog.engine === 'mssql') {
+        return `EXEC sp_rename ${sqlStringLiteral(`${dialog.table}.${dialog.columnName}`, true)}, ${sqlStringLiteral(next, true)}, 'COLUMN';`;
+      }
+      return `ALTER TABLE ${qTable} RENAME COLUMN ${quoteIdent(dialog.columnName, dialog.engine)} TO ${quoteIdent(next, dialog.engine)};`;
+    }
+    case 'set-default': {
+      const def = dialog.defaultValue.trim();
+      const qTable = quoteTable(dialog.table, dialog.engine);
+      const qCol = quoteIdent(dialog.columnName, dialog.engine);
+      if (dialog.engine === 'postgres') {
+        return def ? `ALTER TABLE ${qTable} ALTER COLUMN ${qCol} SET DEFAULT ${def};` : `ALTER TABLE ${qTable} ALTER COLUMN ${qCol} DROP DEFAULT;`;
+      }
+      if (dialog.engine === 'mssql') {
+        const dropDefault = mssqlDropDefaultSql(dialog.table, dialog.columnName, dialog.engine);
+        if (!def) return dropDefault;
+        const constraintName = `df_${lastIdent(dialog.table)}_${dialog.columnName}`;
+        return `${dropDefault}\nALTER TABLE ${qTable} ADD CONSTRAINT ${quoteIdent(constraintName, dialog.engine)} DEFAULT ${def} FOR ${qCol};`;
+      }
+      return `ALTER TABLE ${qTable} ALTER COLUMN ${qCol} SET DEFAULT ${def || 'NULL'};`;
+    }
+    case 'create-index': {
+      const cols = dialog.columnsText.split(',').map((s) => s.trim()).filter(Boolean);
+      const name = dialog.name.trim();
+      if (cols.length === 0 || !name) return null;
+      const qTable = quoteTable(dialog.table, dialog.engine);
+      return `CREATE ${dialog.unique ? 'UNIQUE ' : ''}INDEX ${quoteIdent(name, dialog.engine)} ON ${qTable} (${cols.map((c) => quoteIdent(c, dialog.engine)).join(', ')});`;
+    }
+  }
 }
 
 function quoteIdent(ident: string, engine: DbConnection['engine']): string {

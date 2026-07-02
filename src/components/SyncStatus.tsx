@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useSyncStore } from '../state/syncStore';
+import { AlertCircleIcon, RefreshIcon } from './AppIcons';
 
 interface Props {
   onErrorClick?: () => void;
@@ -32,9 +33,9 @@ export function SyncStatus({ onErrorClick, onClick }: Props) {
         type="button"
         className="sync-status sync-status--syncing"
         aria-label="syncing"
-        title="Syncing with Supabase…"
+        title="Syncing…"
       >
-        <span className="sync-spinner">↻</span>
+        <RefreshIcon size={13} className="sync-spinner" />
       </button>
     );
   }
@@ -47,7 +48,7 @@ export function SyncStatus({ onErrorClick, onClick }: Props) {
         title={syncState.error ?? 'Sync error'}
         onClick={onErrorClick}
       >
-        ✕
+        <AlertCircleIcon size={14} />
       </button>
     );
   }

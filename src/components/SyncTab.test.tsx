@@ -58,14 +58,14 @@ describe('SyncTab — signed in', () => {
     vi.mocked(useSyncStore).mockImplementation((sel: any) => sel(mockStore));
   });
 
-  it('shows user email', () => {
+  it('shows user email', async () => {
     render(<SyncTab />);
-    expect(screen.getByText('a@b.com')).toBeTruthy();
+    expect(await screen.findByText('a@b.com')).toBeTruthy();
   });
 
-  it('shows Sign out button', () => {
+  it('shows Sign out button', async () => {
     render(<SyncTab />);
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /sign out/i })).toBeTruthy();
   });
 
   it('calls signOut when sign out button clicked', async () => {

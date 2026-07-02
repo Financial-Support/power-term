@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDbConnectionStore } from '../state/dbConnectionStore';
 import { useHostStore } from '../state/hostStore';
 import type { DbConnection } from '../types';
+import { ChevronDownIcon, ChevronLeftIcon, PencilIcon, PlusIcon, TrashIcon } from './AppIcons';
 
 interface Props {
   onAdd: () => void;
@@ -36,24 +37,28 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen, onHidePane
   return (
     <div className="db-panel">
       <div className="db-panel-header">
-        <button
-          type="button"
-          className="db-panel-toggle"
-          aria-label="toggle databases section"
-          onClick={() => setCollapsed((v) => !v)}
-        >
-          <span className="sp-caret">{collapsed ? '▸' : '▾'}</span>
-          <span className="db-panel-title">Databases</span>
-        </button>
+        <div className="panel-head-copy">
+          <button
+            type="button"
+            className="db-panel-toggle"
+            aria-label="toggle databases section"
+            onClick={() => setCollapsed((v) => !v)}
+          >
+            <span className={`sp-caret${collapsed ? ' collapsed' : ''}`}><ChevronDownIcon size={10} /></span>
+            <span className="db-panel-title">Databases</span>
+            <span className="panel-count" aria-hidden>{sorted.length}</span>
+          </button>
+          <p className="panel-subtitle">Connection profiles and quick launch</p>
+        </div>
         {onHidePanel && (
           <button
             type="button"
             className="db-panel-hide"
             onClick={onHidePanel}
             aria-label="Hide database list"
-            title="Hide database list"
+            title="Hide"
           >
-            ‹
+            <ChevronLeftIcon size={12} />
           </button>
         )}
       </div>
@@ -61,7 +66,7 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen, onHidePane
       {!collapsed && (
         <>
           {sorted.length === 0 ? (
-            <p className="db-panel-empty">No DB connections yet.</p>
+            <p className="db-panel-empty">No connections.</p>
           ) : (
             <ul className="db-panel-list">
               {sorted.map((c) => (
@@ -77,8 +82,8 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen, onHidePane
                     <span className="db-host">{hostName(c.host_id)}</span>
                   </button>
                   <span className="db-row-actions">
-                    <button type="button" aria-label={`edit ${c.name}`} onClick={() => onEdit(c)}>✎</button>
-                    <button type="button" aria-label={`delete ${c.name}`} onClick={() => onDelete(c)}>×</button>
+                    <button type="button" aria-label={`edit ${c.name}`} title={`Edit ${c.name}`} onClick={() => onEdit(c)}><PencilIcon size={13} /></button>
+                    <button type="button" aria-label={`delete ${c.name}`} title={`Delete ${c.name}`} onClick={() => onDelete(c)}><TrashIcon size={13} /></button>
                   </span>
                 </li>
               ))}
@@ -90,12 +95,10 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen, onHidePane
                 type="button"
                 className="sp-add-primary"
                 onClick={onAdd}
-                title="Add a new database connection"
+                title="Add database"
               >
                 <span className="sp-add-icon" aria-hidden>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  </svg>
+                  <PlusIcon size={14} />
                 </span>
                 <span>Add database</span>
               </button>

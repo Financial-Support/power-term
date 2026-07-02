@@ -3,6 +3,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { homeDir } from '@tauri-apps/api/path';
 import { localReadText } from '../lib/ipc';
 import type { SshKey, SshKeyInput } from '../types';
+import { CloseIcon, KeyIcon } from './AppIcons';
 
 interface Props {
   mode: 'create' | 'edit';
@@ -103,7 +104,16 @@ export function KeyFormModal({ mode, initial, onSave, onCancel, saving }: Props)
   return (
     <div className="modal-backdrop" role="dialog" aria-label="key form">
       <div className="modal modal-form">
-        <h2>{mode === 'create' ? 'Add SSH key' : 'Edit SSH key'}</h2>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><KeyIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">Key</span>
+            <h2>{mode === 'create' ? 'Add SSH key' : 'Edit SSH key'}</h2>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close key form" title="Close" onClick={onCancel}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
         <div className="form-grid">
           <label htmlFor="kfm-name">Label</label>
           <input id="kfm-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Personal" />
@@ -132,7 +142,7 @@ export function KeyFormModal({ mode, initial, onSave, onCancel, saving }: Props)
               className={`key-mode-btn ${pasteMode ? 'active' : ''}`}
               onClick={enterPasteMode}
             >
-              Paste content
+              Paste
             </button>
           </div>
 
@@ -157,17 +167,17 @@ export function KeyFormModal({ mode, initial, onSave, onCancel, saving }: Props)
             {!reading && readError && <span className="key-content-error">{readError}</span>}
             {!reading && !readError && content && (
               <span className="key-content-ok">
-                Captured {content.length.toLocaleString()} bytes — SSH stays working even if the file is moved or deleted.
+                Captured {content.length.toLocaleString()} bytes. This key stays available even if the file moves.
               </span>
             )}
             {!reading && !readError && !content && (
               <span className="key-content-warn">
-                No captured contents — SSH will read the file at handshake time. Pick a path above to capture.
+                No captured contents. SSH will read the file from disk.
               </span>
             )}
             {mode === 'edit' && path.trim() !== '' && (
               <button type="button" className="key-recapture" onClick={() => void recapture()} disabled={reading}>
-                Re-capture from disk
+                Capture again
               </button>
             )}
           </div>

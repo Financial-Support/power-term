@@ -1,3 +1,5 @@
+import { AlertCircleIcon, KeyIcon, ServerIcon } from './AppIcons';
+
 interface Props {
   host: string;
   fingerprint: string;
@@ -13,7 +15,20 @@ export function HostFingerprintPrompt(props: Props) {
   return (
     <div className="modal-backdrop" role="dialog" aria-label="host fingerprint">
       <div className={`modal ${isMismatch ? 'modal-warning' : ''}`}>
-        <h2>{isMismatch ? '⚠ Host key changed' : 'New host'}</h2>
+        <div className="modal-title-row">
+          <span className={`modal-title-icon${isMismatch ? ' danger' : ''}`} aria-hidden>
+            <AlertCircleIcon size={14} />
+          </span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">{isMismatch ? 'Security warning' : 'Trust prompt'}</span>
+            <h2>{isMismatch ? 'Host key changed' : 'New host'}</h2>
+            <p className="form-title-meta">
+              <ServerIcon size={11} /> {host}
+              <span>·</span>
+              <KeyIcon size={11} /> {keyType}
+            </p>
+          </div>
+        </div>
         <p>
           {isMismatch
             ? `The fingerprint of ${host} does not match the one previously trusted.`

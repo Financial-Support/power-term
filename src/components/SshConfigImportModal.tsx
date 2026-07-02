@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { sshConfigRead, type SshConfigEntry } from '../lib/ipc';
 import { useHostStore } from '../state/hostStore';
 import type { HostInput } from '../types';
+import { CloseIcon, ServerIcon } from './AppIcons';
 
 interface Props {
   onClose: () => void;
@@ -81,12 +82,23 @@ export function SshConfigImportModal({ onClose }: Props) {
   return (
     <div className="modal-backdrop" role="dialog" aria-label="import ssh config">
       <div className="modal modal-form ssh-import-modal">
-        <h2>Import from ~/.ssh/config</h2>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden>
+            <ServerIcon size={14} />
+          </span>
+          <div className="modal-title-copy">
+            <h2>Import SSH config</h2>
+            <p className="form-title-meta">Parse `~/.ssh/config` into saved hosts</p>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close SSH config import" title="Close" onClick={onClose}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
 
         {error && <p className="error">{error}</p>}
-        {!rows && !error && <p>Reading ~/.ssh/config…</p>}
+        {!rows && !error && <p>Reading config…</p>}
         {rows && rows.length === 0 && (
-          <p>No host blocks found in ~/.ssh/config.</p>
+          <p>No SSH hosts found.</p>
         )}
 
         {rows && rows.length > 0 && !result && (
@@ -115,11 +127,11 @@ export function SshConfigImportModal({ onClose }: Props) {
                   <div className="ssh-import-fields">
                     <div className="ssh-import-name">
                       {r.entry.name}
-                      {r.duplicate && <span className="ssh-import-dup">already exists</span>}
+                      {r.duplicate && <span className="ssh-import-dup">exists</span>}
                     </div>
                     <div className="ssh-import-detail">
                       {r.entry.user && <>{r.entry.user}@</>}{r.entry.hostname}{r.entry.port !== 22 && <>:{r.entry.port}</>}
-                      {r.entry.proxy_jump && <span className="ssh-import-pj"> · jump via {r.entry.proxy_jump}</span>}
+                      {r.entry.proxy_jump && <span className="ssh-import-pj"> · via {r.entry.proxy_jump}</span>}
                       {r.entry.key_path && <span className="ssh-import-key"> · {trimKey(r.entry.key_path)}</span>}
                     </div>
                   </div>

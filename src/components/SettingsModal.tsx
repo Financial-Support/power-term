@@ -6,7 +6,9 @@ import { THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from '../themes';
 import { SyncTab } from './SyncTab';
 import { AISettingsTab } from './AISettingsTab';
 import { TagChip } from './TagChip';
+import { ConfirmModal } from './ConfirmModal';
 import type { CursorStyle, SettingsPatch, Theme } from '../types';
+import { CloseIcon, PencilIcon, RefreshIcon, SettingsIcon, TrashIcon } from './AppIcons';
 
 interface Props {
   onClose: () => void;
@@ -21,7 +23,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
 
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'appearance');
   const [terminalTheme, setTerminalTheme] = useState(settings?.terminal_theme ?? 'default');
-  const [fontFamily, setFontFamily] = useState(settings?.font_family ?? 'SF Mono');
+  const [fontFamily, setFontFamily] = useState(settings?.font_family ?? 'JetBrains Mono');
   const [fontSize, setFontSize] = useState(settings?.font_size ?? 14);
   const [cursorBlink, setCursorBlink] = useState(settings?.cursor_blink ?? true);
   const [cursorStyle, setCursorStyle] = useState<CursorStyle>(settings?.cursor_style ?? 'block');
@@ -68,9 +70,14 @@ export function SettingsModal({ onClose, initialTab }: Props) {
   return (
     <div className="modal-backdrop" role="dialog" aria-label="settings" aria-modal="true">
       <div className="modal modal-form modal-settings">
-        <div className="modal-settings-header">
-          <h2>Settings</h2>
-          <button type="button" className="modal-close-btn" aria-label="Close settings" title="Close (Esc)" onClick={onClose}>✕</button>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><SettingsIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">Settings</span>
+            <h2>Preferences</h2>
+            <p className="form-title-meta">Appearance, terminal, sync, tags, and AI</p>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close settings" title="Close" onClick={onClose}><CloseIcon size={14} /></button>
         </div>
 
         <div className="settings-tabs" role="tablist">
@@ -281,6 +288,7 @@ function TagsTab() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState('');
+  const [pendingDeleteName, setPendingDeleteName] = useState<string | null>(null);
 
   const tagNames = useMemo(() => {
     const set = new Set<string>();
@@ -339,19 +347,37 @@ function TagsTab() {
   };
 
   const handleDelete = async (name: string) => {
-    const usage = hosts.filter((h) => h.tags.includes(name)).length;
-    const message =
-      usage > 0
-        ? `Delete tag "${name}"? It will be removed from ${usage} host${usage === 1 ? '' : 's'}.`
-        : `Delete tag "${name}"?`;
-    if (!confirm(message)) return;
-    await deleteTag(name);
+    setPendingDeleteName(name);
   };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteName) return;
+    await deleteTag(pendingDeleteName);
+    setPendingDeleteName(null);
+  };
+
+  const pendingDeleteUsage = pendingDeleteName
+    ? hosts.filter((h) => h.tags.includes(pendingDeleteName)).length
+    : 0;
 
   return (
     <div className="tags-tab-panel">
+      {pendingDeleteName && (
+        <ConfirmModal
+          title="Delete tag"
+          message={
+            pendingDeleteUsage > 0
+              ? `Delete "${pendingDeleteName}"? It will be removed from ${pendingDeleteUsage} host${pendingDeleteUsage === 1 ? '' : 's'}.`
+              : `Delete "${pendingDeleteName}"?`
+          }
+          confirmLabel="Delete"
+          destructive
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPendingDeleteName(null)}
+        />
+      )}
       <p className="form-hint">
-        Tag colors are stored locally and used to render the chip beside each host. Renaming or deleting a tag updates every host that uses it.
+        Tag colors stay local. Renaming or deleting a tag updates every host using it.
       </p>
 
       <div className="tags-create-row">
@@ -375,7 +401,7 @@ function TagsTab() {
       {createError && <p className="form-error">{createError}</p>}
 
       {tagNames.length === 0 ? (
-        <p className="form-hint">No tags yet. Add one above, or attach a tag to a host.</p>
+        <p className="form-hint">No tags.</p>
       ) : (
         <ul className="tags-list">
           {tagNames.map((name) => {
@@ -416,9 +442,9 @@ function TagsTab() {
                     type="button"
                     className="tags-row-clear"
                     aria-label={`reset ${name} color to default`}
-                    title="Reset to auto color"
+                    title="Reset color"
                     onClick={() => void clearColor(name)}
-                  >↺</button>
+                  ><RefreshIcon size={13} /></button>
                 )}
                 <button
                   type="button"
@@ -426,14 +452,14 @@ function TagsTab() {
                   aria-label={`rename ${name}`}
                   title="Rename"
                   onClick={() => (isEditing ? void commitRename() : startRename(name))}
-                >✎</button>
+                ><PencilIcon size={13} /></button>
                 <button
                   type="button"
                   className="tags-row-action tags-row-delete"
                   aria-label={`delete ${name}`}
                   title="Delete tag"
                   onClick={() => void handleDelete(name)}
-                >🗑</button>
+                ><TrashIcon size={13} /></button>
               </li>
             );
           })}

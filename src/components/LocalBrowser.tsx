@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
+import { ArrowLeftIcon, ArrowRightIcon, CopyIcon, DownloadIcon, FileIcon, FolderIcon, ParentDirectoryIcon, RefreshIcon, RevealIcon } from './AppIcons';
 import { localList, localHome, localReveal, type LocalEntry } from '../lib/ipc';
 
 export interface DragPayload {
@@ -156,16 +157,23 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
       onDrop={(e) => void onDrop(e)}
     >
       <div className="fb-toolbar">
-        <button type="button" aria-label="parent dir" className="fb-up" disabled={loading || !cwd} onClick={cdParent}>◀</button>
-        <input
-          className="fb-breadcrumb"
-          value={pathDraft}
-          onChange={(e) => setPathDraft(e.target.value)}
-          onKeyDown={onPathKey}
-          placeholder="/Users/you"
-        />
-        <button type="button" aria-label="reload" disabled={loading || !cwd} onClick={() => cwd && void reload(cwd)}>⟳</button>
-        <span className="fb-pane-label">Local</span>
+        <button type="button" aria-label="parent dir" className="fb-up" title="Up" disabled={loading || !cwd} onClick={cdParent}><ArrowLeftIcon size={14} /></button>
+        <div className="fb-path-wrap">
+          <span className="fb-path-icon" aria-hidden>
+            <FolderIcon size={14} open />
+          </span>
+          <input
+            className="fb-breadcrumb"
+            value={pathDraft}
+            onChange={(e) => setPathDraft(e.target.value)}
+            onKeyDown={onPathKey}
+            placeholder="/Users/you"
+          />
+          <span className="fb-pane-label">Local</span>
+        </div>
+        <div className="fb-toolbar-actions">
+          <button type="button" aria-label="reload" title="Reload" disabled={loading || !cwd} onClick={() => cwd && void reload(cwd)}><RefreshIcon size={14} /></button>
+        </div>
       </div>
       {downloading && (
         <div className="fb-upload-progress">
@@ -175,7 +183,7 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
       {dropOver && (
         <div className="fb-drop-overlay">
           <div className="fb-drop-card">
-            <div className="fb-drop-icon">⬇</div>
+            <div className="fb-drop-icon"><DownloadIcon size={18} /></div>
             <div className="fb-drop-text">Download to <code>{cwd}</code></div>
           </div>
         </div>
@@ -188,7 +196,7 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
       <div className="fb-list">
         {cwd && cwd !== '/' && (
           <button type="button" className="file-row pseudo-up" onClick={cdParent}>
-            <span className="file-row-name"><span className="file-icon">▸</span><span className="file-name">..</span></span>
+            <span className="file-row-name"><span className="file-icon"><ParentDirectoryIcon size={14} /></span><span className="file-name">..</span></span>
           </button>
         )}
         {loading && <div className="fb-loading">Loading…</div>}
@@ -201,16 +209,9 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
             onDragStart={(e) => onDragStart(e, entry)}
             onDoubleClick={() => entry.kind === 'dir' && cdInto(entry.name)}
             onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, entry }); }}
-            title={
-              entry.kind === 'file'
-                ? 'Drag to remote pane to upload'
-                : entry.kind === 'dir'
-                  ? 'Drag to remote pane to upload folder'
-                  : undefined
-            }
           >
             <span className="file-row-name">
-              <span className="file-icon">{entry.kind === 'dir' ? '▸' : '·'}</span>
+              <span className="file-icon">{entry.kind === 'dir' ? <FolderIcon size={14} /> : <FileIcon size={14} />}</span>
               <span className="file-name">{entry.name}</span>
             </span>
             <span className="file-row-size">{entry.kind === 'file' ? formatSize(entry.size) : ''}</span>
@@ -239,17 +240,17 @@ function buildLocalCtxItems(
   const isDir = entry.kind === 'dir';
   const items: MenuEntry[] = [];
   if (isDir) {
-    items.push({ label: 'Open', icon: '▸', onClick: () => cb.cdInto(entry.name) });
+    items.push({ label: 'Open', icon: <FolderIcon size={14} open />, onClick: () => cb.cdInto(entry.name) });
   }
   if (cb.onCopyToRemote && (isDir || entry.kind === 'file')) {
     items.push({
       label: isDir ? 'Copy folder to remote' : 'Copy to remote',
-      icon: '⇢',
+      icon: <ArrowRightIcon size={14} />,
       onClick: () => void cb.onCopyToRemote!(fullPath, entry.name),
     });
   }
-  items.push({ label: 'Reveal in Finder', icon: '◌', onClick: () => void localReveal(fullPath) });
-  items.push({ label: 'Copy path', icon: '❏', onClick: () => void navigator.clipboard.writeText(fullPath) });
+  items.push({ label: 'Reveal in Finder', icon: <RevealIcon size={14} />, onClick: () => void localReveal(fullPath) });
+  items.push({ label: 'Copy path', icon: <CopyIcon size={14} />, onClick: () => void navigator.clipboard.writeText(fullPath) });
   return items;
 }
 

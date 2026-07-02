@@ -11,6 +11,7 @@ import { useSessionStore } from '../state/sessionStore';
 import { useSettingsStore } from '../state/settingsStore';
 import { useTheme } from '../hooks/useTheme';
 import { PRESET_THEMES } from '../themes';
+import { ChevronDownIcon, ChevronUpIcon, CloseIcon, SearchIcon } from './AppIcons';
 
 interface Props { tab: Tab; visible: boolean; active?: boolean; onAutoClose?: (id: string) => void }
 
@@ -283,6 +284,9 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     >
       {searchOpen && (
         <div className="terminal-search" role="search">
+          <span className="terminal-search-icon" aria-hidden>
+            <SearchIcon size={12} />
+          </span>
           <input
             ref={searchInputRef}
             autoFocus
@@ -311,23 +315,23 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
             type="button"
             className="terminal-search-btn"
             aria-label="Previous match"
-            title="Previous match (Shift+Enter)"
+            title="Previous match"
             onClick={() => searchQuery && searchAddonRef.current?.findPrevious(searchQuery, SEARCH_OPTS)}
-          >↑</button>
+          ><ChevronUpIcon size={12} /></button>
           <button
             type="button"
             className="terminal-search-btn"
             aria-label="Next match"
-            title="Next match (Enter)"
+            title="Next match"
             onClick={() => searchQuery && searchAddonRef.current?.findNext(searchQuery, SEARCH_OPTS)}
-          >↓</button>
+          ><ChevronDownIcon size={12} /></button>
           <button
             type="button"
             className="terminal-search-btn"
             aria-label="Close search"
-            title="Close (Esc)"
+            title="Close"
             onClick={closeSearch}
-          >✕</button>
+          ><CloseIcon size={12} /></button>
         </div>
       )}
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
@@ -346,9 +350,9 @@ function resolveXtermTheme(
 
 function themeForResolved(theme: 'light' | 'dark'): import('@xterm/xterm').ITheme {
   if (theme === 'light') {
-    return { background: '#ffffff', foreground: '#1a1a1a', cursor: '#1a1a1a' };
+    return { background: '#f8fafc', foreground: '#0f172a', cursor: '#0f172a' };
   }
-  return { background: '#0f1115', foreground: '#e6e6e6', cursor: '#e6e6e6' };
+  return { background: '#0f1118', foreground: '#f8fafc', cursor: '#f8fafc' };
 }
 
 // xterm.js takes the fontFamily string verbatim — if the requested font is not
@@ -356,7 +360,7 @@ function themeForResolved(theme: 'light' | 'dark'): import('@xterm/xterm').IThem
 // monospace on macOS, which is unreadable). Append a fallback chain that always
 // resolves to something installed on macOS.
 function withMonospaceFallback(family: string): string {
-  const fallbacks = '"SF Mono", "Menlo", "Monaco", ui-monospace, "Courier New", monospace';
+  const fallbacks = '"JetBrains Mono", "SF Mono", "Menlo", "Monaco", ui-monospace, "Courier New", monospace';
   // If the user's setting already includes commas (its own fallback chain), trust it.
   if (family.includes(',')) return family;
   return `"${family}", ${fallbacks}`;

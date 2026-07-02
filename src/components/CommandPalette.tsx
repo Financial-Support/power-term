@@ -3,6 +3,7 @@ import { parseSshTarget } from '../lib/sshTarget';
 import { useHostStore } from '../state/hostStore';
 import { useSnippetStore } from '../state/snippetStore';
 import type { Host, Snippet, SshTarget } from '../types';
+import { CloseIcon, SearchIcon, ServerIcon, SettingsIcon, SnippetIcon, SparklesIcon, TerminalIcon } from './AppIcons';
 
 interface Props {
   open: boolean;
@@ -60,8 +61,8 @@ export function CommandPalette({
     }
 
     const actions: Array<{ id: string; label: string; hint?: string; run?: () => void }> = [
-      { id: 'new-tab', label: 'New local tab', hint: '⌘T', run: onNewLocalTab },
-      { id: 'settings', label: 'Open Settings', hint: '⌘,', run: onOpenSettings },
+      { id: 'new-tab', label: 'New local tab', run: onNewLocalTab },
+      { id: 'settings', label: 'Open Settings', run: onOpenSettings },
     ];
     for (const a of actions) {
       if (!a.run) continue;
@@ -115,17 +116,40 @@ export function CommandPalette({
   return (
     <div className="palette-backdrop" role="dialog" aria-label="command palette" onClick={onClose}>
       <div className="palette" onClick={(e) => e.stopPropagation()}>
-        <input
-          autoFocus
-          placeholder="Search hosts, snippets, or type 'ssh user@host'…"
-          value={text}
-          onChange={(e) => { setText(e.target.value); setSelected(0); }}
-          onKeyDown={handleKey}
-        />
+        <div className="palette-head">
+          <div className="palette-head-copy">
+            <div className="palette-badge">
+              <SearchIcon size={12} />
+              <span>Command</span>
+            </div>
+            <p className="palette-subtitle">Hosts, snippets, and quick actions</p>
+          </div>
+          <div className="palette-head-actions">
+            <span className="palette-shortcut-chip" aria-hidden>⌘K</span>
+            <button type="button" className="modal-close-btn" aria-label="Close command palette" title="Close" onClick={onClose}>
+              <CloseIcon size={13} />
+            </button>
+          </div>
+        </div>
+        <div className="palette-input-wrap">
+          <span className="palette-input-icon" aria-hidden><SearchIcon size={14} /></span>
+          <input
+            autoFocus
+            placeholder="Search or type ssh user@host"
+            value={text}
+            onChange={(e) => { setText(e.target.value); setSelected(0); }}
+            onKeyDown={handleKey}
+          />
+        </div>
+        <div className="palette-hints" aria-hidden>
+          <span>↑↓ navigate</span>
+          <span>Enter run</span>
+          <span>Esc close</span>
+        </div>
         <div className="palette-list" ref={listRef} role="listbox">
           {items.length === 0 ? (
             <div className="palette-empty">
-              {text ? 'No matches' : 'Start typing to search hosts and snippets'}
+              {text ? 'No matches' : 'Hosts, snippets, actions'}
             </div>
           ) : items.map((item, i) => (
             <button
@@ -152,6 +176,7 @@ function ItemRow({ item }: { item: Item }) {
     case 'host':
       return (
         <>
+          <span className="palette-row-icon" aria-hidden><ServerIcon size={14} /></span>
           <span className="palette-row-label">{item.host.name}</span>
           <span className="palette-row-meta">{item.host.username}@{item.host.hostname}{item.host.port !== 22 ? `:${item.host.port}` : ''}</span>
           <span className="palette-row-kind">Host</span>
@@ -160,6 +185,7 @@ function ItemRow({ item }: { item: Item }) {
     case 'snippet':
       return (
         <>
+          <span className="palette-row-icon" aria-hidden><SnippetIcon size={14} /></span>
           <span className="palette-row-label">{item.snippet.name}</span>
           <span className="palette-row-meta">{firstLine(item.snippet.content)}</span>
           <span className="palette-row-kind">Snippet</span>
@@ -168,6 +194,7 @@ function ItemRow({ item }: { item: Item }) {
     case 'ssh':
       return (
         <>
+          <span className="palette-row-icon" aria-hidden><TerminalIcon size={14} /></span>
           <span className="palette-row-label">Connect: {item.raw}</span>
           <span className="palette-row-meta">{item.target.user}@{item.target.host}:{item.target.port}</span>
           <span className="palette-row-kind">SSH</span>
@@ -176,6 +203,7 @@ function ItemRow({ item }: { item: Item }) {
     case 'action':
       return (
         <>
+          <span className="palette-row-icon" aria-hidden>{item.id === 'settings' ? <SettingsIcon size={14} /> : item.id === 'new-tab' ? <TerminalIcon size={14} /> : <SparklesIcon size={14} />}</span>
           <span className="palette-row-label">{item.label}</span>
           <span className="palette-row-meta" />
           <span className="palette-row-kind">{item.hint ?? 'Action'}</span>

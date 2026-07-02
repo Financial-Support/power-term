@@ -1,4 +1,5 @@
 import type { DbConnection } from '../types';
+import { RefreshIcon } from './AppIcons';
 
 interface Props {
   connection: DbConnection;
@@ -17,17 +18,28 @@ export function DbConnectingModal({ connection, step }: Props) {
   return (
     <div className="modal-backdrop" role="dialog" aria-label="connecting" aria-busy="true">
       <div className="modal db-connecting">
-        <div className="db-connecting-header">
-          <span className={`db-engine-pill db-engine-${connection.engine}`}>
-            {engineShort(connection.engine)}
-          </span>
-          <span className="db-connecting-name">{connection.name}</span>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><RefreshIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">Database session</span>
+            <div className="db-connecting-header">
+              <span className={`db-engine-pill db-engine-${connection.engine}`}>
+                {engineShort(connection.engine)}
+              </span>
+              <span className="db-connecting-name">{connection.name}</span>
+            </div>
+            <p className="form-title-meta">
+              {connection.db_user ? `${connection.db_user}@` : ''}{connection.db_host}
+              {connection.db_port ? `:${connection.db_port}` : ''}
+              {connection.database ? ` / ${connection.database}` : ''}
+            </p>
+          </div>
         </div>
         <div className="db-connecting-body">
           <span className="db-spinner" aria-hidden />
           <span className="db-connecting-step">{step ?? 'Connecting…'}</span>
         </div>
-        <p className="form-hint" style={{ marginTop: 0 }}>
+        <p className="form-hint db-connecting-hint">
           {connection.engine === 'sqlite' ? 'Opening local SQLite file' : `Opening SSH tunnel and authenticating to ${engineLabel(connection.engine)}`}
           {connection.db_user ? <><span> as</span><code> {connection.db_user}</code></> : null}
           {connection.database ? <> on <code>{connection.database}</code></> : null}.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { secretGet, secretSet, secretDelete } from '../lib/ipc';
+import { KeyIcon, SparklesIcon } from './AppIcons';
 
 const SECRET_KEY = '__ai_anthropic';
 
@@ -55,35 +56,49 @@ export function AISettingsTab() {
 
   return (
     <div className="ai-settings">
-      <p className="ai-settings-blurb">
-        The AI command bar (<kbd>⌘L</kbd>) turns natural language into a shell
-        command using the Anthropic API. Your key is stored in the macOS
-        Keychain and is never synced.
-      </p>
-      <div className="form-grid">
-        <label htmlFor="ai-key">Anthropic API key</label>
-        <input
-          id="ai-key"
-          type="password"
-          autoComplete="off"
-          placeholder={hasKey ? '•••••••• stored' : 'sk-ant-…'}
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          disabled={loading || saving}
-        />
-      </div>
-      <div className="modal-actions">
-        {hasKey && (
-          <button type="button" onClick={() => void onClear()} disabled={saving}>
-            Remove stored key
-          </button>
-        )}
-        <button
-          type="button"
-          className="primary"
-          onClick={() => void onSave()}
-          disabled={saving || key.trim() === ''}
-        >Save key</button>
+      <div className="settings-section-card">
+        <div className="settings-section-head">
+          <div>
+            <div className="settings-section-title-row">
+              <span className="settings-section-icon" aria-hidden><SparklesIcon size={13} /></span>
+              <h3>AI command bar</h3>
+            </div>
+            <p className="ai-settings-blurb">
+              Anthropic API key stored in the local keychain.
+            </p>
+          </div>
+        </div>
+        <div className="form-grid">
+          <label htmlFor="ai-key">Anthropic API key</label>
+          <input
+            id="ai-key"
+            type="password"
+            autoComplete="off"
+            placeholder={hasKey ? '•••••••• stored' : 'sk-ant-…'}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            disabled={loading || saving}
+          />
+        </div>
+        <div className="ai-settings-meta">
+          <span className="settings-inline-pill">
+            <KeyIcon size={11} />
+            {hasKey ? 'Stored locally' : 'No key saved'}
+          </span>
+        </div>
+        <div className="modal-actions">
+          {hasKey && (
+            <button type="button" onClick={() => void onClear()} disabled={saving}>
+              Remove stored key
+            </button>
+          )}
+          <button
+            type="button"
+            className="primary"
+            onClick={() => void onSave()}
+            disabled={saving || key.trim() === ''}
+          >Save key</button>
+        </div>
       </div>
       {status && <p className="ai-settings-status">{status}</p>}
     </div>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useForwardStore } from '../state/forwardStore';
 import type { Forward, ForwardStatus } from '../types';
+import { ChevronDownIcon, PauseIcon, PencilIcon, PlayIcon, PlusIcon, TrashIcon } from './AppIcons';
 
 interface Props {
   onAdd: () => void;
@@ -23,6 +24,14 @@ export function ForwardsPanel({ onAdd, onEdit, onDelete }: Props) {
   const statusOf = (id: string): ForwardStatus =>
     statuses[id] ?? { id, state: 'stopped', error: null };
 
+  const activeCount = useMemo(
+    () => sorted.filter((forward) => {
+      const state = statusOf(forward.id).state;
+      return state === 'running' || state === 'starting';
+    }).length,
+    [sorted, statuses],
+  );
+
   const onToggle = (f: Forward) => {
     const s = statusOf(f.id);
     if (s.state === 'running' || s.state === 'starting') void stopStore(f.id);
@@ -32,21 +41,27 @@ export function ForwardsPanel({ onAdd, onEdit, onDelete }: Props) {
   return (
     <div className="forwards-panel">
       <div className="forwards-header">
-        <button
-          type="button"
-          className="forwards-toggle"
-          aria-label="toggle forwards section"
-          onClick={() => setCollapsed((v) => !v)}
-        >
-          <span className="sp-caret">{collapsed ? '▸' : '▾'}</span>
-          <span className="forwards-title">Forwards</span>
-        </button>
-        <button type="button" className="forwards-add" aria-label="add forward" onClick={onAdd}>+</button>
+        <div className="panel-head-copy">
+          <button
+            type="button"
+            className="forwards-toggle"
+            aria-label="toggle forwards section"
+            onClick={() => setCollapsed((v) => !v)}
+          >
+            <span className={`sp-caret${collapsed ? ' collapsed' : ''}`}><ChevronDownIcon size={10} /></span>
+            <span className="forwards-title">Forwards</span>
+            <span className="panel-count" aria-hidden>{sorted.length}</span>
+          </button>
+          <p className="panel-subtitle">
+            {activeCount > 0 ? `${activeCount} active tunnel${activeCount === 1 ? '' : 's'}` : 'Saved port mappings'}
+          </p>
+        </div>
+        <button type="button" className="forwards-add" aria-label="add forward" onClick={onAdd}><PlusIcon size={13} /></button>
       </div>
       {!collapsed && (
         <>
           {sorted.length === 0 ? (
-            <p className="forwards-empty">No forwards. Click + to add one.</p>
+            <p className="forwards-empty">No forwards.</p>
           ) : (
             <ul className="forwards-list">
               {sorted.map((f) => {
@@ -56,19 +71,26 @@ export function ForwardsPanel({ onAdd, onEdit, onDelete }: Props) {
                 return (
                   <li key={f.id} className="forward-row" title={s.error ?? undefined}>
                     <span className={dotClass} aria-label={`status ${s.state}`} />
-                    <span className="forward-name">{f.name}</span>
-                    <span className="forward-kind">
-                      {f.kind === 'local' ? 'L' : 'R'} {f.bind_port}
+                    <div className="forward-copy">
+                      <span className="forward-name">{f.name}</span>
+                      <span className="forward-meta">
+                        {f.kind === 'local' ? 'L' : 'R'} {f.bind_port}
+                        <span aria-hidden> · </span>
+                        <span>{f.bind_addr}:{f.bind_port} → {f.remote_host}:{f.remote_port}</span>
+                      </span>
+                    </div>
+                    <span className={`forward-state-pill forward-state-${s.state}`}>
+                      {stateLabel(s.state)}
                     </span>
                     <button
                       type="button"
                       className="forward-toggle"
                       aria-label={`${isOn ? 'stop' : 'start'} forward ${f.name}`}
                       onClick={() => onToggle(f)}
-                    >{isOn ? '⏸' : '⏵'}</button>
+                    >{isOn ? <PauseIcon size={12} /> : <PlayIcon size={12} />}</button>
                     <span className="forward-actions">
-                      <button type="button" aria-label={`edit forward ${f.name}`} onClick={() => onEdit(f)}>✎</button>
-                      <button type="button" aria-label={`delete forward ${f.name}`} onClick={() => onDelete(f)}>×</button>
+                      <button type="button" aria-label={`edit forward ${f.name}`} title={`Edit forward ${f.name}`} onClick={() => onEdit(f)}><PencilIcon size={13} /></button>
+                      <button type="button" aria-label={`delete forward ${f.name}`} title={`Delete forward ${f.name}`} onClick={() => onDelete(f)}><TrashIcon size={13} /></button>
                     </span>
                   </li>
                 );
@@ -79,4 +101,17 @@ export function ForwardsPanel({ onAdd, onEdit, onDelete }: Props) {
       )}
     </div>
   );
+}
+
+function stateLabel(state: ForwardStatus['state']): string {
+  switch (state) {
+    case 'running':
+      return 'Live';
+    case 'starting':
+      return 'Starting';
+    case 'error':
+      return 'Error';
+    default:
+      return 'Idle';
+  }
 }

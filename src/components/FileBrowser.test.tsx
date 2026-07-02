@@ -11,6 +11,7 @@ vi.mock('../lib/ipc', () => ({
   sftpRename: vi.fn(),
   sftpDownload: vi.fn(),
   sftpUpload: vi.fn(),
+  isSftpTransferCancelledError: vi.fn((err: unknown) => String(err).toLowerCase().includes('transfer cancelled')),
 }));
 
 vi.mock('../lib/dialog', () => ({
@@ -24,7 +25,8 @@ vi.mock('@tauri-apps/api/webview', () => ({
   }),
 }));
 
-import { sftpList, sftpMkdir } from '../lib/ipc';
+import { sftpDownload, sftpList, sftpMkdir, sftpRename, sftpUpload } from '../lib/ipc';
+import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
 import { FileBrowser } from './FileBrowser';
 import { useSftpStore } from '../state/sftpStore';
 import type { SftpEntry } from '../types';
@@ -45,8 +47,6 @@ beforeEach(() => {
     },
   });
   vi.clearAllMocks();
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
-  vi.spyOn(window, 'prompt').mockReturnValue('renamed');
 });
 
 describe('FileBrowser', () => {
@@ -116,5 +116,42 @@ describe('FileBrowser', () => {
     render(<FileBrowser tabId="t" onClose={vi.fn()} />);
     await userEvent.click(screen.getByText('..'));
     expect(sftpList).toHaveBeenCalledWith('s', '/home');
+  });
+
+  it('does not show an error banner when a download is cancelled', async () => {
+    (pickLocalSavePath as any).mockResolvedValue('/tmp/a.txt');
+    (sftpDownload as any).mockRejectedValue(new Error('transfer cancelled'));
+    render(<FileBrowser tabId="t" onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByLabelText('download a.txt'));
+
+    expect(screen.queryByText(/download failed/i)).not.toBeInTheDocument();
+  });
+
+  it('renames a file through the in-app modal', async () => {
+    (sftpRename as any).mockResolvedValue(undefined);
+    (sftpList as any).mockResolvedValue([]);
+    render(<FileBrowser tabId="t" onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByLabelText('rename a.txt'));
+    const input = screen.getByLabelText('Name');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'renamed.txt');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+
+    expect(sftpRename).toHaveBeenCalledWith('s', '/home/alice/a.txt', '/home/alice/renamed.txt');
+  });
+
+  it('confirms overwrite before uploading over an existing file', async () => {
+    (pickLocalFile as any).mockResolvedValue('/tmp/a.txt');
+    (sftpUpload as any).mockResolvedValue(undefined);
+    (sftpList as any).mockResolvedValue([]);
+    render(<FileBrowser tabId="t" onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByLabelText('upload'));
+    expect(screen.getByText(/replace "a\.txt" in \/home\/alice/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Overwrite' }));
+
+    expect(sftpUpload).toHaveBeenCalledWith('s', '/tmp/a.txt', '/home/alice/a.txt');
   });
 });

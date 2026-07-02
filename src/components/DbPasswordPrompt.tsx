@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DbConnection } from '../types';
+import { CloseIcon, DatabaseIcon, LockIcon } from './AppIcons';
 
 interface Props {
   connection: DbConnection;
@@ -28,10 +29,20 @@ export function DbPasswordPrompt({ connection, onSubmit, onCancel }: Props) {
   return (
     <div className="modal-backdrop" role="dialog" aria-label="db password">
       <div className="modal modal-form">
-        <h2>Connect to {connection.name}</h2>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><LockIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">Password</span>
+            <h2>Connect to {connection.name}</h2>
+            <p className="form-title-meta"><DatabaseIcon size={11} /> {engineLabel(connection.engine)}</p>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close database password prompt" title="Close" onClick={onCancel}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
         <p className="form-hint">
           {engineLabel(connection.engine)}{connection.db_user ? <> as <code>{connection.db_user}</code></> : null}
-          {connection.database ? <> on <code>{connection.database}</code></> : null}.
+          {connection.database ? <> on <code>{connection.database}</code></> : null}
         </p>
         <div className="form-grid">
           <label htmlFor="dbp-pass">Password</label>

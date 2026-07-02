@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { FileRow } from './FileRow';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { ConfirmModal } from './ConfirmModal';
+import { ArrowLeftIcon, CloseIcon, CopyIcon, DownloadIcon, FolderIcon, FolderPlusIcon, ParentDirectoryIcon, PencilIcon, TrashIcon, UploadIcon, RefreshIcon } from './AppIcons';
 import { useSftpStore } from '../state/sftpStore';
-import { sftpDownload, sftpMkdir, sftpRemoveDir, sftpRemoveFile, sftpRename, sftpUpload } from '../lib/ipc';
+import { isSftpTransferCancelledError, sftpDownload, sftpMkdir, sftpRemoveDir, sftpRemoveFile, sftpRename, sftpUpload } from '../lib/ipc';
 import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
 import type { SftpEntry } from '../types';
 
@@ -36,6 +37,10 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: SftpEntry } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<SftpEntry | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [renameEntry, setRenameEntry] = useState<SftpEntry | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [uploadOverwrite, setUploadOverwrite] = useState<{ local: string; base: string } | null>(null);
 
   // Sync local breadcrumb input when cwd changes externally (after navigate).
   useEffect(() => {
@@ -86,6 +91,7 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
   // Surface a per-op failure into the existing tab.error banner so the user sees
   // why a delete/rename/upload/download silently "didn't happen". Spec §9.
   const reportOpError = (verb: string, err: unknown) => {
+    if (isSftpTransferCancelledError(err)) return;
     console.warn(`${verb} failed`, err);
     setError(tabId, `${verb} failed: ${String(err)}`);
   };
@@ -126,11 +132,27 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
   };
 
   const onRename = async (entry: SftpEntry) => {
-    const next = prompt(`Rename "${entry.name}" to:`, entry.name);
-    if (!next || next === entry.name) return;
+    setRenameEntry(entry);
+    setRenameDraft(entry.name);
+  };
+
+  const submitRename = async () => {
+    if (!renameEntry) return;
+    const next = renameDraft.trim();
+    if (!next || next === renameEntry.name) {
+      setRenameEntry(null);
+      setRenameDraft('');
+      return;
+    }
     setError(tabId, null);
-    try { await sftpRename(tab.sftpId, joinPath(tab.cwd, entry.name), joinPath(tab.cwd, next)); }
+    setRenaming(true);
+    try { await sftpRename(tab.sftpId, joinPath(tab.cwd, renameEntry.name), joinPath(tab.cwd, next)); }
     catch (err) { reportOpError('rename', err); }
+    finally {
+      setRenaming(false);
+      setRenameEntry(null);
+      setRenameDraft('');
+    }
     void reload(tabId);
   };
 
@@ -140,7 +162,9 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     setError(tabId, null);
     try {
       await sftpDownload(tab.sftpId, joinPath(tab.cwd, entry.name), local);
-    } catch (err) { reportOpError('download', err); }
+    } catch (err) {
+      reportOpError('download', err);
+    }
   };
 
   const onUpload = async () => {
@@ -152,13 +176,19 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     // overwrite is still TRUNCATE — we accept that race for MVP.
     const clash = tab.entries.find((e) => e.name === base);
     if (clash) {
-      const ok = confirm(`File "${base}" already exists at ${tab.cwd}. Overwrite?`);
-      if (!ok) return;
+      setUploadOverwrite({ local, base });
+      return;
     }
+    await performUpload(local, base);
+  };
+
+  const performUpload = async (local: string, base: string) => {
     setError(tabId, null);
     try {
       await sftpUpload(tab.sftpId, local, joinPath(tab.cwd, base));
-    } catch (err) { reportOpError('upload', err); }
+    } catch (err) {
+      reportOpError('upload', err);
+    }
     void reload(tabId);
   };
 
@@ -210,15 +240,25 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
 
     setUploadProgress({ done: 0, total: localPaths.length });
     let done = 0;
+    let cancelled = false;
     for (const local of localPaths) {
       const base = local.split('/').pop() ?? 'upload';
       try {
         await sftpUpload(tab.sftpId, local, joinPath(tab.cwd, base));
       } catch (err) {
+        if (isSftpTransferCancelledError(err)) {
+          cancelled = true;
+          break;
+        }
         setError(tabId, `upload "${base}" failed: ${String(err)}`);
       }
       done++;
       setUploadProgress({ done, total: localPaths.length });
+    }
+    if (cancelled) {
+      setUploadProgress(null);
+      void reload(tabId);
+      return;
     }
     setUploadProgress(null);
     void reload(tabId);
@@ -239,23 +279,23 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     const remotePath = joinPath(tab.cwd, entry.name);
     const items: MenuEntry[] = [];
     if (isDir) {
-      items.push({ label: 'Open', icon: '▸', onClick: () => cdInto(entry.name) });
+      items.push({ label: 'Open', icon: <FolderIcon size={14} open />, onClick: () => cdInto(entry.name) });
     }
     if (onCopyToLocal && (isDir || entry.kind === 'file')) {
       items.push({
         label: isDir ? 'Copy folder to local' : 'Copy to local',
-        icon: '⇠',
+        icon: <ArrowLeftIcon size={14} />,
         onClick: () => void onCopyToLocal(remotePath, entry.name),
       });
     }
     if (!isDir) {
-      items.push({ label: 'Download…', icon: '⬇', onClick: () => void onDownload(entry) });
+      items.push({ label: 'Download…', icon: <DownloadIcon size={14} />, onClick: () => void onDownload(entry) });
     }
     items.push({ separator: true });
-    items.push({ label: 'Rename', icon: '✎', onClick: () => void onRename(entry) });
-    items.push({ label: 'Copy path', icon: '❏', onClick: () => void navigator.clipboard.writeText(remotePath) });
+    items.push({ label: 'Rename', icon: <PencilIcon size={14} />, onClick: () => void onRename(entry) });
+    items.push({ label: 'Copy path', icon: <CopyIcon size={14} />, onClick: () => void navigator.clipboard.writeText(remotePath) });
     items.push({ separator: true });
-    items.push({ label: 'Delete', icon: '×', danger: true, onClick: () => void onDelete(entry) });
+    items.push({ label: 'Delete', icon: <TrashIcon size={14} />, danger: true, onClick: () => void onDelete(entry) });
     return items;
   };
 
@@ -267,20 +307,28 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
       onDrop={(e) => void onIntraDrop(e)}
     >
       <div className="fb-toolbar">
-        <button type="button" aria-label="parent dir" className="fb-up" disabled={tab.loading} onClick={cdParent}>◀</button>
-        <input
-          className="fb-breadcrumb"
-          value={pathDraft}
-          onChange={(e) => setPathDraft(e.target.value)}
-          onKeyDown={onPathKey}
-        />
-        <button type="button" aria-label="reload" disabled={tab.loading} onClick={() => void reload(tabId)}>⟳</button>
-        <button type="button" aria-label="upload" disabled={tab.loading} onClick={() => void onUpload()}>⬆</button>
-        <button type="button" aria-label="new folder" disabled={tab.loading} onClick={() => setMkdirOpen(true)}>📁+</button>
-        <label className="fb-toggle">
-          <input type="checkbox" aria-label="show hidden files" checked={tab.showHidden} onChange={() => toggleHidden(tabId)} />
-          show hidden
-        </label>
+        <button type="button" aria-label="parent dir" className="fb-up" title="Up" disabled={tab.loading} onClick={cdParent}><ArrowLeftIcon size={14} /></button>
+        <div className="fb-path-wrap">
+          <span className="fb-path-icon" aria-hidden>
+            <FolderIcon size={14} open />
+          </span>
+          <input
+            className="fb-breadcrumb"
+            value={pathDraft}
+            onChange={(e) => setPathDraft(e.target.value)}
+            onKeyDown={onPathKey}
+          />
+          <span className="fb-pane-label">Remote</span>
+        </div>
+        <div className="fb-toolbar-actions">
+          <button type="button" aria-label="reload" title="Reload" disabled={tab.loading} onClick={() => void reload(tabId)}><RefreshIcon size={14} /></button>
+          <button type="button" aria-label="upload" title="Upload" disabled={tab.loading} onClick={() => void onUpload()}><UploadIcon size={14} /></button>
+          <button type="button" aria-label="new folder" title="New folder" disabled={tab.loading} onClick={() => setMkdirOpen(true)}><FolderPlusIcon size={14} /></button>
+          <label className="fb-toggle">
+            <input type="checkbox" aria-label="show hidden files" checked={tab.showHidden} onChange={() => toggleHidden(tabId)} />
+            Hidden
+          </label>
+        </div>
       </div>
       {mkdirOpen && (
         <div className="fb-mkdir">
@@ -311,7 +359,7 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
       {dropOver && (
         <div className="fb-drop-overlay">
           <div className="fb-drop-card">
-            <div className="fb-drop-icon">⬇</div>
+            <div className="fb-drop-icon"><UploadIcon size={18} /></div>
             <div className="fb-drop-text">Drop to upload to <code>{tab.cwd}</code></div>
           </div>
         </div>
@@ -319,7 +367,7 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
       <div className="fb-list">
         {tab.cwd !== '/' && (
           <button type="button" className="file-row pseudo-up" onClick={cdParent}>
-            <span className="file-row-name"><span className="file-icon">▸</span><span className="file-name">..</span></span>
+            <span className="file-row-name"><span className="file-icon"><ParentDirectoryIcon size={14} /></span><span className="file-name">..</span></span>
           </button>
         )}
         {tab.loading && <div className="fb-loading">Loading…</div>}
@@ -357,6 +405,67 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
           destructive
           onConfirm={() => { if (!deleting) void performDelete(confirmDelete); }}
           onCancel={() => { if (!deleting) setConfirmDelete(null); }}
+        />
+      )}
+      {renameEntry && (
+        <div className="modal-backdrop" role="dialog" aria-label="rename item">
+          <div className="modal modal-form">
+            <div className="modal-title-row">
+              <span className="modal-title-icon" aria-hidden>
+                <PencilIcon size={14} />
+              </span>
+              <div className="modal-title-copy">
+                <h2>Rename item</h2>
+                <p className="form-title-meta">
+                  <FolderIcon size={11} open /> {tab.cwd}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                aria-label="Close rename"
+                title="Close"
+                onClick={() => { if (!renaming) { setRenameEntry(null); setRenameDraft(''); } }}
+                disabled={renaming}
+              >
+                <CloseIcon size={14} />
+              </button>
+            </div>
+            <div className="form-grid">
+              <label htmlFor="fb-rename">Name</label>
+              <input
+                id="fb-rename"
+                autoFocus
+                value={renameDraft}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); void submitRename(); }
+                  if (e.key === 'Escape' && !renaming) { e.preventDefault(); setRenameEntry(null); setRenameDraft(''); }
+                }}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" onClick={() => { setRenameEntry(null); setRenameDraft(''); }} disabled={renaming}>Cancel</button>
+              <button type="button" className="primary" onClick={() => void submitRename()} disabled={renaming || renameDraft.trim() === ''}>
+                {renaming && <span className="db-spinner inline-spinner" aria-hidden />}
+                {renaming ? 'Renaming…' : 'Rename'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {uploadOverwrite && (
+        <ConfirmModal
+          title="Overwrite file"
+          message={`Replace "${uploadOverwrite.base}" in ${tab.cwd}?`}
+          confirmLabel="Overwrite"
+          destructive
+          onConfirm={() => {
+            const next = uploadOverwrite;
+            setUploadOverwrite(null);
+            void performUpload(next.local, next.base);
+          }}
+          onCancel={() => setUploadOverwrite(null)}
         />
       )}
     </div>

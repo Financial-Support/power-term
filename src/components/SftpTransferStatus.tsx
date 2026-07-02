@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { onSftpTransferProgress, sftpCancelTransfer } from '../lib/ipc';
 import type { SftpTransferProgress } from '../types';
+import { CloseIcon, DownloadIcon, TransferStatusIcon, UploadIcon } from './AppIcons';
 
 type TransferRecord = SftpTransferProgress & {
   started_at: number;
@@ -13,11 +14,15 @@ const MAX_HISTORY = 80;
 export function SftpTransferStatus() {
   const [open, setOpen] = useState(false);
   const [records, setRecords] = useState<TransferRecord[]>(() => loadHistory());
+  const [cancellingIds, setCancellingIds] = useState<string[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     void onSftpTransferProgress((payload) => {
+      if (payload.state !== 'running') {
+        setCancellingIds((current) => current.filter((id) => id !== payload.transfer_id));
+      }
       setRecords((current) => {
         const now = Date.now();
         const existing = current.find((r) => r.transfer_id === payload.transfer_id);
@@ -59,6 +64,10 @@ export function SftpTransferStatus() {
       ? 'SFTP transfer history'
       : 'No SFTP transfers';
   const sorted = useMemo(() => [...records].sort((a, b) => b.updated_at - a.updated_at), [records]);
+  const activeTransfers = useMemo(
+    () => sorted.filter((record) => record.state === 'running'),
+    [sorted],
+  );
 
   const clearHistory = () => {
     const running = records.filter((r) => r.state === 'running');
@@ -67,11 +76,20 @@ export function SftpTransferStatus() {
   };
 
   const cancelTransfer = async (transferId: string) => {
+    setCancellingIds((current) => current.includes(transferId) ? current : [...current, transferId]);
     try {
       await sftpCancelTransfer(transferId);
     } catch (err) {
+      setCancellingIds((current) => current.filter((id) => id !== transferId));
       console.warn('cancel transfer failed', err);
     }
+  };
+
+  const cancelActiveTransfers = async () => {
+    const activeIds = records
+      .filter((record) => record.state === 'running')
+      .map((record) => record.transfer_id);
+    await Promise.all(activeIds.map((transferId) => cancelTransfer(transferId)));
   };
 
   return (
@@ -83,7 +101,7 @@ export function SftpTransferStatus() {
         title={buttonTitle}
         onClick={() => setOpen((v) => !v)}
       >
-        <TransferIcon active={activeCount > 0} />
+        <TransferStatusIcon size={18} className={activeCount > 0 ? 'spinning-transfer' : undefined} />
         {(activeCount > 0 || errorCount > 0) && (
           <span className="transfer-status-badge">{activeCount || errorCount}</span>
         )}
@@ -93,16 +111,35 @@ export function SftpTransferStatus() {
         <div className="transfer-popover" role="menu" aria-label="SFTP transfer history">
           <div className="transfer-popover-head">
             <span>SFTP transfers</span>
-            <button type="button" onClick={clearHistory} disabled={!records.some((r) => r.state !== 'running')}>
-              Clear
-            </button>
+            <div className="transfer-popover-actions">
+              <button type="button" onClick={clearHistory} disabled={!records.some((r) => r.state !== 'running')}>
+                Clear
+              </button>
+            </div>
           </div>
+          {activeTransfers.length > 0 && (
+            <div className="transfer-popover-banner">
+              <div className="transfer-popover-banner-copy">
+                <strong>{activeTransfers.length === 1 ? lastPathPart(activeTransfers[0].path) : `${activeTransfers.length} active transfers`}</strong>
+                <span>{activeTransfers.length === 1 ? 'Transfer in progress' : 'Transfers in progress'}</span>
+              </div>
+              <button type="button" className="transfer-popover-cancel-all" onClick={() => void cancelActiveTransfers()}>
+                <CloseIcon size={12} />
+                <span>{activeTransfers.length === 1 ? 'Cancel transfer' : 'Cancel all'}</span>
+              </button>
+            </div>
+          )}
           {sorted.length === 0 ? (
-            <div className="transfer-empty">No transfer history.</div>
+            <div className="transfer-empty">No transfers.</div>
           ) : (
             <div className="transfer-list">
               {sorted.map((r) => (
-                <TransferRow key={r.transfer_id} record={r} onCancel={cancelTransfer} />
+                <TransferRow
+                  key={r.transfer_id}
+                  record={r}
+                  cancelling={cancellingIds.includes(r.transfer_id)}
+                  onCancel={cancelTransfer}
+                />
               ))}
             </div>
           )}
@@ -112,14 +149,22 @@ export function SftpTransferStatus() {
   );
 }
 
-function TransferRow({ record, onCancel }: { record: TransferRecord; onCancel: (transferId: string) => Promise<void> }) {
+function TransferRow({
+  record,
+  cancelling,
+  onCancel,
+}: {
+  record: TransferRecord;
+  cancelling: boolean;
+  onCancel: (transferId: string) => Promise<void>;
+}) {
   const pct = record.bytes_total > 0
     ? Math.min(100, Math.round((record.bytes_done / record.bytes_total) * 100))
     : record.state === 'done' ? 100 : 0;
   const name = lastPathPart(record.path);
   const verb = record.direction === 'upload' ? 'Upload' : 'Download';
   const stateText = record.state === 'running'
-    ? `${pct}%`
+    ? (cancelling ? 'Cancelling…' : `${pct}%`)
     : record.state === 'done'
       ? 'Done'
       : record.state === 'cancelled'
@@ -129,11 +174,20 @@ function TransferRow({ record, onCancel }: { record: TransferRecord; onCancel: (
   return (
     <div className={`transfer-row transfer-row-${record.state}`}>
       <div className="transfer-row-main">
-        <span className="transfer-row-icon" aria-hidden>{record.direction === 'upload' ? '↑' : '↓'}</span>
+        <span className="transfer-row-icon" aria-hidden>
+          {record.direction === 'upload' ? <UploadIcon size={14} /> : <DownloadIcon size={14} />}
+        </span>
         <span className="transfer-row-name" title={record.path}>{name}</span>
         {record.state === 'running' ? (
-          <button type="button" className="transfer-cancel" onClick={() => void onCancel(record.transfer_id)}>
-            Cancel
+          <button
+            type="button"
+            className="transfer-cancel"
+            disabled={cancelling}
+            aria-label={`Cancel transfer ${name}`}
+            title={`Cancel transfer ${name}`}
+            onClick={() => void onCancel(record.transfer_id)}
+          >
+            {cancelling ? 'Cancelling…' : 'Cancel'}
           </button>
         ) : (
           <span className="transfer-row-state">{stateText}</span>
@@ -148,15 +202,6 @@ function TransferRow({ record, onCancel }: { record: TransferRecord; onCancel: (
       </div>
       {record.error && <div className="transfer-error">{record.error}</div>}
     </div>
-  );
-}
-
-function TransferIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden className={active ? 'spinning-transfer' : ''}>
-      <path d="M5 6.2 9 2.5l4 3.7M9 2.8v9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M13 11.8 9 15.5l-4-3.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.65" />
-    </svg>
   );
 }
 

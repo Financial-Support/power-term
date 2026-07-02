@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSyncStore } from '../state/syncStore';
+import { KeyIcon, RefreshIcon } from './AppIcons';
 
 export function SyncTab() {
   const syncState = useSyncStore((s) => s.syncState);
@@ -24,17 +25,26 @@ export function SyncTab() {
   if (!syncState?.user) {
     return (
       <div className="sync-tab">
-        <p className="sync-tab-desc">
-          Sign in to sync your hosts, snippets, and settings across devices.
-          Credentials are encrypted on your device before upload.
-        </p>
-        <button
-          type="button"
-          className="primary"
-          onClick={() => void signIn()}
-        >
-          Sign in with GitHub
-        </button>
+        <div className="settings-section-card">
+          <div className="settings-section-head">
+            <div>
+              <div className="settings-section-title-row">
+                <span className="settings-section-icon" aria-hidden><RefreshIcon size={13} /></span>
+                <h3>Cloud sync</h3>
+              </div>
+              <p className="sync-tab-desc">Sign in to sync.</p>
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void signIn()}
+            >
+              Sign in with GitHub
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -65,39 +75,48 @@ export function SyncTab() {
 
   return (
     <div className="sync-tab">
-      <div className="sync-row-between">
-        <div className="sync-account">
-          <div className="sync-user-email">{user.email ?? user.id}</div>
-          {syncState.last_synced != null && (
-            <div className="sync-last-synced">
-              Last synced: {new Date(syncState.last_synced).toLocaleString()}
+      <div className="settings-section-card">
+        <div className="sync-row-between">
+          <div className="sync-account">
+            <div className="settings-section-title-row">
+              <span className="settings-section-icon" aria-hidden><RefreshIcon size={13} /></span>
+              <h3>Cloud sync</h3>
             </div>
-          )}
-        </div>
-        <div className="sync-row-actions">
-          <button
-            type="button"
-            className="primary"
-            onClick={() => void handlePull()}
-            disabled={pulling}
-          >
-            {pulling ? 'Syncing…' : 'Sync now'}
-          </button>
-          <button type="button" onClick={() => void signOut()}>
-            Sign out
-          </button>
+            <div className="sync-user-email">{user.email ?? user.id}</div>
+            {syncState.last_synced != null && (
+              <div className="sync-last-synced">
+                Last synced: {new Date(syncState.last_synced).toLocaleString()}
+              </div>
+            )}
+          </div>
+          <div className="sync-row-actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void handlePull()}
+              disabled={pulling}
+            >
+              {pulling ? 'Syncing…' : 'Sync now'}
+            </button>
+            <button type="button" onClick={() => void signOut()}>
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
 
       {syncState.error && <p className="form-error">{syncState.error}</p>}
 
-      <div className="sync-divider" role="separator" />
-
-      <div className="sync-key-section">
-        <h3>Sync key</h3>
-        <p className="sync-tab-desc">
-          Encrypts your saved credentials before upload. Use the same key on every device.
-        </p>
+      <div className="settings-section-card sync-key-section">
+        <div className="settings-section-head">
+          <div>
+            <div className="settings-section-title-row">
+              <span className="settings-section-icon" aria-hidden><KeyIcon size={13} /></span>
+              <h3>Sync key</h3>
+            </div>
+            <p className="sync-tab-desc">Encryption key</p>
+          </div>
+        </div>
 
         {hasKey ? (
           <div className="sync-key-display">
@@ -114,19 +133,19 @@ export function SyncTab() {
           </div>
         ) : (
           <p className="sync-key-notice">
-            No sync key on this device — paste one from another device below to decrypt your credentials.
+            No local key.
           </p>
         )}
 
         <div className="sync-key-input-block">
           <label htmlFor="sm-sync-key-input" className="sync-tab-sublabel">
-            {hasKey ? 'Replace with key from another device' : 'Set key from another device'}
+            {hasKey ? 'Replace key' : 'Set key'}
           </label>
           <div className="sync-key-input-row">
             <input
               id="sm-sync-key-input"
               type="text"
-              placeholder="Paste base58 sync key…"
+              placeholder="Base58 sync key"
               value={keyInput}
               onChange={(e) => setKeyInput(e.target.value)}
             />
@@ -135,7 +154,7 @@ export function SyncTab() {
               onClick={() => void handleSetKey()}
               disabled={!keyInput.trim() || keyLoading}
             >
-              Save key
+              Save
             </button>
           </div>
         </div>

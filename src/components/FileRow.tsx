@@ -1,4 +1,5 @@
 import type { SftpEntry } from '../types';
+import { DownloadIcon, FileIcon, FolderIcon, LinkIcon, PencilIcon, TrashIcon } from './AppIcons';
 
 interface Props {
   entry: SftpEntry;
@@ -17,7 +18,7 @@ interface Props {
 export function FileRow({ entry, onCd, onDownload, onRename, onDelete, onDragStart, onContextMenu }: Props) {
   const isDir = entry.kind === 'dir';
   const isSymlink = entry.kind === 'symlink';
-  const icon = isDir ? '📁' : isSymlink ? '🔗' : '📄';
+  const icon = isDir ? <FolderIcon size={14} /> : isSymlink ? <LinkIcon size={14} /> : <FileIcon size={14} />;
   const draggable = !!onDragStart && !isSymlink;
   return (
     <div
@@ -25,7 +26,6 @@ export function FileRow({ entry, onCd, onDownload, onRename, onDelete, onDragSta
       draggable={draggable}
       onDragStart={draggable ? (e) => onDragStart!(e, entry) : undefined}
       onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e, entry); } : undefined}
-      title={draggable ? (isDir ? 'Drag to local pane to download folder' : 'Drag to local pane to download') : undefined}
     >
       <button
         type="button"
@@ -39,10 +39,10 @@ export function FileRow({ entry, onCd, onDownload, onRename, onDelete, onDragSta
       <span className="file-modified">{formatTime(entry.modified_ms)}</span>
       <span className="file-actions">
         {!isDir && (
-          <button type="button" aria-label={`download ${entry.name}`} onClick={() => onDownload(entry)}>⬇</button>
+          <button type="button" aria-label={`download ${entry.name}`} title={`Download ${entry.name}`} onClick={() => onDownload(entry)}><DownloadIcon size={13} /></button>
         )}
-        <button type="button" aria-label={`rename ${entry.name}`} onClick={() => onRename(entry)}>✎</button>
-        <button type="button" aria-label={`delete ${entry.name}`} onClick={() => onDelete(entry)}>×</button>
+        <button type="button" aria-label={`rename ${entry.name}`} title={`Rename ${entry.name}`} onClick={() => onRename(entry)}><PencilIcon size={13} /></button>
+        <button type="button" aria-label={`delete ${entry.name}`} title={`Delete ${entry.name}`} onClick={() => onDelete(entry)}><TrashIcon size={13} /></button>
       </span>
     </div>
   );

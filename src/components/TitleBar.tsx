@@ -4,59 +4,13 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSessionStore } from '../state/sessionStore';
 import { SyncStatus } from './SyncStatus';
 import { SftpTransferStatus } from './SftpTransferStatus';
+import { BrandIcon, BroadcastIcon, LayoutIcon } from './AppIcons';
 import type { LayoutKind } from '../types';
 
 interface Props {
   children: ReactNode;
   onLayoutChange?: (kind: LayoutKind) => void;
   onOpenSyncSettings?: () => void;
-}
-
-function LayoutSvg({ kind }: { kind: LayoutKind }) {
-  const s = 18;
-  const r = 2;
-  const stroke = 'currentColor';
-  const sw = 1.4;
-  switch (kind) {
-    case 'solo':
-      return (
-        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
-          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
-        </svg>
-      );
-    case '2col':
-      return (
-        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
-          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
-          <line x1="9" y1="2" x2="9" y2="16" stroke={stroke} strokeWidth={sw} />
-        </svg>
-      );
-    case '2row':
-      return (
-        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
-          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
-          <line x1="2" y1="9" x2="16" y2="9" stroke={stroke} strokeWidth={sw} />
-        </svg>
-      );
-    case '3col':
-      return (
-        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
-          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
-          <line x1="7" y1="2" x2="7" y2="16" stroke={stroke} strokeWidth={sw} />
-          <line x1="11" y1="2" x2="11" y2="16" stroke={stroke} strokeWidth={sw} />
-        </svg>
-      );
-    case '2x2':
-      return (
-        <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none">
-          <rect x="2" y="2" width="14" height="14" rx={r} stroke={stroke} strokeWidth={sw} />
-          <line x1="9" y1="2" x2="9" y2="16" stroke={stroke} strokeWidth={sw} />
-          <line x1="2" y1="9" x2="16" y2="9" stroke={stroke} strokeWidth={sw} />
-        </svg>
-      );
-    default:
-      return null;
-  }
 }
 
 const LAYOUT_ICONS: { kind: LayoutKind; label: string }[] = [
@@ -164,7 +118,7 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
     >
       <div className="titlebar-drag-left" />
       <div className="brand" aria-label="Power Term" data-no-drag>
-        <BrandMark />
+        <BrandIcon size={18} />
         <span className="brand-wordmark">Power<span className="brand-wordmark-gap"> </span>Term</span>
       </div>
       {children}
@@ -179,7 +133,7 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
         title={broadcast ? 'Broadcast input ON — typing fans out to every visible pane' : 'Broadcast input to all visible panes'}
         onClick={() => setBroadcast(!broadcast)}
       >
-        <BroadcastIcon />
+        <BroadcastIcon size={18} />
       </button>
       <div className="layout-picker-wrap" data-no-drag ref={wrapRef}>
         <button
@@ -189,7 +143,7 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
           title="Change layout"
           onClick={() => setPickerOpen((o) => !o)}
         >
-          <LayoutSvg kind={layoutKind} />
+          <LayoutIcon kind={layoutKind} />
         </button>
         {pickerOpen && (
           <div className="layout-picker-popover" role="menu">
@@ -204,39 +158,12 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
                 onClick={() => handlePick(kind)}
                 title={label}
               >
-                <LayoutSvg kind={kind} />
+                <LayoutIcon kind={kind} />
               </button>
             ))}
           </div>
         )}
       </div>
     </div>
-  );
-}
-
-function BroadcastIcon() {
-  // Sized + viewBox-matched to LayoutSvg (18×18) so the two title-bar
-  // buttons read as a balanced pair.
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-      <circle cx="9" cy="9" r="1.6" fill="currentColor" />
-      <path d="M6.4 6.4a3.7 3.7 0 0 0 0 5.2M11.6 6.4a3.7 3.7 0 0 1 0 5.2"
-            stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <path d="M4.2 4.2a6.7 6.7 0 0 0 0 9.6M13.8 4.2a6.7 6.7 0 0 1 0 9.6"
-            stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"
-            strokeOpacity="0.55" />
-    </svg>
-  );
-}
-
-/** A stylised lightning bolt enclosed in a rounded square — doubles as the
- * app icon. Uses currentColor so it picks up the accent in the title bar. */
-function BrandMark() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
-      <rect x="1" y="1" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.4" strokeOpacity="0.9" />
-      <path d="M11.2 4 L6.2 11.2 H10 L8.8 16 L13.8 8.8 H10 Z"
-            fill="currentColor" />
-    </svg>
   );
 }

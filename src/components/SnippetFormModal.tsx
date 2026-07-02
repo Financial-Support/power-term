@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Snippet, SnippetInput } from '../types';
+import { CloseIcon, SnippetIcon } from './AppIcons';
 
 interface Props {
   mode: 'create' | 'edit';
@@ -47,7 +48,16 @@ export function SnippetFormModal({ mode, snippet, onSave, onCancel, saving }: Pr
   return (
     <div className="modal-backdrop" role="dialog" aria-label="snippet form">
       <div className="modal modal-form">
-        <h2>{mode === 'create' ? 'Add snippet' : 'Edit snippet'}</h2>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><SnippetIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">Snippet</span>
+            <h2>{mode === 'create' ? 'Add snippet' : 'Edit snippet'}</h2>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close snippet form" title="Close" onClick={onCancel}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
         <div className="form-grid">
           <label htmlFor="sfm-name">Name</label>
           <input id="sfm-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />

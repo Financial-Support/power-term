@@ -7,6 +7,7 @@ import type { Host, HostInput } from '../types';
 import type { SidebarSection } from './IconRail';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { TagChip } from './TagChip';
+import { ArrowRightIcon, BranchIcon, ChevronDownIcon, CopyIcon, DownloadIcon, FolderIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon } from './AppIcons';
 
 interface Props {
   section: SidebarSection;
@@ -138,6 +139,13 @@ export function SidebarPanel({
       {/* Hosts section */}
       {section === 'hosts' && (
         <div className="sp-section">
+          <div className="sp-panel-head">
+            <div className="sp-panel-title-row">
+              <span className="sp-panel-title">Hosts</span>
+              <span className="sp-panel-count">{filteredHosts.length}</span>
+            </div>
+            <p className="sp-panel-subtitle">Groups, tags, and active sessions</p>
+          </div>
           <div className="sp-search-row">
             <div className="sp-search-wrap">
               <span className="sp-search-icon" aria-hidden>
@@ -151,13 +159,12 @@ export function SidebarPanel({
                 onChange={(e) => setFilter(e.target.value)}
                 aria-label="filter hosts"
               />
-              <kbd className="sp-search-kbd" aria-hidden>⌘K</kbd>
             </div>
           </div>
           {error && <p className="sp-error">{error}</p>}
           <div className="sp-list">
             {hosts.length === 0 && (
-              <p className="sp-empty">No saved hosts.</p>
+              <p className="sp-empty">No hosts.</p>
             )}
             {groups.map((g) => {
               const isCollapsed = collapsed.has(g.name);
@@ -181,7 +188,7 @@ export function SidebarPanel({
                         onDoubleClick={() => startRenameGroup(g)}
                         aria-expanded={!isCollapsed}
                       >
-                        <span className={`sp-caret${isCollapsed ? ' collapsed' : ''}`}><CaretIcon /></span>
+                        <span className={`sp-caret${isCollapsed ? ' collapsed' : ''}`}><ChevronDownIcon size={10} /></span>
                         <span className="sp-group-icon"><FolderIcon open={!isCollapsed} /></span>
                         {isRenaming ? (
                           <input
@@ -210,7 +217,7 @@ export function SidebarPanel({
                           className="sp-group-rename-btn"
                           aria-label={`rename group ${g.name}`}
                           onClick={() => startRenameGroup(g)}
-                        >✎</button>
+                        ><PencilIcon size={12} /></button>
                       )}
                     </div>
                   )}
@@ -245,7 +252,7 @@ export function SidebarPanel({
                             <span
                               className="sp-host-jump"
                               title={'Jumps via ' + host.tags.find((t) => t.startsWith('proxyjump:'))!.slice('proxyjump:'.length)}
-                            >↳</span>
+                            ><BranchIcon size={12} /></span>
                           )}
                           {host.tags
                             .filter((t) => !t.includes(':'))
@@ -254,9 +261,9 @@ export function SidebarPanel({
                             ))}
                           <span className="sp-host-port">{host.port !== 22 ? host.port : ''}</span>
                           <span className="sp-host-actions">
-                            <button type="button" aria-label={`sftp ${host.name}`} onClick={() => onOpenSftp(host)}>📂</button>
-                            <button type="button" aria-label={`edit ${host.name}`} onClick={() => onEditHost(host)}>✎</button>
-                            <button type="button" aria-label={`delete ${host.name}`} onClick={() => onDeleteHost(host)}>×</button>
+                            <button type="button" aria-label={`sftp ${host.name}`} title={`Open SFTP for ${host.name}`} onClick={() => onOpenSftp(host)}><FolderIcon size={13} open /></button>
+                            <button type="button" aria-label={`edit ${host.name}`} title={`Edit ${host.name}`} onClick={() => onEditHost(host)}><PencilIcon size={13} /></button>
+                            <button type="button" aria-label={`delete ${host.name}`} title={`Delete ${host.name}`} onClick={() => onDeleteHost(host)}><TrashIcon size={12} /></button>
                           </span>
                         </li>
                         );
@@ -273,12 +280,10 @@ export function SidebarPanel({
                 type="button"
                 className="sp-add-primary"
                 onClick={onAddHost}
-                title="Add a new host"
+                title="Add host"
               >
                 <span className="sp-add-icon" aria-hidden>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  </svg>
+                  <PlusIcon size={14} />
                 </span>
                 <span>Add host</span>
               </button>
@@ -286,13 +291,10 @@ export function SidebarPanel({
                 type="button"
                 className="sp-add-import"
                 onClick={onImportSshConfig}
-                title="Parse ~/.ssh/config and pick which hosts to import"
-                aria-label="Import from ~/.ssh/config"
+                title="Import SSH config"
+                aria-label="Import SSH config"
               >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                  <path d="M3 9v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                  <path d="M7 2v6.5M4 6l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <DownloadIcon size={14} />
               </button>
             </div>
           </div>
@@ -352,13 +354,13 @@ function buildHostCtxItems(
   },
 ): MenuEntry[] {
   return [
-    { label: 'Connect', icon: '⏵', onClick: () => cb.onConnect(host) },
-    { label: 'Open SFTP', icon: '📂', onClick: () => cb.onOpenSftp(host) },
+    { label: 'Connect', icon: <ArrowRightIcon size={14} />, onClick: () => cb.onConnect(host) },
+    { label: 'Open SFTP', icon: <FolderIcon size={14} open />, onClick: () => cb.onOpenSftp(host) },
     { separator: true },
-    { label: 'Edit…', icon: '✎', onClick: () => cb.onEditHost(host) },
-    { label: 'Duplicate', icon: '⎘', onClick: () => cb.onDuplicateHost(host) },
+    { label: 'Edit…', icon: <PencilIcon size={14} />, onClick: () => cb.onEditHost(host) },
+    { label: 'Duplicate', icon: <CopyIcon size={14} />, onClick: () => cb.onDuplicateHost(host) },
     { separator: true },
-    { label: 'Delete', icon: '×', danger: true, onClick: () => cb.onDeleteHost(host) },
+    { label: 'Delete', icon: <TrashIcon size={14} />, danger: true, onClick: () => cb.onDeleteHost(host) },
   ];
 }
 
@@ -369,44 +371,4 @@ function hostToInput(host: Host, override: Partial<HostInput>): HostInput {
     auth_method: host.auth_method, key_path: host.key_path, notes: host.notes,
     ...override,
   };
-}
-
-function SearchIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-      <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M9.2 9.2l3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CaretIcon() {
-  // The caret rotates -90° via CSS when the group is collapsed (keeps a
-  // single SVG asset for both states).
-  return (
-    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden>
-      <path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" strokeWidth="1.4"
-            strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function FolderIcon({ open }: { open: boolean }) {
-  if (open) {
-    return (
-      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-        <path d="M2 4.5C2 3.95 2.45 3.5 3 3.5H5.5L6.5 4.5H11C11.55 4.5 12 4.95 12 5.5V6H4L2.6 11.5H2.5C2 11.5 1.5 11 1.5 10.5L2 4.5Z"
-              fill="currentColor" fillOpacity="0.16" />
-        <path d="M2 4.5C2 3.95 2.45 3.5 3 3.5H5.5L6.5 4.5H11C11.55 4.5 12 4.95 12 5.5V6M2 4.5V10.5C2 11.05 2.45 11.5 3 11.5H10.6C11.05 11.5 11.45 11.2 11.55 10.78L12.7 6.78C12.85 6.18 12.4 5.5 11.75 5.5H4.25C3.8 5.5 3.4 5.8 3.3 6.22L2 11.5"
-              stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-      <path d="M2 5C2 4.45 2.45 4 3 4H5.5L6.5 5H11C11.55 5 12 5.45 12 6V10.5C12 11.05 11.55 11.5 11 11.5H3C2.45 11.5 2 11.05 2 10.5V5Z"
-            fill="currentColor" fillOpacity="0.12"
-            stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
-    </svg>
-  );
 }

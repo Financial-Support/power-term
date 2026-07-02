@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 
 export interface MenuItem {
   label: string;
-  /** Icon glyph or emoji shown left of the label. Optional. */
-  icon?: string;
+  /** Optional icon shown left of the label. */
+  icon?: ReactNode;
   onClick: () => void;
   /** Renders the item in destructive (red) styling. */
   danger?: boolean;

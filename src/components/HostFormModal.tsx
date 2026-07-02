@@ -5,6 +5,7 @@ import { useHostStore } from '../state/hostStore';
 import { useSshKeyStore } from '../state/sshKeyStore';
 import type { AuthMethodKind, Host, HostInput } from '../types';
 import { TagsMultiPicker } from './TagsMultiPicker';
+import { CloseIcon, ServerIcon } from './AppIcons';
 
 export interface HostFormSaveArgs {
   input: HostInput;
@@ -134,7 +135,16 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
   return (
     <div className="modal-backdrop" role="dialog" aria-label="host form">
       <div className="modal modal-form">
-        <h2>{mode === 'create' ? 'Add host' : 'Edit host'}</h2>
+        <div className="modal-title-row">
+          <span className="modal-title-icon" aria-hidden><ServerIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">Host</span>
+            <h2>{mode === 'create' ? 'Add host' : 'Edit host'}</h2>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close host form" title="Close" onClick={onCancel}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
         <div className="form-grid">
           <label htmlFor="hfm-name">Name</label>
           <input id="hfm-name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -166,9 +176,9 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
         </div>
 
         <fieldset className="auth-method">
-          <legend>Authentication</legend>
+          <legend>Access</legend>
           <label>
-            <input type="radio" name="auth" checked={authMethod === 'agent'} onChange={() => setAuthMethod('agent')} /> SSH agent
+            <input type="radio" name="auth" checked={authMethod === 'agent'} onChange={() => setAuthMethod('agent')} /> Agent
           </label>
           <label>
             <input type="radio" id="hfm-auth-key" name="auth" checked={authMethod === 'key'} onChange={() => setAuthMethod('key')} /> Private key
@@ -180,7 +190,7 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
 
         {authMethod === 'key' && (
           <div className="auth-fields">
-            <label htmlFor="hfm-key-select">Saved keys</label>
+            <label htmlFor="hfm-key-select">Key</label>
             <select
               id="hfm-key-select"
               value={sshKeys.find((k) => k.path === keyPath)?.id ?? ''}
@@ -190,7 +200,7 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
                 else setKeyPath('');
               }}
             >
-              <option value="">— custom path below —</option>
+              <option value="">Custom path</option>
               {sshKeys.map((k) => (
                 <option key={k.id} value={k.id}>{k.name} ({k.path})</option>
               ))}
@@ -206,7 +216,7 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
             <input id="hfm-passphrase" type="password" value={secret} onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
 
             <label className="checkbox">
-              <input type="checkbox" checked={saveSecret} onChange={(e) => { setSaveSecret(e.target.checked); setSaveSecretDirty(true); }} /> Save passphrase to Keychain
+              <input type="checkbox" checked={saveSecret} onChange={(e) => { setSaveSecret(e.target.checked); setSaveSecretDirty(true); }} /> Save passphrase
             </label>
           </div>
         )}
@@ -217,7 +227,7 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
             <input id="hfm-password" type="password" value={secret} onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
 
             <label className="checkbox">
-              <input type="checkbox" checked={saveSecret} onChange={(e) => { setSaveSecret(e.target.checked); setSaveSecretDirty(true); }} /> Save password to Keychain
+              <input type="checkbox" checked={saveSecret} onChange={(e) => { setSaveSecret(e.target.checked); setSaveSecretDirty(true); }} /> Save password
             </label>
           </div>
         )}

@@ -1,3 +1,5 @@
+import { AlertCircleIcon, CloseIcon } from './AppIcons';
+
 interface Props {
   title: string;
   message: string;
@@ -23,7 +25,16 @@ export function ConfirmModal({
   return (
     <div className="modal-backdrop" role="dialog" aria-label={title} aria-busy={loading}>
       <div className={`modal ${destructive ? 'modal-warning' : ''}`}>
-        <h2>{title}</h2>
+        <div className="modal-title-row">
+          <span className={`modal-title-icon${destructive ? ' danger' : ''}`} aria-hidden><AlertCircleIcon size={14} /></span>
+          <div className="modal-title-copy">
+            <span className="modal-eyebrow">{destructive ? 'Confirm' : 'Review'}</span>
+            <h2>{title}</h2>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label={`Close ${title}`} title="Close" onClick={onCancel} disabled={loading}>
+            <CloseIcon size={14} />
+          </button>
+        </div>
         <p>{message}</p>
         <div className="modal-actions">
           <button type="button" onClick={onCancel} disabled={loading}>{cancelLabel}</button>

@@ -210,6 +210,10 @@ export async function sftpCancelTransfer(transferId: string): Promise<void> {
   await invoke('sftp_cancel_transfer', { transferId });
 }
 
+export function isSftpTransferCancelledError(err: unknown): boolean {
+  return String(err).toLowerCase().includes('transfer cancelled');
+}
+
 export async function onSftpTransferProgress(
   cb: (payload: SftpTransferProgress) => void,
 ): Promise<UnlistenFn> {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { secretGet, ptyWrite, sshWrite } from '../lib/ipc';
 import { useSessionStore } from '../state/sessionStore';
+import { CloseIcon, CopyIcon, SparklesIcon, TerminalIcon } from './AppIcons';
 
 const SECRET_KEY = '__ai_anthropic';
 const MODEL = 'claude-sonnet-4-6';
@@ -52,7 +53,7 @@ export function AICommandBar({ open, onClose }: Props) {
     try {
       const apiKey = await secretGet(SECRET_KEY);
       if (!apiKey) {
-        setError('No Anthropic API key. Add one in Settings → AI.');
+        setError('Add an Anthropic API key in Settings > AI.');
         return;
       }
       const cmd = await callClaude(apiKey, text);
@@ -69,7 +70,7 @@ export function AICommandBar({ open, onClose }: Props) {
     const { activeTabId, tabs } = useSessionStore.getState();
     const tab = tabs.find((t) => t.id === activeTabId);
     if (!tab || tab.kind === 'sftp') {
-      setError('No active terminal to insert into.');
+      setError('No active terminal.');
       return;
     }
     // Append a newline only when "run" was clicked; otherwise the user can
@@ -84,9 +85,17 @@ export function AICommandBar({ open, onClose }: Props) {
   return (
     <div className="ai-bar-backdrop" onClick={onClose}>
       <div className="ai-bar" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="AI command bar">
-        <div className="ai-bar-header">
-          <span className="ai-bar-pill">AI</span>
-          <span className="ai-bar-title">Describe what you want, get a shell command.</span>
+        <div className="modal-title-row ai-bar-title-row">
+          <span className="modal-title-icon" aria-hidden>
+            <SparklesIcon size={14} />
+          </span>
+          <div className="modal-title-copy">
+            <h2>AI command</h2>
+            <p className="form-title-meta"><TerminalIcon size={11} /> Describe intent, get a shell command</p>
+          </div>
+          <button type="button" className="modal-close-btn" aria-label="Close AI command bar" title="Close" onClick={onClose}>
+            <CloseIcon size={13} />
+          </button>
         </div>
         <textarea
           ref={inputRef}
@@ -101,7 +110,7 @@ export function AICommandBar({ open, onClose }: Props) {
           disabled={busy}
         />
         <div className="ai-bar-row">
-          <span className="ai-bar-hint">Enter to ask · Shift+Enter for newline · Esc to close</span>
+          <span className="ai-bar-hint">Anthropic command generation</span>
           <button type="button" className="primary" onClick={() => void submit()} disabled={busy || !prompt.trim()}>
             {busy ? 'Asking…' : 'Ask Claude'}
           </button>
@@ -111,9 +120,10 @@ export function AICommandBar({ open, onClose }: Props) {
 
         {result && (
           <div className="ai-bar-result">
+            <div className="ai-bar-result-label"><TerminalIcon size={13} /><span>Suggested command</span></div>
             <pre className="ai-bar-cmd"><code>{result.command}</code></pre>
             <div className="ai-bar-actions">
-              <button type="button" onClick={() => void navigator.clipboard.writeText(result.command)}>Copy</button>
+              <button type="button" onClick={() => void navigator.clipboard.writeText(result.command)}><CopyIcon size={13} />Copy</button>
               <button type="button" onClick={() => insert(false)}>Insert</button>
               <button type="button" className="primary" onClick={() => insert(true)}>Insert &amp; run</button>
             </div>

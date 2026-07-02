@@ -36,11 +36,13 @@ import { KeysPanel } from './components/KeysPanel';
 import { KeyFormModal } from './components/KeyFormModal';
 import { useSshKeyStore } from './state/sshKeyStore';
 import { DbConnectionsPanel } from './components/DbConnectionsPanel';
+import { ChevronRightIcon, PlusIcon } from './components/AppIcons';
 import { DbConnectionFormModal, dbSecretKey, type PasswordIntent } from './components/DbConnectionFormModal';
 import { DbPasswordPrompt } from './components/DbPasswordPrompt';
 import { DbSshPassphrasePrompt } from './components/DbSshPassphrasePrompt';
 import { DbConnectingModal } from './components/DbConnectingModal';
 import { DbBrowser } from './components/DbBrowser';
+import { AccentDock } from './components/AccentDock';
 import { useDbConnectionStore } from './state/dbConnectionStore';
 import { dbSessionClose, dbSessionOpen } from './lib/ipc';
 import { SettingsModal } from './components/SettingsModal';
@@ -215,7 +217,7 @@ export function App() {
 
   const SIDEBAR_MIN = 160;
   const SIDEBAR_MAX = 480;
-  const SIDEBAR_DEFAULT = 210;
+  const SIDEBAR_DEFAULT = 280;
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const raw = localStorage.getItem('sidebar-width');
     const n = raw ? parseInt(raw, 10) : NaN;
@@ -929,7 +931,7 @@ export function App() {
             title="Show database list"
           >
             <span>Databases</span>
-            <strong>›</strong>
+            <strong><ChevronRightIcon size={12} /></strong>
           </button>
         )}
         <main
@@ -1063,13 +1065,9 @@ export function App() {
                   ) : (
                     <div className="pane-empty">
                       <button type="button" className="pane-empty-btn" onClick={(e) => { e.stopPropagation(); setActivePane(i); void newLocalTab(); }}>
-                        +
+                        <PlusIcon size={16} />
                       </button>
-                      <div className="pane-empty-hints">
-                        <div className="pane-empty-hint"><kbd>⌘T</kbd><span>New local tab</span></div>
-                        <div className="pane-empty-hint"><kbd>⌘K</kbd><span>Find host or snippet</span></div>
-                        <div className="pane-empty-hint"><kbd>⌘,</kbd><span>Settings</span></div>
-                      </div>
+                      <div className="pane-empty-title">New tab</div>
                     </div>
                   )}
                 </div>
@@ -1282,6 +1280,7 @@ export function App() {
           onCancel={() => setConfirmDeleteKey(null)}
         />
       )}
+      <AccentDock onOpenSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }} />
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} initialTab={settingsInitialTab} />}
       {sshImportOpen && <SshConfigImportModal onClose={() => setSshImportOpen(false)} />}
       <AICommandBar open={aiBarOpen} onClose={() => setAiBarOpen(false)} />
