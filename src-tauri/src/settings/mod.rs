@@ -21,6 +21,8 @@ pub struct Settings {
     /// the macOS user accent via the CSS `AccentColor` keyword — or a
     /// `#RRGGBB` hex string. Anything else is rejected by the setter.
     pub accent_color: String,
+    /// Whether the quick-theme floating panel is visible.
+    pub quick_theme_panel_open: bool,
     pub updated_at: u64,
 }
 
@@ -38,6 +40,7 @@ impl Default for Settings {
             ssh_keepalive_interval_secs: 30,
             terminal_theme: "default".to_string(),
             accent_color: "system".to_string(),
+            quick_theme_panel_open: false,
             updated_at: 0,
         }
     }
@@ -57,6 +60,7 @@ pub struct SettingsPatch {
     pub ssh_keepalive_interval_secs: Option<u32>,
     pub terminal_theme: Option<String>,
     pub accent_color: Option<String>,
+    pub quick_theme_panel_open: Option<bool>,
 }
 
 #[derive(Debug, Error)]
@@ -107,6 +111,7 @@ impl SettingsStore {
         if let Some(v) = patch.ssh_connect_timeout_secs { s.ssh_connect_timeout_secs = v; }
         if let Some(v) = patch.ssh_keepalive_interval_secs { s.ssh_keepalive_interval_secs = v; }
         if let Some(v) = patch.terminal_theme { s.terminal_theme = v; }
+        if let Some(v) = patch.quick_theme_panel_open { s.quick_theme_panel_open = v; }
         if let Some(v) = patch.accent_color {
             // Either "system" (= follow macOS) or a 7-char hex literal.
             // Anything else is silently ignored so a typo can't poison config.

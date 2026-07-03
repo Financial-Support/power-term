@@ -14,6 +14,7 @@ export interface Settings {
   terminal_theme: string;
   /** "system" (use macOS AccentColor) or a `#RRGGBB` hex string. */
   accent_color: string;
+  quick_theme_panel_open: boolean;
   updated_at: number;
 }
 
