@@ -23,6 +23,8 @@ pub struct Settings {
     pub accent_color: String,
     /// Whether the quick-theme floating panel is visible.
     pub quick_theme_panel_open: bool,
+    /// Whether the accent colour dock is visible.
+    pub accent_dock_open: bool,
     pub updated_at: u64,
 }
 
@@ -41,6 +43,7 @@ impl Default for Settings {
             terminal_theme: "default".to_string(),
             accent_color: "system".to_string(),
             quick_theme_panel_open: false,
+            accent_dock_open: true,
             updated_at: 0,
         }
     }
@@ -61,6 +64,7 @@ pub struct SettingsPatch {
     pub terminal_theme: Option<String>,
     pub accent_color: Option<String>,
     pub quick_theme_panel_open: Option<bool>,
+    pub accent_dock_open: Option<bool>,
 }
 
 #[derive(Debug, Error)]
@@ -112,6 +116,7 @@ impl SettingsStore {
         if let Some(v) = patch.ssh_keepalive_interval_secs { s.ssh_keepalive_interval_secs = v; }
         if let Some(v) = patch.terminal_theme { s.terminal_theme = v; }
         if let Some(v) = patch.quick_theme_panel_open { s.quick_theme_panel_open = v; }
+        if let Some(v) = patch.accent_dock_open { s.accent_dock_open = v; }
         if let Some(v) = patch.accent_color {
             // Either "system" (= follow macOS) or a 7-char hex literal.
             // Anything else is silently ignored so a typo can't poison config.

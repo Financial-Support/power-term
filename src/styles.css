@@ -2209,6 +2209,62 @@ body::before {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
+.accent-dock-collapse {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: var(--transition-smooth);
+}
+.accent-dock-collapse:hover {
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+}
+.accent-dock-reveal {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(18, 21, 31, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+.accent-dock-reveal:hover {
+  color: var(--fg);
+  background: rgba(18, 21, 31, 0.88);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.accent-dock-reveal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+.accent-dock-reveal-label {
+  text-transform: capitalize;
+}
 .accent-dock-settings {
   width: 28px;
   height: 28px;

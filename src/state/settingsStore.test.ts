@@ -19,6 +19,7 @@ describe('settingsStore', () => {
       shell: null, font_family: 'JetBrains Mono', font_size: 14,
       theme: 'auto', cursor_blink: true, cursor_style: 'block', accent_color: 'system', scrollback_lines: 10000,
       quick_theme_panel_open: false,
+      accent_dock_open: true,
     });
     await useSettingsStore.getState().load();
     expect(useSettingsStore.getState().settings?.font_size).toBe(14);
@@ -29,6 +30,7 @@ describe('settingsStore', () => {
       shell: null, font_family: 'JetBrains Mono', font_size: 18,
       theme: 'auto', cursor_blink: true, cursor_style: 'block', accent_color: 'system', scrollback_lines: 10000,
       quick_theme_panel_open: false,
+      accent_dock_open: true,
     });
     await useSettingsStore.getState().update({ font_size: 18 });
     expect(useSettingsStore.getState().settings?.font_size).toBe(18);

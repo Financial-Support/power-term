@@ -258,6 +258,7 @@ export function App() {
   const [dbSessions, setDbSessions] = useState<Record<string, { sessionId: string; connection: DbConnection }>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const quickThemePanelOpen = settings?.quick_theme_panel_open ?? false;
+  const accentDockOpen = settings?.accent_dock_open ?? true;
   const [sshImportOpen, setSshImportOpen] = useState(false);
   const [aiBarOpen, setAiBarOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<'appearance' | 'terminal' | 'sync'>('appearance');
@@ -1282,7 +1283,12 @@ export function App() {
           onCancel={() => setConfirmDeleteKey(null)}
         />
       )}
-      <AccentDock onOpenSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }} />
+      <AccentDock
+        collapsed={!accentDockOpen}
+        onExpand={() => void useSettingsStore.getState().update({ accent_dock_open: true })}
+        onCollapse={() => void useSettingsStore.getState().update({ accent_dock_open: false })}
+        onOpenSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
+      />
       {settings && (
         <QuickThemeFloater
           collapsed={!quickThemePanelOpen}

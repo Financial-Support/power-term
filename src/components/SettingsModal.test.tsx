@@ -13,7 +13,7 @@ const defaults: Settings = {
   shell: null, font_family: 'JetBrains Mono', font_size: 14, theme: 'auto',
   cursor_blink: true, cursor_style: 'block', accent_color: 'system', scrollback_lines: 10000,
   ssh_connect_timeout_secs: 10, ssh_keepalive_interval_secs: 30,
-  terminal_theme: 'default', quick_theme_panel_open: false, updated_at: 0,
+  terminal_theme: 'default', quick_theme_panel_open: false, accent_dock_open: true, updated_at: 0,
 };
 
 beforeEach(() => {

@@ -15,6 +15,7 @@ export interface Settings {
   /** "system" (use macOS AccentColor) or a `#RRGGBB` hex string. */
   accent_color: string;
   quick_theme_panel_open: boolean;
+  accent_dock_open: boolean;
   updated_at: number;
 }
 

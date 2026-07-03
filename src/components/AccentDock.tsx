@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useSettingsStore } from '../state/settingsStore';
-import { SettingsIcon } from './AppIcons';
+import { ChevronDownIcon, ChevronRightIcon, SettingsIcon } from './AppIcons';
 
 const ACCENT_PRESETS: Array<{ id: string; label: string }> = [
   { id: 'system', label: 'System accent' },
@@ -13,10 +13,13 @@ const ACCENT_PRESETS: Array<{ id: string; label: string }> = [
 ];
 
 interface Props {
+  collapsed: boolean;
+  onExpand: () => void;
+  onCollapse: () => void;
   onOpenSettings?: () => void;
 }
 
-export function AccentDock({ onOpenSettings }: Props) {
+export function AccentDock({ collapsed, onExpand, onCollapse, onOpenSettings }: Props) {
   const settings = useSettingsStore((s) => s.settings);
   const updateSettings = useSettingsStore((s) => s.update);
 
@@ -27,15 +30,44 @@ export function AccentDock({ onOpenSettings }: Props) {
   );
   const customValue = !isPreset && /^#[0-9a-f]{6}$/i.test(value) ? value : '#888888';
 
-  if (!settings) return null;
+  const currentPreset = ACCENT_PRESETS.find((p) => p.id === value);
+  const swatchColor = value === 'system' ? undefined : value;
 
   const setAccent = async (accent: string) => {
     if (accent === value) return;
     await updateSettings({ accent_color: accent });
   };
 
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        className="accent-dock-reveal"
+        onClick={onExpand}
+        aria-label="Show accent colors"
+        title="Accent colors"
+      >
+        <span
+          className="accent-dock-reveal-dot"
+          style={swatchColor ? { background: swatchColor } : undefined}
+        />
+        <span className="accent-dock-reveal-label">{currentPreset?.label ?? 'Custom'}</span>
+        <ChevronRightIcon size={12} />
+      </button>
+    );
+  }
+
   return (
     <div className="accent-dock" aria-label="Quick accent colors">
+      <button
+        type="button"
+        className="accent-dock-collapse"
+        aria-label="Collapse accent dock"
+        title="Collapse"
+        onClick={onCollapse}
+      >
+        <ChevronDownIcon size={14} />
+      </button>
       <button
         type="button"
         className="accent-dock-settings"
