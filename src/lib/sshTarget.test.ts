@@ -3,12 +3,12 @@ import { parseSshTarget } from './sshTarget';
 
 describe('parseSshTarget', () => {
   it('parses user@host', () => {
-    expect(parseSshTarget('band@example.com')).toEqual({ user: 'band', host: 'example.com', port: 22 });
+    expect(parseSshTarget('user@example.com')).toEqual({ user: 'user', host: 'example.com', port: 22 });
   });
 
   it('parses user@host:port', () => {
-    expect(parseSshTarget('band@example.com:2222'))
-      .toEqual({ user: 'band', host: 'example.com', port: 2222 });
+    expect(parseSshTarget('user@example.com:2222'))
+      .toEqual({ user: 'user', host: 'example.com', port: 2222 });
   });
 
   it('host without user uses fallback', () => {
@@ -23,9 +23,9 @@ describe('parseSshTarget', () => {
   it('rejects out-of-range port', () => { expect(() => parseSshTarget('a@b:99999')).toThrow(); });
 
   it('parses bracketed IPv6', () => {
-    expect(parseSshTarget('band@[::1]:2222'))
-      .toEqual({ user: 'band', host: '::1', port: 2222 });
+    expect(parseSshTarget('user@[::1]:2222'))
+      .toEqual({ user: 'user', host: '::1', port: 2222 });
   });
 
-  it('rejects malformed IPv6 brackets', () => { expect(() => parseSshTarget('band@[::1')).toThrow(); });
+  it('rejects malformed IPv6 brackets', () => { expect(() => parseSshTarget('user@[::1')).toThrow(); });
 });

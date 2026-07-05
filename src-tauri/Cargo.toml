@@ -2,7 +2,8 @@
 name = "power-term"
 version = "0.2.6"
 description = "A modern terminal app"
-authors = ["band"]
+authors = ["Power Term Contributors"]
+repository = "https://github.com/Financial-Support/power-term"
 edition = "2021"
 
 [lib]

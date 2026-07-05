@@ -1,6 +1,6 @@
 use crate::store::SecretError;
 
-const SERVICE: &str = "com.band.power-term";
+const SERVICE: &str = "com.power-term.app";
 
 /// Set the secret for `host_id`. Replaces any prior secret.
 pub fn set(host_id: &str, secret: &str) -> Result<(), SecretError> {
@@ -63,7 +63,7 @@ mod backend {
     use std::path::PathBuf;
     use std::sync::OnceLock;
 
-    const SERVICE: &str = "com.band.power-term";
+const SERVICE: &str = "com.power-term.app";
     const MASTER_KEY_ACCOUNT: &str = "master-key";
     const FILE_NAME: &str = "secrets.bin";
     /// Distinguishes the secrets-file ciphertext from any other use of the

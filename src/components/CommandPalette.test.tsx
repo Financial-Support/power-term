@@ -13,8 +13,8 @@ describe('CommandPalette', () => {
     const onSshConnect = vi.fn();
     render(<CommandPalette open onClose={() => {}} onSshConnect={onSshConnect} />);
     const input = screen.getByPlaceholderText(/search or type ssh/i);
-    await userEvent.type(input, 'ssh band@example.com:2222{Enter}');
-    expect(onSshConnect).toHaveBeenCalledWith({ user: 'band', host: 'example.com', port: 2222 });
+    await userEvent.type(input, 'ssh user@example.com:2222{Enter}');
+    expect(onSshConnect).toHaveBeenCalledWith({ user: 'user', host: 'example.com', port: 2222 });
   });
 
   it('Escape calls onClose', async () => {

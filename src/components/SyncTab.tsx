@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { useSyncStore } from '../state/syncStore';
 import { KeyIcon, RefreshIcon } from './AppIcons';
 
+function isNotConfigured(msg: string | null): boolean {
+  return msg != null && msg.toLowerCase().includes('not configured');
+}
+
 export function SyncTab() {
   const syncState = useSyncStore((s) => s.syncState);
   const signIn = useSyncStore((s) => s.signIn);
@@ -9,6 +13,7 @@ export function SyncTab() {
   const pull = useSyncStore((s) => s.pull);
   const getKey = useSyncStore((s) => s.getKey);
   const setKey = useSyncStore((s) => s.setKey);
+  const error = useSyncStore((s) => s.error);
 
   const [syncKey, setSyncKey] = useState('');
   const [keyVisible, setKeyVisible] = useState(false);
@@ -21,6 +26,28 @@ export function SyncTab() {
     if (!syncState?.user) return;
     getKey().then(setSyncKey).catch(() => setSyncKey(''));
   }, [syncState?.user, getKey]);
+
+  if (isNotConfigured(error)) {
+    return (
+      <div className="sync-tab">
+        <div className="settings-section-card">
+          <div className="settings-section-head">
+            <div>
+              <div className="settings-section-title-row">
+                <span className="settings-section-icon" aria-hidden><RefreshIcon size={13} /></span>
+                <h3>Cloud sync</h3>
+              </div>
+              <p className="sync-tab-desc">
+                Sync is not enabled in this build. Set the <code>POWER_TERM_SUPABASE_URL</code> and{' '}
+                <code>POWER_TERM_SUPABASE_ANON_KEY</code> environment variables at build time to enable it.
+                See <a href="https://github.com/Financial-Support/power-term/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> for details.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!syncState?.user) {
     return (

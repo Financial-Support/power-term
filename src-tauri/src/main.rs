@@ -122,7 +122,7 @@ fn main() {
                     "zoom_out"      => { let _ = app_handle.emit("menu:zoom-out", ()); }
                     "zoom_reset"    => { let _ = app_handle.emit("menu:zoom-reset", ()); }
                     "help_github" => {
-                        open_url("https://github.com/bango97/homebrew-power-term");
+                        open_url(env!("CARGO_PKG_REPOSITORY"));
                     }
                     _ => {}
                 }

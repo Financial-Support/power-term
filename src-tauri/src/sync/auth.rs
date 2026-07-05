@@ -1,6 +1,6 @@
 use crate::store::SecretError;
 
-const SERVICE: &str = "com.band.power-term";
+const SERVICE: &str = "com.power-term.app";
 const ACCOUNT_ACCESS: &str = "sync:access_token";
 const ACCOUNT_REFRESH: &str = "sync:refresh_token";
 const ACCOUNT_KEY: &str = "sync:key";

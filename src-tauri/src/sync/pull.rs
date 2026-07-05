@@ -350,14 +350,14 @@ async fn pull_credentials(
     for cred in creds {
         if cred.deleted_at.is_some() {
             let _ = crate::store::secrets::backend_delete(
-                "com.band.power-term",
+                "com.power-term.app",
                 &format!("host:{}", cred.id),
             );
             continue;
         }
         if pending_deletes.contains(&cred.id) || pending_host_deletes.contains(&cred.id) {
             let _ = crate::store::secrets::backend_delete(
-                "com.band.power-term",
+                "com.power-term.app",
                 &format!("host:{}", cred.id),
             );
             continue;
@@ -366,7 +366,7 @@ async fn pull_credentials(
         match decrypt(&cred.ciphertext, key, cred.id.as_bytes()) {
             Ok(plaintext) => {
                 let _ = crate::store::secrets::backend_set(
-                    "com.band.power-term",
+                    "com.power-term.app",
                     &format!("host:{}", cred.id),
                     &plaintext,
                 );

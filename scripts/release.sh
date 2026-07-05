@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
 #
-# Release a new version of power-term:
-#   1. Bump version in package.json, Cargo.toml, tauri.conf.json
-#   2. Build DMGs for aarch64 + x86_64
-#   3. Commit, tag, push source branch
-#   4. Upload DMGs as a GitHub release on the tap repo
-#   5. Update the cask formula (version + sha256s) and push the tap
+# macOS-only convenience release script. For multi-platform releases (macOS +
+# Windows + Linux), push a version tag and let .github/workflows/release.yml
+# handle the build matrix.
 #
 # Usage:
 #   scripts/release.sh <version>          # e.g. scripts/release.sh 0.2.0
-#   BRANCH=main scripts/release.sh 0.2.0  # override source branch (default: develop)
+#   TAP_REPO=my-org/homebrew-my-term scripts/release.sh 0.2.0
+#
+# Uses env vars for forkeability:
+#   TAP_REPO       — Homebrew tap repo     (default: bango97/homebrew-power-term)
+#   SOURCE_BRANCH  — git branch to tag     (default: main)
+#   SOURCE_REPO    — source GitHub repo    (default: Financial-Support/power-term)
 
 set -euo pipefail
 
 VERSION="${1:-}"
-TAP_REPO="bango97/homebrew-power-term"
-SOURCE_BRANCH="${BRANCH:-develop}"
+TAP_REPO="${TAP_REPO:-bango97/homebrew-power-term}"
+SOURCE_BRANCH="${SOURCE_BRANCH:-main}"
+SOURCE_REPO="${SOURCE_REPO:-Financial-Support/power-term}"
 
 red()   { printf "\033[31m%s\033[0m\n" "$*" >&2; }
 green() { printf "\033[32m%s\033[0m\n" "$*"; }
@@ -121,7 +124,7 @@ git commit -m "feat: bump power-term to $VERSION"
 git push
 
 step "Done"
-green "  Source: https://github.com/Financial-Support/power-term/tree/$TAG"
+green "  Source: https://github.com/$SOURCE_REPO/tree/$TAG"
 green "  Release: https://github.com/$TAP_REPO/releases/tag/$TAG"
 green "  Test:    brew update && brew upgrade --cask power-term"
 echo

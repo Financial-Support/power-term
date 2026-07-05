@@ -29,3 +29,11 @@ vite.config.d.ts
 
 # Playwright MCP artifacts (screenshots, console logs)
 .playwright-mcp/
+
+# AI / personal tool artifacts
+.commandcode/
+.superpowers/
+docs/superpowers/
+
+# Unrelated design mockups
+redesign/

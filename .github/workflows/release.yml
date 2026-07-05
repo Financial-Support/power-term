@@ -56,7 +56,7 @@ jobs:
           targets: ${{ matrix.platform.target }}
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.16.4
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -81,12 +81,13 @@ jobs:
             --repo "${{ github.repository }}" \
             --dir artifacts
 
-      - name: Publish to bango97/homebrew-power-term
+      - name: Publish to ${{ vars.TAP_REPO && 'tap' || 'release' }}
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
+          REPO="${{ vars.TAP_REPO || github.repository }}"
           gh release create "${{ github.ref_name }}" \
-            --repo bango97/homebrew-power-term \
+            --repo "$REPO" \
             --title "${{ github.ref_name }}" \
             --notes "Release ${{ github.ref_name }}" \
             artifacts/*
@@ -99,18 +100,19 @@ jobs:
       - name: Checkout tap repo
         uses: actions/checkout@v6
         with:
-          repository: bango97/homebrew-power-term
+          repository: ${{ vars.TAP_REPO || 'bango97/homebrew-power-term' }}
           token: ${{ secrets.PUBLIC_REPO_TOKEN }}
 
       - name: Update cask formula
         env:
           TAG: ${{ github.ref_name }}
+          TAP_REPO: ${{ vars.TAP_REPO || 'bango97/homebrew-power-term' }}
         run: |
           V="${TAG#v}"
 
           # Download DMGs and compute SHA256
-          URL_AARCH64="https://github.com/bango97/homebrew-power-term/releases/download/${TAG}/Power.Term_${V}_aarch64.dmg"
-          URL_X64="https://github.com/bango97/homebrew-power-term/releases/download/${TAG}/Power.Term_${V}_x64.dmg"
+          URL_AARCH64="https://github.com/${TAP_REPO}/releases/download/${TAG}/Power.Term_${V}_aarch64.dmg"
+          URL_X64="https://github.com/${TAP_REPO}/releases/download/${TAG}/Power.Term_${V}_x64.dmg"
 
           curl -sLo aarch64.dmg "$URL_AARCH64"
           curl -sLo x64.dmg "$URL_X64"
