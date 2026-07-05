@@ -67,34 +67,9 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
 
-  publish:
-    name: Mirror to public repo
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p artifacts
-          gh release download "${{ github.ref_name }}" \
-            --repo "${{ github.repository }}" \
-            --dir artifacts
-
-      - name: Publish to ${{ vars.TAP_REPO && 'tap' || 'release' }}
-        env:
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
-        run: |
-          REPO="${{ vars.TAP_REPO || github.repository }}"
-          gh release create "${{ github.ref_name }}" \
-            --repo "$REPO" \
-            --title "${{ github.ref_name }}" \
-            --notes "Release ${{ github.ref_name }}" \
-            artifacts/*
-
   cask:
     name: Update Homebrew cask
-    needs: publish
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tap repo
@@ -106,13 +81,13 @@ jobs:
       - name: Update cask formula
         env:
           TAG: ${{ github.ref_name }}
-          TAP_REPO: ${{ vars.TAP_REPO || 'bango97/homebrew-power-term' }}
+          SOURCE_REPO: ${{ github.repository }}
         run: |
           V="${TAG#v}"
 
-          # Download DMGs and compute SHA256
-          URL_AARCH64="https://github.com/${TAP_REPO}/releases/download/${TAG}/Power.Term_${V}_aarch64.dmg"
-          URL_X64="https://github.com/${TAP_REPO}/releases/download/${TAG}/Power.Term_${V}_x64.dmg"
+          # Download DMGs from the source repo's release and compute SHA256
+          URL_AARCH64="https://github.com/${SOURCE_REPO}/releases/download/${TAG}/Power.Term_${V}_aarch64.dmg"
+          URL_X64="https://github.com/${SOURCE_REPO}/releases/download/${TAG}/Power.Term_${V}_x64.dmg"
 
           curl -sLo aarch64.dmg "$URL_AARCH64"
           curl -sLo x64.dmg "$URL_X64"
