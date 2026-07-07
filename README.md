@@ -7,7 +7,7 @@ A modern terminal built with Tauri + React + xterm.js.
 ### macOS (Homebrew Cask)
 
 ```bash
-brew tap <your-github-org>/power-term
+brew tap bango97/power-term
 brew install --cask power-term
 ```
 
@@ -42,7 +42,7 @@ sudo dpkg -i power-term-*.deb
 
 ### Windows
 
-Run the `.exe` installer (NSIS) from [Releases](https://github.com/<your-github-org>/power-term/releases).
+Run the `.exe` installer (NSIS) from [Releases](https://github.com/Financial-Support/power-term/releases).
 
 ## Build from source
 
