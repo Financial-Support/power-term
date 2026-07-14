@@ -56,7 +56,7 @@ jobs:
           targets: ${{ matrix.platform.target }}
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0.16.4
+        uses: tauri-apps/tauri-action@action-v1.0.0
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
