@@ -47,6 +47,22 @@ pub fn system_accent_color() -> String {
     }
 }
 
+/// Open an HTTP(S) URL with the operating system's default browser.
+///
+/// Terminal output is untrusted, so do not pass arbitrary schemes through to
+/// the OS. Restricting this command to web URLs also matches xterm's built-in
+/// web-link detection.
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(&url).map_err(|e| format!("invalid URL: {e}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("only HTTP(S) URLs can be opened".to_string());
+    }
+
+    crate::open_url(parsed.as_str());
+    Ok(())
+}
+
 fn shell_with_fallback(opt: Option<String>) -> String {
     if let Some(s) = opt.filter(|s| !s.is_empty()) { return s; }
     if let Ok(env) = std::env::var("SHELL") { if !env.is_empty() { return env; } }

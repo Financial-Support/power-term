@@ -43,7 +43,6 @@ import { DbSshPassphrasePrompt } from './components/DbSshPassphrasePrompt';
 import { DbConnectingModal } from './components/DbConnectingModal';
 import { DbBrowser } from './components/DbBrowser';
 import { AccentDock } from './components/AccentDock';
-import { QuickThemeFloater } from './components/QuickThemePanel';
 import { useDbConnectionStore } from './state/dbConnectionStore';
 import { dbSessionClose, dbSessionOpen } from './lib/ipc';
 import { SettingsModal } from './components/SettingsModal';
@@ -257,7 +256,6 @@ export function App() {
   const [dbConnecting, setDbConnecting] = useState<DbConnection | null>(null);
   const [dbSessions, setDbSessions] = useState<Record<string, { sessionId: string; connection: DbConnection }>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const quickThemePanelOpen = settings?.quick_theme_panel_open ?? false;
   const accentDockOpen = settings?.accent_dock_open ?? true;
   const [sshImportOpen, setSshImportOpen] = useState(false);
   const [aiBarOpen, setAiBarOpen] = useState(false);
@@ -1285,20 +1283,9 @@ export function App() {
       )}
       <AccentDock
         collapsed={!accentDockOpen}
-        onExpand={() => void useSettingsStore.getState().update({ accent_dock_open: true })}
-        onCollapse={() => void useSettingsStore.getState().update({ accent_dock_open: false })}
+        onToggle={() => void useSettingsStore.getState().update({ accent_dock_open: !accentDockOpen })}
         onOpenSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
       />
-      {settings && (
-        <QuickThemeFloater
-          collapsed={!quickThemePanelOpen}
-          settings={settings}
-          onExpand={() => void useSettingsStore.getState().update({ quick_theme_panel_open: true })}
-          onCollapse={() => void useSettingsStore.getState().update({ quick_theme_panel_open: false })}
-          onAppearance={async (a) => { await useSettingsStore.getState().update({ theme: a }); }}
-          onOpenSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
-        />
-      )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} initialTab={settingsInitialTab} />}
       {sshImportOpen && <SshConfigImportModal onClose={() => setSshImportOpen(false)} />}
       <AICommandBar open={aiBarOpen} onClose={() => setAiBarOpen(false)} />

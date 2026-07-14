@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { onPtyExit, onPtyOutput, ptyResize, ptyWrite, sshAttach, sshResize, sshWrite } from '../lib/ipc';
+import { onPtyExit, onPtyOutput, openExternalUrl, ptyResize, ptyWrite, sshAttach, sshResize, sshWrite } from '../lib/ipc';
 import type { Tab } from '../types';
 import { useSessionStore } from '../state/sessionStore';
 import { useSettingsStore } from '../state/settingsStore';
@@ -44,7 +44,12 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon());
+    // xterm's default handler calls window.open(), which is not connected to
+    // the system browser from a Tauri WebView. Delegate to the native side so
+    // Ctrl/Cmd+Click links open in the user's default browser.
+    term.loadAddon(new WebLinksAddon((_event, uri) => {
+      void openExternalUrl(uri).catch((error) => console.error('failed to open terminal link', error));
+    }));
     const searchAddon = new SearchAddon();
     term.loadAddon(searchAddon);
     searchAddonRef.current = searchAddon;

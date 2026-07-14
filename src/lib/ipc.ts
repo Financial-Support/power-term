@@ -37,6 +37,11 @@ export async function settingsUpdate(patch: SettingsPatch): Promise<Settings> {
   return invoke<Settings>('settings_update', { patch });
 }
 
+/** Open a terminal web link in the operating system's default browser. */
+export async function openExternalUrl(url: string): Promise<void> {
+  await invoke('open_external_url', { url });
+}
+
 export async function onPtyOutput(
   ptyId: string,
   cb: (bytes: Uint8Array) => void,

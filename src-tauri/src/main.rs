@@ -166,6 +166,7 @@ fn main() {
             power_term::commands::settings_get,
             power_term::commands::settings_update,
             power_term::commands::system_accent_color,
+            power_term::commands::open_external_url,
             power_term::commands::ssh_connect,
             power_term::commands::ssh_write,
             power_term::commands::ssh_resize,
