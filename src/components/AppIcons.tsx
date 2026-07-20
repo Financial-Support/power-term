@@ -428,3 +428,12 @@ export function LayoutIcon({ kind, ...props }: IconProps & { kind: LayoutPreview
       return null;
   }
 }
+
+export function SidebarPanelIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <rect x="2" y="2.5" width="12" height="11" rx="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <line x1="6" y1="2.5" x2="6" y2="13.5" stroke="currentColor" strokeWidth="1.3" />
+    </IconBase>
+  );
+}

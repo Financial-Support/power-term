@@ -13,6 +13,7 @@ interface Props {
   onInsertSnippet?: (snippet: Snippet) => void;
   onNewLocalTab?: () => void;
   onOpenSettings?: () => void;
+  onToggleSidebar?: () => void;
 }
 
 type Item =
@@ -24,7 +25,7 @@ type Item =
 const RESULT_LIMIT = 30;
 
 export function CommandPalette({
-  open, onClose, onSshConnect, onConnectHost, onInsertSnippet, onNewLocalTab, onOpenSettings,
+  open, onClose, onSshConnect, onConnectHost, onInsertSnippet, onNewLocalTab, onOpenSettings, onToggleSidebar,
 }: Props) {
   const [text, setText] = useState('');
   const [selected, setSelected] = useState(0);
@@ -61,8 +62,9 @@ export function CommandPalette({
     }
 
     const actions: Array<{ id: string; label: string; hint?: string; run?: () => void }> = [
-      { id: 'new-tab', label: 'New local tab', run: onNewLocalTab },
-      { id: 'settings', label: 'Open Settings', run: onOpenSettings },
+      { id: 'new-tab', label: 'New local tab', hint: '⌘T', run: onNewLocalTab },
+      { id: 'toggle-sidebar', label: 'Toggle sidebar', hint: '⌘B', run: onToggleSidebar },
+      { id: 'settings', label: 'Open Settings', hint: '⌘,', run: onOpenSettings },
     ];
     for (const a of actions) {
       if (!a.run) continue;
@@ -72,7 +74,7 @@ export function CommandPalette({
 
     out.sort((a, b) => b.score - a.score);
     return out.slice(0, RESULT_LIMIT);
-  }, [open, text, hosts, snippets, onNewLocalTab, onOpenSettings]);
+  }, [open, text, hosts, snippets, onNewLocalTab, onOpenSettings, onToggleSidebar]);
 
   // Clamp the cursor when the result set shrinks.
   useEffect(() => {

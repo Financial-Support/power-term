@@ -203,6 +203,14 @@ export function App() {
   const closeSftpTabState = useSftpStore((s) => s.closeTab);
 
   const [sidebarSection, setSidebarSection] = useState<SidebarSection>('hosts');
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    // Default to open; persist across launches so the user's last choice sticks.
+    const raw = localStorage.getItem('sidebar-open');
+    if (raw === null) return true;
+    return raw !== '0';
+  });
+  useEffect(() => { localStorage.setItem('sidebar-open', sidebarOpen ? '1' : '0'); }, [sidebarOpen]);
+  const toggleSidebar = useCallback(() => setSidebarOpen((o) => !o), []);
   const [dbListCollapsed, setDbListCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('db-list-collapsed') === '1';
   });
@@ -732,7 +740,7 @@ export function App() {
     setDbPasswordPrompt(connection);
   }, [openDbConnection]);
 
-  useHotkeys({ onNewTab: () => void newLocalTab(), onCloseTab: (id) => void handleClose(id), onZoomIn: zoomIn, onZoomOut: zoomOut, onZoomReset: zoomReset });
+  useHotkeys({ onNewTab: () => void newLocalTab(), onCloseTab: (id) => void handleClose(id), onZoomIn: zoomIn, onZoomOut: zoomOut, onZoomReset: zoomReset, onToggleSidebar: toggleSidebar });
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -876,8 +884,21 @@ export function App() {
           onToggle={() => setRailExpanded((o) => !o)}
           onSettings={() => { setSettingsInitialTab('appearance'); setSettingsOpen(true); }}
           onSync={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={toggleSidebar}
         />
-        {!(sidebarSection === 'databases' && dbListCollapsed) && (
+        {!sidebarOpen && (
+          <button
+            type="button"
+            className="sidebar-reveal"
+            onClick={toggleSidebar}
+            aria-label="Show sidebar"
+            title="Show sidebar (⌘B)"
+          >
+            <ChevronRightIcon size={14} />
+          </button>
+        )}
+        {sidebarOpen && !(sidebarSection === 'databases' && dbListCollapsed) && (
           <>
             <SidebarPanel
               section={sidebarSection}
@@ -1121,6 +1142,7 @@ export function App() {
         onInsertSnippet={onInsertSnippet}
         onNewLocalTab={() => void newLocalTab()}
         onOpenSettings={() => setSettingsOpen(true)}
+        onToggleSidebar={toggleSidebar}
       />
       {flow.phase === 'connecting' && (
         <div className="connecting-overlay" role="status" aria-live="polite">

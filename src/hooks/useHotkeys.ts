@@ -7,9 +7,10 @@ interface Handlers {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onToggleSidebar?: () => void;
 }
 
-export function useHotkeys({ onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomReset }: Handlers) {
+export function useHotkeys({ onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomReset, onToggleSidebar }: Handlers) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
@@ -21,6 +22,7 @@ export function useHotkeys({ onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomRe
       if (e.key === '-') { e.preventDefault(); onZoomOut(); return; }
       if (e.key === '0') { e.preventDefault(); onZoomReset(); return; }
       if (e.key === 't') { e.preventDefault(); onNewTab(); return; }
+      if (e.key === 'b') { e.preventDefault(); onToggleSidebar?.(); return; }
       if (e.key === 'w') {
         e.preventDefault();
         if (activeTabId) onCloseTab(activeTabId);
@@ -51,5 +53,5 @@ export function useHotkeys({ onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomRe
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomReset]);
+  }, [onNewTab, onCloseTab, onZoomIn, onZoomOut, onZoomReset, onToggleSidebar]);
 }

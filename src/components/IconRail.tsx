@@ -1,6 +1,6 @@
 // src/components/IconRail.tsx
 import type { ReactNode } from 'react';
-import { ChevronLeftIcon, DatabaseIcon, ForwardIcon, KeyIcon, RefreshIcon, ServerIcon, SettingsIcon, SnippetIcon } from './AppIcons';
+import { ChevronLeftIcon, DatabaseIcon, ForwardIcon, KeyIcon, RefreshIcon, ServerIcon, SettingsIcon, SidebarPanelIcon, SnippetIcon } from './AppIcons';
 
 export type SidebarSection = 'hosts' | 'snippets' | 'forwards' | 'databases' | 'keys';
 
@@ -11,13 +11,24 @@ interface Props {
   onSync: () => void;
   expanded: boolean;
   onToggle: () => void;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
 export function IconRail({
-  activeSection, onSection, onSettings, onSync, expanded, onToggle,
+  activeSection, onSection, onSettings, onSync, expanded, onToggle, sidebarOpen, onToggleSidebar,
 }: Props) {
   return (
     <div className={`icon-rail${expanded ? ' expanded' : ''}`} aria-label="navigation rail">
+      <RailButton
+        className="rail-icon-toggle"
+        ariaLabel={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+        title={sidebarOpen ? 'Hide sidebar (⌘B)' : 'Show sidebar (⌘B)'}
+        onClick={onToggleSidebar}
+        expanded={expanded}
+        icon={<SidebarPanelIcon size={16} />}
+        label="Panel"
+      />
       <RailButton
         className="rail-icon-toggle"
         ariaLabel={expanded ? 'Collapse menu' : 'Expand menu'}

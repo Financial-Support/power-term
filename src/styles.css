@@ -513,6 +513,7 @@ body::before {
   overflow: hidden;
   user-select: none;
   box-shadow: none;
+  transition: width 0.18s ease, flex-basis 0.18s ease, opacity 0.15s ease;
 }
 
 .sidebar-resize-handle {
@@ -565,6 +566,33 @@ body::before {
   background: rgba(255, 255, 255, 0.03);
   color: var(--fg);
 }
+
+/* Thin vertical strip to re-open the sidebar when it's toggled off. Sits
+   between the icon rail and the terminals area. */
+.sidebar-reveal {
+  flex: 0 0 28px;
+  width: 28px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--fg-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-smooth);
+}
+.sidebar-reveal:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg);
+}
+.sidebar-reveal svg {
+  opacity: 0.7;
+}
+.sidebar-reveal:hover svg {
+  opacity: 1;
+}
+
 .sp-section {
   display: flex;
   flex-direction: column;
