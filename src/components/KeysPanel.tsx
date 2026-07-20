@@ -54,7 +54,6 @@ export function KeysPanel({ onAdd, onEdit, onDelete }: Props) {
             <span className="keys-panel-title">SSH keys</span>
             <span className="panel-count" aria-hidden>{sorted.length}</span>
           </button>
-          <p className="panel-subtitle">Local identities and captured key material</p>
         </div>
         <button type="button" className="keys-panel-add" aria-label="add key" onClick={onAdd}><PlusIcon size={13} /></button>
       </div>

@@ -1,6 +1,6 @@
 [package]
 name = "power-term"
-version = "0.2.7"
+version = "0.3.1"
 description = "A modern terminal app"
 authors = ["Power Term Contributors"]
 repository = "https://github.com/Financial-Support/power-term"

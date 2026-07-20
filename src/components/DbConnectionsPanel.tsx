@@ -48,7 +48,6 @@ export function DbConnectionsPanel({ onAdd, onEdit, onDelete, onOpen, onHidePane
             <span className="db-panel-title">Databases</span>
             <span className="panel-count" aria-hidden>{sorted.length}</span>
           </button>
-          <p className="panel-subtitle">Connection profiles and quick launch</p>
         </div>
         {onHidePanel && (
           <button

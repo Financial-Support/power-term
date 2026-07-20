@@ -37,11 +37,6 @@ export function SyncTab() {
                 <span className="settings-section-icon" aria-hidden><RefreshIcon size={13} /></span>
                 <h3>Cloud sync</h3>
               </div>
-              <p className="sync-tab-desc">
-                Sync is not enabled in this build. Set the <code>POWER_TERM_SUPABASE_URL</code> and{' '}
-                <code>POWER_TERM_SUPABASE_ANON_KEY</code> environment variables at build time to enable it.
-                See <a href="https://github.com/Financial-Support/power-term/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> for details.
-              </p>
             </div>
           </div>
         </div>
@@ -59,7 +54,6 @@ export function SyncTab() {
                 <span className="settings-section-icon" aria-hidden><RefreshIcon size={13} /></span>
                 <h3>Cloud sync</h3>
               </div>
-              <p className="sync-tab-desc">Sign in to sync.</p>
             </div>
           </div>
           <div className="modal-actions">
@@ -141,7 +135,6 @@ export function SyncTab() {
               <span className="settings-section-icon" aria-hidden><KeyIcon size={13} /></span>
               <h3>Sync key</h3>
             </div>
-            <p className="sync-tab-desc">Encryption key</p>
           </div>
         </div>
 

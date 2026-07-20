@@ -144,7 +144,6 @@ export function SidebarPanel({
               <span className="sp-panel-title">Hosts</span>
               <span className="sp-panel-count">{filteredHosts.length}</span>
             </div>
-            <p className="sp-panel-subtitle">Groups, tags, and active sessions</p>
           </div>
           <div className="sp-search-row">
             <div className="sp-search-wrap">

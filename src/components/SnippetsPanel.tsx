@@ -34,7 +34,6 @@ export function SnippetsPanel({ onAdd, onEdit, onDelete, onInsert }: Props) {
             <span className="snippets-title">Snippets</span>
             <span className="panel-count" aria-hidden>{sorted.length}</span>
           </button>
-          <p className="panel-subtitle">Reusable shell commands</p>
         </div>
         <button
           type="button"

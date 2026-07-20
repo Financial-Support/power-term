@@ -4,8 +4,8 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
-import { WebglAddon } from '@xterm/addon-webgl';
 import { onPtyExit, onPtyOutput, openExternalUrl, ptyResize, ptyWrite, sshAttach, sshResize, sshWrite } from '../lib/ipc';
+import { reconcileImeInsertText } from '../lib/imeInput';
 import type { Tab } from '../types';
 import { useSessionStore } from '../state/sessionStore';
 import { useSettingsStore } from '../state/settingsStore';
@@ -58,7 +58,9 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     );
     term.loadAddon(new Unicode11Addon());
     term.unicode.activeVersion = '11';
-    try { term.loadAddon(new WebglAddon()); } catch { /* fall back to canvas */ }
+    // Keep xterm's DOM renderer on macOS. WKWebView's WebGL text atlas can
+    // fail to paint IME-composed grapheme clusters (such as Vietnamese Telex),
+    // making otherwise-correct input look like it disappeared.
 
     // Cmd+C: if there is a selection, copy to clipboard and swallow.
     // If no selection, fall through (xterm sends ETX / SIGINT).
@@ -141,7 +143,13 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
       }
     })();
 
-    const onData = term.onData((data) => {
+    // IMEs such as Vietnamese Telex often emit a short sequence of edits
+    // (for example, backspace followed by the composed character). Tauri
+    // invokes are asynchronous, so firing them without awaiting can reorder
+    // those edits at the PTY and make characters appear to jump or vanish.
+    // Serialize every input event for this terminal to preserve xterm's order.
+    let inputWriteQueue = Promise.resolve();
+    const writeInput = async (data: string) => {
       // Broadcast: when toggled on, route input from the focused pane to
       // every other visible pane (skip SFTP). Always include self so the
       // origin pane echoes its own keystrokes the same as before.
@@ -153,14 +161,100 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
           seen.add(id);
           const t = allTabs.find((x) => x.id === id);
           if (!t || t.kind === 'sftp') continue;
-          if (t.kind === 'ssh') void sshWrite(t.ptyId, data);
-          else void ptyWrite(t.ptyId, data);
+          if (t.kind === 'ssh') await sshWrite(t.ptyId, data);
+          else await ptyWrite(t.ptyId, data);
         }
         return;
       }
-      if (tab.kind === 'ssh') void sshWrite(tab.ptyId, data);
-      else void ptyWrite(tab.ptyId, data);
+      if (tab.kind === 'ssh') await sshWrite(tab.ptyId, data);
+      else await ptyWrite(tab.ptyId, data);
+    };
+    const enqueueInput = (data: string) => {
+      inputWriteQueue = inputWriteQueue
+        .then(() => writeInput(data))
+        // Keep later key events flowing even if an individual IPC call fails.
+        .catch((error) => console.error('failed to write terminal input', error));
+    };
+
+    // xterm normally commits IME text by reading its hidden textarea in a
+    // zero-delay timer after `compositionend`. WKWebView can clear/change that
+    // textarea first, causing xterm to emit nothing (or only the following
+    // space). Keep the authoritative CompositionEvent.data as a fallback.
+    // Our listener is registered after xterm's, so its timer runs first.
+    let latestCompositionData = '';
+    let keydownEmittedData: string[] = [];
+    let pendingComposition: { data: string; xtermData: string[] } | null = null;
+    const compositionTimers = new Set<number>();
+    const scheduleCompositionCommit = (data: string) => {
+      if (!data) return;
+      if (pendingComposition) {
+        pendingComposition.data = data;
+        return;
+      }
+      const pending = { data, xtermData: [] as string[] };
+      pendingComposition = pending;
+      const timer = window.setTimeout(() => {
+        compositionTimers.delete(timer);
+        if (pendingComposition === pending) pendingComposition = null;
+
+        const emitted = pending.xtermData.join('');
+        const xtermCommittedComposition = emitted
+          .normalize('NFC')
+          .includes(pending.data.normalize('NFC'));
+        if (xtermCommittedComposition) {
+          enqueueInput(emitted);
+          return;
+        }
+
+        // xterm missed the composition. Commit it before any trailing data
+        // (commonly the space that ended Vietnamese Telex composition).
+        enqueueInput(pending.data);
+        if (emitted) enqueueInput(emitted);
+      }, 0);
+      compositionTimers.add(timer);
+    };
+    const onCompositionStart = () => { latestCompositionData = ''; };
+    const onCompositionUpdate = (event: CompositionEvent) => {
+      if (event.data) latestCompositionData = event.data;
+    };
+    const onCompositionEnd = (event: CompositionEvent) => {
+      scheduleCompositionCommit(event.data || latestCompositionData);
+      latestCompositionData = '';
+    };
+    const onImeInput = (rawEvent: Event) => {
+      const event = rawEvent as InputEvent;
+      if (event.data && event.isComposing) latestCompositionData = event.data;
+
+      if (event.inputType === 'insertText' && event.data) {
+        const emitted = keydownEmittedData.join('');
+        keydownEmittedData = [];
+        const correction = reconcileImeInsertText(emitted, event.data);
+        if (correction) enqueueInput(correction);
+      }
+
+      // WebKit uses these input types when committing IME/replacement text.
+      // xterm 6's input handler only accepts `insertText`, so without this
+      // bridge the committed Vietnamese syllable never reaches onData.
+      const isWebKitCommit = event.inputType === 'insertFromComposition'
+        || event.inputType === 'insertReplacementText'
+        || (event.inputType === 'insertCompositionText' && !event.isComposing);
+      if (isWebKitCommit && event.data) scheduleCompositionCommit(event.data);
+    };
+
+    const onData = term.onData((data) => {
+      if (pendingComposition) {
+        pendingComposition.xtermData.push(data);
+        return;
+      }
+      keydownEmittedData.push(data);
+      enqueueInput(data);
     });
+    const onTerminalKeyDown = () => { keydownEmittedData = []; };
+    containerRef.current.addEventListener('keydown', onTerminalKeyDown, true);
+    term.textarea?.addEventListener('compositionstart', onCompositionStart);
+    term.textarea?.addEventListener('compositionupdate', onCompositionUpdate);
+    term.textarea?.addEventListener('compositionend', onCompositionEnd);
+    term.textarea?.addEventListener('input', onImeInput);
     const onResize = term.onResize(({ cols, rows }) => {
       // Drop bogus 0×0 resizes that can leak through during initial
       // mount before the container has dimensions.
@@ -181,6 +275,12 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
 
     return () => {
       cancelAnimationFrame(initialFitFrame);
+      containerRef.current?.removeEventListener('keydown', onTerminalKeyDown, true);
+      term.textarea?.removeEventListener('compositionstart', onCompositionStart);
+      term.textarea?.removeEventListener('compositionupdate', onCompositionUpdate);
+      term.textarea?.removeEventListener('compositionend', onCompositionEnd);
+      term.textarea?.removeEventListener('input', onImeInput);
+      for (const timer of compositionTimers) window.clearTimeout(timer);
       onData.dispose();
       onResize.dispose();
       ro.disconnect();

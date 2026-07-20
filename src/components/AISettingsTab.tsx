@@ -63,9 +63,6 @@ export function AISettingsTab() {
               <span className="settings-section-icon" aria-hidden><SparklesIcon size={13} /></span>
               <h3>AI command bar</h3>
             </div>
-            <p className="ai-settings-blurb">
-              Anthropic API key stored in the local keychain.
-            </p>
           </div>
         </div>
         <div className="form-grid">

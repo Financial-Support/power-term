@@ -24,14 +24,6 @@ export function ForwardsPanel({ onAdd, onEdit, onDelete }: Props) {
   const statusOf = (id: string): ForwardStatus =>
     statuses[id] ?? { id, state: 'stopped', error: null };
 
-  const activeCount = useMemo(
-    () => sorted.filter((forward) => {
-      const state = statusOf(forward.id).state;
-      return state === 'running' || state === 'starting';
-    }).length,
-    [sorted, statuses],
-  );
-
   const onToggle = (f: Forward) => {
     const s = statusOf(f.id);
     if (s.state === 'running' || s.state === 'starting') void stopStore(f.id);
@@ -52,9 +44,6 @@ export function ForwardsPanel({ onAdd, onEdit, onDelete }: Props) {
             <span className="forwards-title">Forwards</span>
             <span className="panel-count" aria-hidden>{sorted.length}</span>
           </button>
-          <p className="panel-subtitle">
-            {activeCount > 0 ? `${activeCount} active tunnel${activeCount === 1 ? '' : 's'}` : 'Saved port mappings'}
-          </p>
         </div>
         <button type="button" className="forwards-add" aria-label="add forward" onClick={onAdd}><PlusIcon size={13} /></button>
       </div>

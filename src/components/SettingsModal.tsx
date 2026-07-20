@@ -75,7 +75,6 @@ export function SettingsModal({ onClose, initialTab }: Props) {
           <div className="modal-title-copy">
             <span className="modal-eyebrow">Settings</span>
             <h2>Preferences</h2>
-            <p className="form-title-meta">Appearance, terminal, sync, tags, and AI</p>
           </div>
           <button type="button" className="modal-close-btn" aria-label="Close settings" title="Close" onClick={onClose}><CloseIcon size={14} /></button>
         </div>
@@ -376,10 +375,6 @@ function TagsTab() {
           onCancel={() => setPendingDeleteName(null)}
         />
       )}
-      <p className="form-hint">
-        Tag colors stay local. Renaming or deleting a tag updates every host using it.
-      </p>
-
       <div className="tags-create-row">
         <input
           className="tags-create-name"
