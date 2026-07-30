@@ -62,10 +62,17 @@ describe('FileBrowser', () => {
     expect(screen.getByText('sub')).toBeInTheDocument();
   });
 
-  it('clicking a directory name navigates into it', async () => {
-    (sftpList as any).mockResolvedValue([e({ name: 'inside.txt' })]);
+  it('single-clicking a directory selects it without navigating', async () => {
     render(<FileBrowser tabId="t" onClose={vi.fn()} />);
     await userEvent.click(screen.getByText('sub'));
+    expect(screen.getByLabelText('Select sub')).toBeChecked();
+    expect(sftpList).not.toHaveBeenCalled();
+  });
+
+  it('double-clicking a directory navigates into it', async () => {
+    (sftpList as any).mockResolvedValue([e({ name: 'inside.txt' })]);
+    render(<FileBrowser tabId="t" onClose={vi.fn()} />);
+    await userEvent.dblClick(screen.getByText('sub'));
     expect(sftpList).toHaveBeenCalledWith('s', '/home/alice/sub');
   });
 

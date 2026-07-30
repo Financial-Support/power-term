@@ -11,7 +11,7 @@ brew tap bango97/power-term
 brew install --cask power-term
 ```
 
-The app installs to `/Applications/power-term.app`. The cask runs `xattr -cr` automatically as a postflight step — see below for context.
+The app installs to `/Applications/Power Term.app`. The cask runs `xattr -cr` automatically as a postflight step — see below for context.
 
 > **Heads-up**: power-term is **not code-signed or notarized** by Apple (we don't pay the $99/year Developer Program fee). macOS Gatekeeper will block the app on first launch with a *"power-term is damaged and can't be opened"* or *"cannot verify developer"* error. This is expected — see workaround below.
 
@@ -20,7 +20,7 @@ The app installs to `/Applications/power-term.app`. The cask runs `xattr -cr` au
 After installing, run once:
 
 ```bash
-xattr -cr /Applications/power-term.app
+xattr -cr "/Applications/Power Term.app"
 ```
 
 This clears the quarantine attribute macOS adds to apps downloaded from the internet. After that, power-term opens normally like any other app.
@@ -43,6 +43,38 @@ sudo dpkg -i power-term-*.deb
 ### Windows
 
 Run the `.exe` installer (NSIS) from [Releases](https://github.com/Financial-Support/power-term/releases).
+
+## Update
+
+### macOS (Homebrew Cask)
+
+```bash
+brew update
+brew upgrade --cask power-term
+```
+
+### macOS (manual DMG)
+
+1. Quit Power Term.
+2. Download the latest `.dmg` from [Releases](https://github.com/Financial-Support/power-term/releases/latest) (`aarch64` for Apple Silicon or `x64` for Intel).
+3. Open the DMG and replace `Power Term.app` in `/Applications`.
+4. If macOS blocks the updated app, run:
+
+```bash
+xattr -cr "/Applications/Power Term.app"
+```
+
+### Linux
+
+Download the latest `.deb`, then install it over the current version:
+
+```bash
+sudo dpkg -i power-term-*_amd64.deb
+```
+
+### Windows
+
+Download the latest `.exe` from [Releases](https://github.com/Financial-Support/power-term/releases/latest) and run the installer. It replaces the currently installed version.
 
 ## Build from source
 

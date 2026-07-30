@@ -20,14 +20,27 @@ describe('FileRow', () => {
     expect(screen.getByText(/2\.0 KB|2 KB/)).toBeInTheDocument();
   });
 
-  it('clicking a directory name calls onCd with name', async () => {
+  it('single-clicking a directory selects it without opening it', async () => {
+    const onCd = vi.fn();
+    const onSelect = vi.fn();
+    render(
+      <FileRow entry={e({ name: 'projects', kind: 'dir' })}
+        selected={false} onSelect={onSelect}
+        onCd={onCd} onDownload={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} />,
+    );
+    await userEvent.click(screen.getByText('projects'));
+    expect(onSelect).toHaveBeenCalled();
+    expect(onCd).not.toHaveBeenCalled();
+  });
+
+  it('double-clicking a directory opens it', async () => {
     const onCd = vi.fn();
     render(
       <FileRow entry={e({ name: 'projects', kind: 'dir' })}
         selected={false} onSelect={vi.fn()}
         onCd={onCd} onDownload={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} />,
     );
-    await userEvent.click(screen.getByText('projects'));
+    await userEvent.dblClick(screen.getByText('projects'));
     expect(onCd).toHaveBeenCalledWith('projects');
   });
 

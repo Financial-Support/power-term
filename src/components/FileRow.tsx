@@ -32,11 +32,10 @@ export function FileRow({ entry, selected, onSelect, onCd, onDownload, onRename,
       onClick={(e) => {
         const target = e.target as HTMLElement;
         if (target.closest('.file-actions')) return;
-        if (isDir && target.closest('.file-row-name') && !target.closest('.file-select-checkbox')) {
-          onCd(entry.name);
-          return;
-        }
         onSelect(e, entry);
+      }}
+      onDoubleClick={() => {
+        if (isDir) onCd(entry.name);
       }}
       onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e, entry); } : undefined}
     >
