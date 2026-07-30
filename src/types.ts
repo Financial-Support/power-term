@@ -67,11 +67,20 @@ export type AuthRequest =
   | { kind: 'password'; password: string }
   | { kind: 'key'; path: string; passphrase?: string };
 
+export interface BastionRequest {
+  target: SshTarget;
+  auth: AuthRequest;
+  acceptFingerprint?: string | null;
+}
+
+export type ConnectionStage = 'target' | 'bastion';
+
 export type SshConnectResult =
   | { status: 'connected'; id: string }
-  | { status: 'needs_fingerprint'; fingerprint: string; host: string; key_type: string }
-  | { status: 'fingerprint_mismatch'; fingerprint: string; expected: string; host: string }
-  | { status: 'needs_auth'; tried: string[]; available: string[] };
+  | { status: 'needs_fingerprint'; stage: ConnectionStage; fingerprint: string; host: string; key_type: string }
+  | { status: 'fingerprint_mismatch'; stage: ConnectionStage; fingerprint: string; expected: string; host: string }
+  | { status: 'needs_auth'; stage: ConnectionStage; tried: string[]; available: string[] }
+  | { status: 'failed'; stage: ConnectionStage; message: string };
 
 export type AuthMethodKind = 'agent' | 'key' | 'password';
 
@@ -138,9 +147,10 @@ export interface SftpTransferProgress {
 
 export type SftpOpenResult =
   | { status: 'connected'; id: string }
-  | { status: 'needs_fingerprint'; fingerprint: string; host: string; key_type: string }
-  | { status: 'fingerprint_mismatch'; fingerprint: string; expected: string; host: string }
-  | { status: 'needs_auth'; tried: string[]; available: string[] };
+  | { status: 'needs_fingerprint'; stage: ConnectionStage; fingerprint: string; host: string; key_type: string }
+  | { status: 'fingerprint_mismatch'; stage: ConnectionStage; fingerprint: string; expected: string; host: string }
+  | { status: 'needs_auth'; stage: ConnectionStage; tried: string[]; available: string[] }
+  | { status: 'failed'; stage: ConnectionStage; message: string };
 
 export type SortKey = 'name' | 'size' | 'modified';
 

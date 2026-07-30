@@ -61,8 +61,9 @@ import {
   ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
   sftpClose, sftpOpen, sshConnect, sshKill, sshWrite, snippetsTouch,
 } from './lib/ipc';
-import type { AuthRequest, DbConnection, DbConnectionInput, Forward, ForwardInput, Host, HostInput, LayoutKind, Snippet, SnippetInput, SshKey, SshKeyInput, SshTarget } from './types';
+import type { AuthRequest, ConnectionStage, DbConnection, DbConnectionInput, Forward, ForwardInput, Host, HostInput, LayoutKind, Snippet, SnippetInput, SshKey, SshKeyInput, SshTarget } from './types';
 import { LAYOUT_SLOT_COUNTS as COUNTS } from './types';
+import { bastionRef, resolveBastion } from './lib/bastion';
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
@@ -86,11 +87,18 @@ async function resolveSystemAccent(): Promise<string | null> {
 
 type TargetKind = 'shell' | 'sftp';
 
+type BastionFlow = {
+  target: SshTarget;
+  auth: AuthRequest;
+  acceptFp: string | null;
+  name: string;
+};
+
 type RemoteFlow =
   | { phase: 'idle' }
-  | { phase: 'connecting'; targetKind: TargetKind; target: SshTarget; auth: AuthRequest; acceptFp: string | null; titleOverride?: string; touchHostId?: string }
-  | { phase: 'fingerprint'; targetKind: TargetKind; target: SshTarget; auth: AuthRequest; fingerprint: string; keyType: string; mismatch?: { expected: string }; titleOverride?: string; touchHostId?: string }
-  | { phase: 'auth'; targetKind: TargetKind; target: SshTarget; tried: string[]; available: string[]; error?: string; titleOverride?: string; touchHostId?: string; previousAuth?: AuthRequest };
+  | { phase: 'connecting'; targetKind: TargetKind; target: SshTarget; auth: AuthRequest; acceptFp: string | null; bastion?: BastionFlow; titleOverride?: string; touchHostId?: string }
+  | { phase: 'fingerprint'; targetKind: TargetKind; target: SshTarget; auth: AuthRequest; acceptFp: string | null; bastion?: BastionFlow; stage: ConnectionStage; fingerprintHost: string; fingerprint: string; keyType: string; mismatch?: { expected: string }; titleOverride?: string; touchHostId?: string }
+  | { phase: 'auth'; targetKind: TargetKind; target: SshTarget; pendingAuth?: AuthRequest; acceptFp: string | null; bastion?: BastionFlow; stage: ConnectionStage; tried: string[]; available: string[]; error?: string; titleOverride?: string; touchHostId?: string; previousAuth?: AuthRequest };
 
 type FormMode =
   | { kind: 'closed' }
@@ -391,13 +399,19 @@ export function App() {
     acceptFp: string | null,
     titleOverride?: string,
     touchHostId?: string,
+    bastion?: BastionFlow,
   ) => {
     const myToken = ++flowToken.current;
-    setFlow({ phase: 'connecting', targetKind, target, auth, acceptFp, titleOverride, touchHostId });
+    setFlow({ phase: 'connecting', targetKind, target, auth, acceptFp, bastion, titleOverride, touchHostId });
+    const bastionRequest = bastion ? {
+      target: bastion.target,
+      auth: bastion.auth,
+      acceptFingerprint: bastion.acceptFp,
+    } : null;
     try {
       const result = targetKind === 'shell'
-        ? await sshConnect({ target, auth, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, acceptFingerprint: acceptFp })
-        : await sftpOpen({ host: target.host, port: target.port, user: target.user, auth, acceptFingerprint: acceptFp });
+        ? await sshConnect({ target, auth, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, acceptFingerprint: acceptFp, bastion: bastionRequest })
+        : await sftpOpen({ host: target.host, port: target.port, user: target.user, auth, acceptFingerprint: acceptFp, bastion: bastionRequest });
       if (myToken !== flowToken.current) {
         // User cancelled while we were connecting. Reap the session if it
         // succeeded so we don't leak a backend session no one is using.
@@ -421,18 +435,40 @@ export function App() {
         }
         setFlow({ phase: 'idle' });
       } else if (result.status === 'needs_fingerprint') {
-        setFlow({ phase: 'fingerprint', targetKind, target, auth, fingerprint: result.fingerprint, keyType: result.key_type, titleOverride, touchHostId });
+        setFlow({
+          phase: 'fingerprint', targetKind, target, auth, acceptFp, bastion,
+          stage: result.stage, fingerprintHost: result.host,
+          fingerprint: result.fingerprint, keyType: result.key_type,
+          titleOverride, touchHostId,
+        });
       } else if (result.status === 'fingerprint_mismatch') {
-        setFlow({ phase: 'fingerprint', targetKind, target, auth, fingerprint: result.fingerprint, keyType: 'unknown', mismatch: { expected: result.expected }, titleOverride, touchHostId });
+        setFlow({
+          phase: 'fingerprint', targetKind, target, auth, acceptFp, bastion,
+          stage: result.stage, fingerprintHost: result.host,
+          fingerprint: result.fingerprint, keyType: 'unknown',
+          mismatch: { expected: result.expected }, titleOverride, touchHostId,
+        });
       } else if (result.status === 'needs_auth') {
-        setFlow({ phase: 'auth', targetKind, target, tried: result.tried, available: result.available, titleOverride, touchHostId });
+        const previousAuth = result.stage === 'bastion' ? bastion?.auth : auth;
+        setFlow({
+          phase: 'auth', targetKind, target, pendingAuth: auth, acceptFp, bastion,
+          stage: result.stage, tried: result.tried, available: result.available,
+          previousAuth, titleOverride, touchHostId,
+        });
+      } else if (result.status === 'failed') {
+        const previousAuth = result.stage === 'bastion' ? bastion?.auth : auth;
+        setFlow({
+          phase: 'auth', targetKind, target, pendingAuth: auth, acceptFp, bastion,
+          stage: result.stage, tried: [], available: ['agent', 'publickey', 'password'],
+          error: cleanAuthError(result.message), previousAuth, titleOverride, touchHostId,
+        });
       }
     } catch (e) {
       if (myToken !== flowToken.current) return;
       console.error(`${targetKind === 'shell' ? 'ssh_connect' : 'sftp_open'} failed`, e);
       setFlow({
         phase: 'auth',
-        targetKind, target,
+        targetKind, target, pendingAuth: auth, acceptFp, bastion, stage: 'target',
         tried: [],
         available: ['agent', 'publickey', 'password'],
         error: cleanAuthError(String(e)),
@@ -461,35 +497,63 @@ export function App() {
     return { kind: 'password', password };
   };
 
-  const connectFromHost = useCallback(async (host: Host) => {
-    // ProxyJump scaffolding: hosts imported with a `proxyjump:<name>` tag
-    // need backend SSH chaining that isn't wired yet. Until that lands,
-    // tell the user clearly so they can fall back to ~/.ssh/config.
-    const jumpTag = host.tags.find((t) => t.startsWith('proxyjump:'));
-    if (jumpTag) {
-      const via = jumpTag.slice('proxyjump:'.length);
-      const msg = `"${host.name}" requires ProxyJump via "${via}". The backend SSH chain is not yet wired in Power Term — please connect via your shell ~/.ssh/config until this lands.`;
-      console.warn(msg);
-      alert(msg);
-      return;
+  const buildBastionFromHost = async (host: Host): Promise<BastionFlow | null | undefined> => {
+    const ref = bastionRef(host.tags);
+    if (!ref) return undefined;
+    const bastionHost = resolveBastion(host, useHostStore.getState().hosts);
+    if (!bastionHost) {
+      alert(`Bastion host "${ref}" is unavailable. Edit "${host.name}" and select an existing bastion host.`);
+      return null;
     }
+    const savedAuth = await buildAuthFromHost(bastionHost);
+    // An empty password intentionally lets the backend identify the failure
+    // as belonging to the bastion stage. The regular AuthPrompt can then ask
+    // for a one-off password without forcing the user back into the host form.
+    const auth: AuthRequest = 'phase' in savedAuth
+      ? { kind: 'password', password: '' }
+      : savedAuth;
+    return {
+      target: {
+        user: bastionHost.username,
+        host: bastionHost.hostname,
+        port: bastionHost.port,
+      },
+      auth,
+      acceptFp: null,
+      name: bastionHost.name,
+    };
+  };
+
+  const connectFromHost = useCallback(async (host: Host) => {
+    const bastion = await buildBastionFromHost(host);
+    if (bastion === null) return;
     const target: SshTarget = { user: host.username, host: host.hostname, port: host.port };
     const auth = await buildAuthFromHost(host);
     if ('phase' in auth) {
-      setFlow({ phase: 'auth', targetKind: 'shell', target, tried: [], available: ['password'], titleOverride: host.name, touchHostId: host.id });
+      setFlow({
+        phase: 'auth', targetKind: 'shell', target, acceptFp: null, bastion,
+        stage: 'target', tried: [], available: ['password'],
+        titleOverride: host.name, touchHostId: host.id,
+      });
       return;
     }
-    await driveConnect('shell', target, auth, null, host.name, host.id);
+    await driveConnect('shell', target, auth, null, host.name, host.id, bastion);
   }, [driveConnect]);
 
   const openSftpFromHost = useCallback(async (host: Host) => {
+    const bastion = await buildBastionFromHost(host);
+    if (bastion === null) return;
     const target: SshTarget = { user: host.username, host: host.hostname, port: host.port };
     const auth = await buildAuthFromHost(host);
     if ('phase' in auth) {
-      setFlow({ phase: 'auth', targetKind: 'sftp', target, tried: [], available: ['password'], titleOverride: host.name, touchHostId: host.id });
+      setFlow({
+        phase: 'auth', targetKind: 'sftp', target, acceptFp: null, bastion,
+        stage: 'target', tried: [], available: ['password'],
+        titleOverride: host.name, touchHostId: host.id,
+      });
       return;
     }
-    await driveConnect('sftp', target, auth, null, host.name, host.id);
+    await driveConnect('sftp', target, auth, null, host.name, host.id, bastion);
   }, [driveConnect]);
 
   /** Re-open a dead SSH/SFTP tab against the same host. Closes the stale
@@ -1150,6 +1214,7 @@ export function App() {
             <div className="spinner" />
             <div className="label">{flow.targetKind === 'sftp' ? 'Opening SFTP…' : 'Connecting…'}</div>
             <div className="target">{flow.target.user}@{flow.target.host}{flow.target.port !== 22 ? `:${flow.target.port}` : ''}</div>
+            {flow.bastion && <div className="target">via {flow.bastion.name}</div>}
             <button
               type="button"
               className="connecting-cancel"
@@ -1160,23 +1225,44 @@ export function App() {
       )}
       {flow.phase === 'fingerprint' && (
         <HostFingerprintPrompt
-          host={flow.target.host}
+          host={flow.fingerprintHost}
           fingerprint={flow.fingerprint}
           keyType={flow.keyType}
           isMismatch={!!flow.mismatch}
           expected={flow.mismatch?.expected}
-          onAccept={() => driveConnect(flow.targetKind, flow.target, flow.auth, flow.fingerprint, flow.titleOverride, flow.touchHostId)}
+          onAccept={() => {
+            const nextBastion = flow.stage === 'bastion' && flow.bastion
+              ? { ...flow.bastion, acceptFp: flow.fingerprint }
+              : flow.bastion;
+            const nextTargetFingerprint = flow.stage === 'target' ? flow.fingerprint : flow.acceptFp;
+            void driveConnect(
+              flow.targetKind, flow.target, flow.auth, nextTargetFingerprint,
+              flow.titleOverride, flow.touchHostId, nextBastion,
+            );
+          }}
           onCancel={() => setFlow({ phase: 'idle' })}
         />
       )}
       {flow.phase === 'auth' && (
         <AuthPrompt
-          user={flow.target.user}
-          host={flow.target.host}
+          user={flow.stage === 'bastion' && flow.bastion ? flow.bastion.target.user : flow.target.user}
+          host={flow.stage === 'bastion' && flow.bastion ? flow.bastion.target.host : flow.target.host}
           triedAgent={flow.tried.includes('agent')}
           errorMessage={flow.error}
           initialAuth={flow.previousAuth}
-          onSubmit={(auth) => driveConnect(flow.targetKind, flow.target, auth, null, flow.titleOverride, flow.touchHostId)}
+          onSubmit={(auth) => {
+            if (flow.stage === 'bastion' && flow.bastion && flow.pendingAuth) {
+              void driveConnect(
+                flow.targetKind, flow.target, flow.pendingAuth, flow.acceptFp,
+                flow.titleOverride, flow.touchHostId, { ...flow.bastion, auth },
+              );
+              return;
+            }
+            void driveConnect(
+              flow.targetKind, flow.target, auth, flow.acceptFp,
+              flow.titleOverride, flow.touchHostId, flow.bastion,
+            );
+          }}
           onCancel={() => setFlow({ phase: 'idle' })}
         />
       )}

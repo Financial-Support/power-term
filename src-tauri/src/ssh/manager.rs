@@ -1,6 +1,7 @@
 use crate::pty::PtyEvent;
 use crate::ssh::auth::Auth;
 use crate::ssh::known_hosts::KnownHosts;
+use crate::ssh::handshake::Bastion;
 use crate::ssh::session::{SshSession, SshTarget};
 use crate::ssh::{SshError, SshId};
 use parking_lot::Mutex;
@@ -31,6 +32,7 @@ impl SshManager {
         _app: AppHandle,
         target: SshTarget,
         auth: Auth,
+        bastion: Option<Bastion>,
         cols: u16,
         rows: u16,
         connect_timeout: Duration,
@@ -43,6 +45,7 @@ impl SshManager {
         let (session, rx) = SshSession::connect(
             target,
             auth,
+            bastion,
             cols,
             rows,
             connect_timeout,

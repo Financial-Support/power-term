@@ -9,7 +9,7 @@
 //! write/resize/kill operations to it through a tokio mpsc command channel.
 use crate::pty::PtyEvent;
 use crate::ssh::auth::Auth;
-use crate::ssh::handshake::{handshake_and_auth, HandshakeError};
+use crate::ssh::handshake::{handshake_and_auth_chain, Bastion, ChainHandshakeError, HandshakeError};
 use crate::ssh::SshError;
 use russh::client::Msg;
 use russh::{ChannelMsg, Disconnect};
@@ -72,6 +72,7 @@ impl SshSession {
     pub async fn connect(
         target: SshTarget,
         auth: Auth,
+        bastion: Option<Bastion>,
         cols: u16,
         rows: u16,
         connect_timeout: Duration,
@@ -79,17 +80,22 @@ impl SshSession {
         known_hosts_path: std::path::PathBuf,
         accepted_fingerprint: Option<String>,
     ) -> Result<(Arc<Self>, mpsc::Receiver<PtyEvent>), SshError> {
-        let session = handshake_and_auth(
+        let chain = handshake_and_auth_chain(
             target.clone(),
             auth,
+            bastion,
             connect_timeout,
             keepalive,
             known_hosts_path,
             accepted_fingerprint,
-            None,
         )
         .await
-        .map_err(handshake_to_ssh_err)?;
+        .map_err(|error| match error {
+            ChainHandshakeError::Target(error) => handshake_to_ssh_err(error),
+            ChainHandshakeError::Bastion(error) => SshError::Bastion(Box::new(handshake_to_ssh_err(error))),
+        })?;
+        let session = chain.target;
+        let bastion_session = chain.bastion;
 
         // Open channel, request PTY, start shell.
         let channel = session
@@ -119,6 +125,11 @@ impl SshSession {
             let _ = session
                 .disconnect(Disconnect::ByApplication, "", "")
                 .await;
+            if let Some(bastion) = bastion_session {
+                let _ = bastion
+                    .disconnect(Disconnect::ByApplication, "", "")
+                    .await;
+            }
         });
 
         Ok((Arc::new(Self { cmd_tx, cancel }), rx))

@@ -16,6 +16,7 @@ use russh::Disconnect;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(thiserror::Error, Debug)]
 pub enum HandshakeError {
@@ -46,6 +47,24 @@ pub struct SshTarget {
     pub host: String,
     pub port: u16,
     pub user: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct Bastion {
+    pub target: SshTarget,
+    pub auth: Auth,
+    pub accepted_fingerprint: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum ChainHandshakeError {
+    Bastion(HandshakeError),
+    Target(HandshakeError),
+}
+
+pub struct HandshakeChain {
+    pub target: Handle<ClientHandler>,
+    pub bastion: Option<Handle<ClientHandler>>,
 }
 
 #[derive(Debug, Clone)]
@@ -167,6 +186,57 @@ pub async fn handshake_and_auth(
     accepted_fingerprint: Option<String>,
     key_capture: KeyCapture,
 ) -> Result<Handle<ClientHandler>, HandshakeError> {
+    let (config, handler, verdict) = prepare_handshake(
+        &target,
+        keepalive,
+        known_hosts_path,
+        accepted_fingerprint,
+        key_capture,
+    );
+    let connect_future = client::connect(config, (target.host.as_str(), target.port), handler);
+    let connect_result = tokio::time::timeout(connect_timeout, connect_future)
+        .await
+        .map_err(|_| HandshakeError::Connect("timed out".into()))?;
+    finish_handshake_and_auth(target, auth, verdict, connect_result).await
+}
+
+async fn handshake_and_auth_stream<R>(
+    stream: R,
+    target: SshTarget,
+    auth: Auth,
+    connect_timeout: Duration,
+    keepalive: Duration,
+    known_hosts_path: PathBuf,
+    accepted_fingerprint: Option<String>,
+) -> Result<Handle<ClientHandler>, HandshakeError>
+where
+    R: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let (config, handler, verdict) = prepare_handshake(
+        &target,
+        keepalive,
+        known_hosts_path,
+        accepted_fingerprint,
+        None,
+    );
+    let connect_future = client::connect_stream(config, stream, handler);
+    let connect_result = tokio::time::timeout(connect_timeout, connect_future)
+        .await
+        .map_err(|_| HandshakeError::Connect("timed out".into()))?;
+    finish_handshake_and_auth(target, auth, verdict, connect_result).await
+}
+
+fn prepare_handshake(
+    target: &SshTarget,
+    keepalive: Duration,
+    known_hosts_path: PathBuf,
+    accepted_fingerprint: Option<String>,
+    key_capture: KeyCapture,
+) -> (
+    Arc<client::Config>,
+    ClientHandler,
+    Arc<PLMutex<Option<HostKeyVerdict>>>,
+) {
     let config = client::Config {
         inactivity_timeout: Some(keepalive * 4),
         keepalive_interval: Some(keepalive),
@@ -183,12 +253,15 @@ pub async fn handshake_and_auth(
         verdict: verdict.clone(),
         key_capture,
     };
+    (config, handler, verdict)
+}
 
-    let connect_future = client::connect(config, (target.host.as_str(), target.port), handler);
-    let connect_result = tokio::time::timeout(connect_timeout, connect_future)
-        .await
-        .map_err(|_| HandshakeError::Connect("timed out".into()))?;
-
+async fn finish_handshake_and_auth(
+    target: SshTarget,
+    auth: Auth,
+    verdict: Arc<PLMutex<Option<HostKeyVerdict>>>,
+    connect_result: Result<Handle<ClientHandler>, russh::Error>,
+) -> Result<Handle<ClientHandler>, HandshakeError> {
     // When check_server_key returns Ok(false), russh aborts the handshake
     // and `connect_result` is Err(_). Translate that to the typed
     // fingerprint error using the verdict we captured inside the handler,
@@ -315,6 +388,86 @@ pub async fn handshake_and_auth(
         return Err(HandshakeError::Auth);
     }
     Ok(session)
+}
+
+/// Establish an SSH connection directly or through one saved bastion host.
+/// The second SSH handshake runs over a `direct-tcpip` channel, so the target
+/// remains responsible for its own host-key verification and authentication.
+pub async fn handshake_and_auth_chain(
+    target: SshTarget,
+    auth: Auth,
+    bastion: Option<Bastion>,
+    connect_timeout: Duration,
+    keepalive: Duration,
+    known_hosts_path: PathBuf,
+    accepted_fingerprint: Option<String>,
+) -> Result<HandshakeChain, ChainHandshakeError> {
+    let Some(bastion) = bastion else {
+        let target_session = handshake_and_auth(
+            target,
+            auth,
+            connect_timeout,
+            keepalive,
+            known_hosts_path,
+            accepted_fingerprint,
+            None,
+        )
+        .await
+        .map_err(ChainHandshakeError::Target)?;
+        return Ok(HandshakeChain { target: target_session, bastion: None });
+    };
+
+    let bastion_session = handshake_and_auth(
+        bastion.target,
+        bastion.auth,
+        connect_timeout,
+        keepalive,
+        known_hosts_path.clone(),
+        bastion.accepted_fingerprint,
+        None,
+    )
+    .await
+    .map_err(ChainHandshakeError::Bastion)?;
+
+    let tunnel = tokio::time::timeout(
+        connect_timeout,
+        bastion_session.channel_open_direct_tcpip(
+            target.host.clone(),
+            target.port as u32,
+            "127.0.0.1",
+            0,
+        ),
+    )
+    .await
+    .map_err(|_| {
+        ChainHandshakeError::Target(HandshakeError::Connect(format!(
+            "bastion timed out reaching {}:{}",
+            target.host, target.port
+        )))
+    })?
+    .map_err(|error| {
+        ChainHandshakeError::Target(HandshakeError::Connect(format!(
+            "bastion could not reach {}:{}: {error}",
+            target.host, target.port
+        )))
+    })?;
+
+    let target_session = handshake_and_auth_stream(
+        tunnel.into_stream(),
+        target,
+        auth,
+        connect_timeout,
+        keepalive,
+        known_hosts_path,
+        accepted_fingerprint,
+    )
+    .await
+    .map_err(ChainHandshakeError::Target)?;
+
+    Ok(HandshakeChain {
+        target: target_session,
+        bastion: Some(bastion_session),
+    })
 }
 
 /// Authenticate against `session` by walking through identities offered by the

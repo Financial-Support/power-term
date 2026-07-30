@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { encodeBase64, decodeBase64 } from './base64';
-import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, SftpTransferProgress, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor, DbConnection, DbConnectionInput, QueryResult, SshKey, SshKeyInput, TableMeta, DbCell } from '../types';
+import type { PtyExitPayload, Settings, SettingsPatch, AuthRequest, BastionRequest, SshConnectResult, SshTarget, Host, HostInput, SftpEntry, SftpOpenResult, SftpTransferProgress, Snippet, SnippetInput, Forward, ForwardInput, ForwardStatus, TagColor, DbConnection, DbConnectionInput, QueryResult, SshKey, SshKeyInput, TableMeta, DbCell } from '../types';
 
 export async function ptySpawn(args: {
   shell?: string | null;
@@ -64,6 +64,7 @@ export async function sshConnect(args: {
   cols: number;
   rows: number;
   acceptFingerprint?: string | null;
+  bastion?: BastionRequest | null;
 }): Promise<SshConnectResult> {
   return invoke<SshConnectResult>('ssh_connect', {
     target: args.target,
@@ -71,6 +72,7 @@ export async function sshConnect(args: {
     cols: args.cols,
     rows: args.rows,
     acceptFingerprint: args.acceptFingerprint ?? null,
+    bastion: args.bastion ?? null,
   });
 }
 
@@ -167,11 +169,13 @@ export async function sftpOpen(args: {
   host: string; port: number; user: string;
   auth: AuthRequest;
   acceptFingerprint?: string | null;
+  bastion?: BastionRequest | null;
 }): Promise<SftpOpenResult> {
   return invoke<SftpOpenResult>('sftp_open', {
     host: args.host, port: args.port, user: args.user,
     auth: args.auth,
     acceptFingerprint: args.acceptFingerprint ?? null,
+    bastion: args.bastion ?? null,
   });
 }
 

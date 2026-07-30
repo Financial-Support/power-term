@@ -6,6 +6,7 @@ import { useSshKeyStore } from '../state/sshKeyStore';
 import type { AuthMethodKind, Host, HostInput } from '../types';
 import { TagsMultiPicker } from './TagsMultiPicker';
 import { CloseIcon, ServerIcon } from './AppIcons';
+import { bastionRef, eligibleBastions, resolveBastion, withBastionRef } from '../lib/bastion';
 
 export interface HostFormSaveArgs {
   input: HostInput;
@@ -34,7 +35,9 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
   const [port, setPort] = useState<number>(host?.port ?? 22);
   const [username, setUsername] = useState(host?.username ?? '');
   const [groupName, setGroupName] = useState(host?.group_name ?? '');
-  const [tags, setTags] = useState<string[]>(host?.tags ?? []);
+  const [tags, setTags] = useState<string[]>(
+    host?.tags.filter((value) => !value.startsWith('proxyjump:')) ?? [],
+  );
   const [authMethod, setAuthMethod] = useState<AuthMethodKind>(host?.auth_method ?? 'agent');
   const [keyPath, setKeyPath] = useState(host?.key_path ?? '');
   const [secret, setSecret] = useState('');
@@ -42,6 +45,12 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
   const [saveSecret, setSaveSecret] = useState(true);
   const [saveSecretDirty, setSaveSecretDirty] = useState(false);
   const [notes, setNotes] = useState(host?.notes ?? '');
+  const initialBastionRef = host ? bastionRef(host.tags) : null;
+  const initialBastion = host ? resolveBastion(host, hosts) : null;
+  const [selectedBastionRef, setSelectedBastionRef] = useState(initialBastion?.id ?? initialBastionRef ?? '');
+  const bastionOptions = useMemo(() => eligibleBastions(hosts, host?.id), [hosts, host?.id]);
+  const unresolvedBastion =
+    selectedBastionRef !== '' && !bastionOptions.some((candidate) => candidate.id === selectedBastionRef);
 
   // Lazy-load saved keys the first time the form opens; the store caches
   // the result so reopening the form is instant.
@@ -106,7 +115,10 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
     const cleaned = tags
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
-    const dedupedTags = Array.from(new Set(cleaned));
+    const dedupedTags = withBastionRef(
+      Array.from(new Set(cleaned)),
+      selectedBastionRef === '' ? null : selectedBastionRef,
+    );
     const input: HostInput = {
       name: name.trim(),
       hostname: hostname.trim(),
@@ -173,6 +185,28 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
 
           <label htmlFor="hfm-tags">Tags</label>
           <TagsMultiPicker id="hfm-tags" value={tags} onChange={setTags} />
+
+          <label htmlFor="hfm-bastion">Bastion host</label>
+          <div className="form-control-stack">
+            <select
+              id="hfm-bastion"
+              value={selectedBastionRef}
+              onChange={(e) => setSelectedBastionRef(e.target.value)}
+            >
+              <option value="">None — connect directly</option>
+              {unresolvedBastion && (
+                <option value={selectedBastionRef}>Unavailable — {selectedBastionRef}</option>
+              )}
+              {bastionOptions.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name} — {candidate.username}@{candidate.hostname}
+                </option>
+              ))}
+            </select>
+            <span className="form-hint">
+              Connects with that host's access settings, then forwards SSH and SFTP traffic.
+            </span>
+          </div>
         </div>
 
         <fieldset className="auth-method">

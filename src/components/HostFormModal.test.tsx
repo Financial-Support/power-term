@@ -1,13 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HostFormModal } from './HostFormModal';
 import type { Host } from '../types';
+import { useHostStore } from '../state/hostStore';
 
 const sampleHost = (): Host => ({
   id: 'h1', name: 'mac', hostname: 'example.com', port: 22, username: 'alice',
   group_name: 'Personal', tags: ['prod'], auth_method: 'agent',
   key_path: null, notes: null, created_at: 1000, updated_at: 0, last_used_at: null,
+});
+
+beforeEach(() => {
+  useHostStore.setState({ hosts: [], loading: false, error: null });
 });
 
 describe('HostFormModal', () => {
@@ -66,5 +71,50 @@ describe('HostFormModal', () => {
 
     await userEvent.type(screen.getByLabelText(/key path/i), '/Users/u/.ssh/id_ed25519');
     expect(save.disabled).toBe(false);
+  });
+
+  it('saves the selected bastion as internal host metadata', async () => {
+    const gateway = {
+      ...sampleHost(),
+      id: 'jump-1',
+      name: 'gateway',
+      hostname: 'jump.example.com',
+    };
+    useHostStore.setState({ hosts: [gateway] });
+    const onSave = vi.fn();
+    render(<HostFormModal mode="create" onSave={onSave} onCancel={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText(/^name$/i), 'database');
+    await userEvent.type(screen.getByLabelText(/^hostname$/i), 'db.internal');
+    await userEvent.type(screen.getByLabelText(/^username$/i), 'dba');
+    await userEvent.selectOptions(screen.getByLabelText(/bastion host/i), 'jump-1');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({ tags: ['proxyjump:jump-1'] }),
+    }));
+  });
+
+  it('resolves an imported ProxyJump name to the saved bastion id', async () => {
+    const gateway = {
+      ...sampleHost(),
+      id: 'jump-1',
+      name: 'gateway',
+      hostname: 'jump.example.com',
+    };
+    const target = {
+      ...sampleHost(),
+      id: 'target-1',
+      name: 'database',
+      tags: ['prod', 'proxyjump:gateway'],
+    };
+    useHostStore.setState({ hosts: [gateway, target] });
+    const onSave = vi.fn();
+    render(<HostFormModal mode="edit" host={target} onSave={onSave} onCancel={vi.fn()} />);
+
+    expect(screen.getByLabelText(/bastion host/i)).toHaveValue('jump-1');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    expect(onSave.mock.calls[0][0].input.tags).toEqual(['prod', 'proxyjump:jump-1']);
   });
 });

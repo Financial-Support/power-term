@@ -2,6 +2,7 @@ use crate::sftp::session::{SftpSession, SftpTarget};
 use crate::sftp::{SftpError, SftpId};
 use crate::ssh::auth::Auth;
 use crate::ssh::known_hosts::KnownHosts;
+use crate::ssh::handshake::Bastion;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,6 +27,7 @@ impl SftpManager {
         &self,
         target: SftpTarget,
         auth: Auth,
+        bastion: Option<Bastion>,
         connect_timeout: Duration,
         keepalive: Duration,
         accepted_fingerprint: Option<String>,
@@ -34,7 +36,7 @@ impl SftpManager {
         let known_hosts_path = KnownHosts::default_user_path()
             .ok_or_else(|| SftpError::Any("no home dir".into()))?;
         let session = SftpSession::open(
-            target, auth, connect_timeout, keepalive, known_hosts_path, accepted_fingerprint,
+            target, auth, bastion, connect_timeout, keepalive, known_hosts_path, accepted_fingerprint,
         ).await?;
         let id = uuid::Uuid::new_v4().to_string();
         self.sessions.lock().insert(id.clone(), session);

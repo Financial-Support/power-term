@@ -7,6 +7,7 @@ import type { Host, HostInput } from '../types';
 import type { SidebarSection } from './IconRail';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { TagChip } from './TagChip';
+import { bastionRef, resolveBastion } from '../lib/bastion';
 import { ArrowRightIcon, BranchIcon, ChevronDownIcon, CopyIcon, DownloadIcon, FolderIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon } from './AppIcons';
 
 interface Props {
@@ -224,6 +225,8 @@ export function SidebarPanel({
                     <ul className={`sp-host-list${showGroupHeader ? ' nested' : ''}`}>
                       {g.hosts.map((host) => {
                         const isConnected = connectedHostIds.has(host.id);
+                        const jumpRef = bastionRef(host.tags);
+                        const jumpHost = resolveBastion(host, hosts);
                         return (
                         <li
                           key={host.id}
@@ -247,10 +250,10 @@ export function SidebarPanel({
                             />
                             {host.name}
                           </button>
-                          {host.tags.find((t) => t.startsWith('proxyjump:')) && (
+                          {jumpRef && (
                             <span
                               className="sp-host-jump"
-                              title={'Jumps via ' + host.tags.find((t) => t.startsWith('proxyjump:'))!.slice('proxyjump:'.length)}
+                              title={`Jumps via ${jumpHost?.name ?? jumpRef}`}
                             ><BranchIcon size={12} /></span>
                           )}
                           {host.tags

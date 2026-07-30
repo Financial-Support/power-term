@@ -21,6 +21,8 @@ pub enum SshError {
     Auth,
     #[error("authentication required")]
     NeedsAuth { available: Vec<String> },
+    #[error("bastion: {0}")]
+    Bastion(Box<SshError>),
     #[error("host fingerprint unknown")]
     UnknownFingerprint { fingerprint: String, host: String, key_type: String },
     #[error("host fingerprint mismatch")]

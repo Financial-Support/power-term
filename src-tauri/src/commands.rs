@@ -184,13 +184,29 @@ pub enum AuthRequest {
     Key { path: String, passphrase: Option<String> },
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BastionArg {
+    pub target: SshTargetArg,
+    pub auth: AuthRequest,
+    pub accept_fingerprint: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionStage {
+    Target,
+    Bastion,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SshConnectResult {
     Connected { id: String },
-    NeedsFingerprint { fingerprint: String, host: String, key_type: String },
-    FingerprintMismatch { fingerprint: String, expected: String, host: String },
-    NeedsAuth { tried: Vec<String>, available: Vec<String> },
+    NeedsFingerprint { stage: ConnectionStage, fingerprint: String, host: String, key_type: String },
+    FingerprintMismatch { stage: ConnectionStage, fingerprint: String, expected: String, host: String },
+    NeedsAuth { stage: ConnectionStage, tried: Vec<String>, available: Vec<String> },
+    Failed { stage: ConnectionStage, message: String },
 }
 
 impl From<AuthRequest> for Auth {
@@ -215,6 +231,7 @@ pub async fn ssh_connect(
     cols: u16,
     rows: u16,
     accept_fingerprint: Option<String>,
+    bastion: Option<BastionArg>,
 ) -> Result<SshConnectResult, String> {
     let s = settings.get();
     let connect_timeout = Duration::from_secs(s.ssh_connect_timeout_secs as u64);
@@ -225,6 +242,11 @@ pub async fn ssh_connect(
         AuthRequest::Password { .. } => "password",
         AuthRequest::Key { .. } => "publickey",
     }.to_string();
+    let bastion_tried_tag = bastion.as_ref().map(|request| match &request.auth {
+        AuthRequest::Agent => "agent",
+        AuthRequest::Password { .. } => "password",
+        AuthRequest::Key { .. } => "publickey",
+    }.to_string());
 
     // Substitute captured key bytes from the registry when the user picked
     // a path that's been registered. Falls through to the From impl
@@ -233,18 +255,43 @@ pub async fn ssh_connect(
         AuthRequest::Key { path, passphrase } => resolve_key_auth(&ssh_key_store, &path, passphrase),
         other => other.into(),
     };
+    let resolved_bastion = bastion.map(|request| crate::ssh::handshake::Bastion {
+        target: SshTarget {
+            host: request.target.host,
+            port: request.target.port,
+            user: request.target.user,
+        },
+        auth: match request.auth {
+            AuthRequest::Key { path, passphrase } => resolve_key_auth(&ssh_key_store, &path, passphrase),
+            other => other.into(),
+        },
+        accepted_fingerprint: request.accept_fingerprint,
+    });
 
-    match manager.connect(app, target.clone(), resolved_auth, cols, rows, connect_timeout, keepalive, accept_fingerprint).await {
+    match manager.connect(app, target.clone(), resolved_auth, resolved_bastion, cols, rows, connect_timeout, keepalive, accept_fingerprint).await {
         Ok(id) => Ok(SshConnectResult::Connected { id }),
         Err(SshError::UnknownFingerprint { fingerprint, host, key_type }) =>
-            Ok(SshConnectResult::NeedsFingerprint { fingerprint, host, key_type }),
+            Ok(SshConnectResult::NeedsFingerprint { stage: ConnectionStage::Target, fingerprint, host, key_type }),
         Err(SshError::FingerprintMismatch { fingerprint, expected, host }) =>
-            Ok(SshConnectResult::FingerprintMismatch { fingerprint, expected, host }),
+            Ok(SshConnectResult::FingerprintMismatch { stage: ConnectionStage::Target, fingerprint, expected, host }),
         Err(SshError::Auth) => Ok(SshConnectResult::NeedsAuth {
+            stage: ConnectionStage::Target,
             tried: vec![tried_tag],
             available: vec!["agent".into(), "publickey".into(), "password".into()],
         }),
-        Err(e) => Err(e.to_string()),
+        Err(SshError::Bastion(error)) => Ok(match *error {
+            SshError::UnknownFingerprint { fingerprint, host, key_type } =>
+                SshConnectResult::NeedsFingerprint { stage: ConnectionStage::Bastion, fingerprint, host, key_type },
+            SshError::FingerprintMismatch { fingerprint, expected, host } =>
+                SshConnectResult::FingerprintMismatch { stage: ConnectionStage::Bastion, fingerprint, expected, host },
+            SshError::Auth => SshConnectResult::NeedsAuth {
+                stage: ConnectionStage::Bastion,
+                tried: bastion_tried_tag.into_iter().collect(),
+                available: vec!["agent".into(), "publickey".into(), "password".into()],
+            },
+            error => SshConnectResult::Failed { stage: ConnectionStage::Bastion, message: error.to_string() },
+        }),
+        Err(e) => Ok(SshConnectResult::Failed { stage: ConnectionStage::Target, message: e.to_string() }),
     }
 }
 
@@ -450,9 +497,10 @@ use crate::sftp::{SftpError, SftpManager};
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SftpOpenResult {
     Connected { id: String },
-    NeedsFingerprint { fingerprint: String, host: String, key_type: String },
-    FingerprintMismatch { fingerprint: String, expected: String, host: String },
-    NeedsAuth { tried: Vec<String>, available: Vec<String> },
+    NeedsFingerprint { stage: ConnectionStage, fingerprint: String, host: String, key_type: String },
+    FingerprintMismatch { stage: ConnectionStage, fingerprint: String, expected: String, host: String },
+    NeedsAuth { stage: ConnectionStage, tried: Vec<String>, available: Vec<String> },
+    Failed { stage: ConnectionStage, message: String },
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -467,6 +515,7 @@ pub async fn sftp_open(
     user: String,
     auth: AuthRequest,
     accept_fingerprint: Option<String>,
+    bastion: Option<BastionArg>,
 ) -> Result<SftpOpenResult, String> {
     let s = settings.get();
     let connect_timeout = Duration::from_secs(s.ssh_connect_timeout_secs as u64);
@@ -477,23 +526,53 @@ pub async fn sftp_open(
         AuthRequest::Password { .. } => "password",
         AuthRequest::Key { .. } => "publickey",
     }.to_string();
+    let bastion_tried_tag = bastion.as_ref().map(|request| match &request.auth {
+        AuthRequest::Agent => "agent",
+        AuthRequest::Password { .. } => "password",
+        AuthRequest::Key { .. } => "publickey",
+    }.to_string());
 
     let resolved_auth: Auth = match auth {
         AuthRequest::Key { path, passphrase } => resolve_key_auth(&ssh_key_store, &path, passphrase),
         other => other.into(),
     };
+    let resolved_bastion = bastion.map(|request| crate::ssh::handshake::Bastion {
+        target: SshTarget {
+            host: request.target.host,
+            port: request.target.port,
+            user: request.target.user,
+        },
+        auth: match request.auth {
+            AuthRequest::Key { path, passphrase } => resolve_key_auth(&ssh_key_store, &path, passphrase),
+            other => other.into(),
+        },
+        accepted_fingerprint: request.accept_fingerprint,
+    });
 
-    match manager.open(target, resolved_auth, connect_timeout, keepalive, accept_fingerprint).await {
+    match manager.open(target, resolved_auth, resolved_bastion, connect_timeout, keepalive, accept_fingerprint).await {
         Ok(id) => Ok(SftpOpenResult::Connected { id }),
         Err(SftpError::UnknownFingerprint { fingerprint, host, key_type }) =>
-            Ok(SftpOpenResult::NeedsFingerprint { fingerprint, host, key_type }),
+            Ok(SftpOpenResult::NeedsFingerprint { stage: ConnectionStage::Target, fingerprint, host, key_type }),
         Err(SftpError::FingerprintMismatch { fingerprint, expected, host }) =>
-            Ok(SftpOpenResult::FingerprintMismatch { fingerprint, expected, host }),
+            Ok(SftpOpenResult::FingerprintMismatch { stage: ConnectionStage::Target, fingerprint, expected, host }),
         Err(SftpError::Auth) => Ok(SftpOpenResult::NeedsAuth {
+            stage: ConnectionStage::Target,
             tried: vec![tried_tag],
             available: vec!["agent".into(), "publickey".into(), "password".into()],
         }),
-        Err(e) => Err(e.to_string()),
+        Err(SftpError::Bastion(error)) => Ok(match *error {
+            SftpError::UnknownFingerprint { fingerprint, host, key_type } =>
+                SftpOpenResult::NeedsFingerprint { stage: ConnectionStage::Bastion, fingerprint, host, key_type },
+            SftpError::FingerprintMismatch { fingerprint, expected, host } =>
+                SftpOpenResult::FingerprintMismatch { stage: ConnectionStage::Bastion, fingerprint, expected, host },
+            SftpError::Auth => SftpOpenResult::NeedsAuth {
+                stage: ConnectionStage::Bastion,
+                tried: bastion_tried_tag.into_iter().collect(),
+                available: vec!["agent".into(), "publickey".into(), "password".into()],
+            },
+            error => SftpOpenResult::Failed { stage: ConnectionStage::Bastion, message: error.to_string() },
+        }),
+        Err(e) => Ok(SftpOpenResult::Failed { stage: ConnectionStage::Target, message: e.to_string() }),
     }
 }
 
@@ -1540,5 +1619,17 @@ mod ssh_config_tests {
         let cfg = "Host db\n  HostName db.internal\n  ProxyJump bastion\n  User dba\n";
         let entries = parse_ssh_config(cfg, &PathBuf::from("/h"));
         assert_eq!(entries[0].proxy_jump.as_deref(), Some("bastion"));
+    }
+
+    #[test]
+    fn bastion_arg_accepts_frontend_camel_case() {
+        let value = serde_json::json!({
+            "target": { "host": "jump.example.com", "port": 22, "user": "ops" },
+            "auth": { "kind": "agent" },
+            "acceptFingerprint": "SHA256:test"
+        });
+        let arg: BastionArg = serde_json::from_value(value).expect("deserialize bastion");
+        assert_eq!(arg.target.host, "jump.example.com");
+        assert_eq!(arg.accept_fingerprint.as_deref(), Some("SHA256:test"));
     }
 }

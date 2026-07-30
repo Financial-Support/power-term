@@ -14,6 +14,8 @@ pub enum SftpError {
     Handshake(String),
     #[error("authentication failed")]
     Auth,
+    #[error("bastion: {0}")]
+    Bastion(Box<SftpError>),
     #[error("host fingerprint unknown")]
     UnknownFingerprint { fingerprint: String, host: String, key_type: String },
     #[error("host fingerprint mismatch")]

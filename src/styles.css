@@ -2154,6 +2154,21 @@ body::before {
 .modal .form-grid > label { font-size: 12px; color: var(--fg-muted); text-align: left; }
 .modal .form-grid > input,
 .modal .form-grid > select { width: 100%; min-width: 0; box-sizing: border-box; }
+.modal .form-control-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.modal .form-control-stack > select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.modal .form-control-stack .form-hint {
+  margin: 0;
+  line-height: 1.35;
+}
 
 .theme-picker {
   display: inline-flex;

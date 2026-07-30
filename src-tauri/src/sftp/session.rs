@@ -11,7 +11,7 @@
 //! client in an `AsyncMutex` and serialize calls.
 use crate::sftp::SftpError;
 use crate::ssh::auth::Auth;
-use crate::ssh::handshake::{handshake_and_auth, ClientHandler, HandshakeError};
+use crate::ssh::handshake::{handshake_and_auth_chain, Bastion, ChainHandshakeError, ClientHandler, HandshakeError};
 use russh::client::Handle;
 use russh::Disconnect;
 use russh_sftp::client::SftpSession as SftpClient;
@@ -81,6 +81,7 @@ pub struct SftpSession {
     /// Hold the russh session alive for the lifetime of the SFTP session.
     /// Wrapped in AsyncMutex so close() can disconnect.
     ssh: AsyncMutex<Handle<ClientHandler>>,
+    bastion: Option<AsyncMutex<Handle<ClientHandler>>>,
 }
 
 impl SftpSession {
@@ -88,22 +89,27 @@ impl SftpSession {
     pub async fn open(
         target: SftpTarget,
         auth: Auth,
+        bastion: Option<Bastion>,
         connect_timeout: Duration,
         keepalive: Duration,
         known_hosts_path: PathBuf,
         accepted_fingerprint: Option<String>,
     ) -> Result<Arc<Self>, SftpError> {
-        let session = handshake_and_auth(
+        let chain = handshake_and_auth_chain(
             target.clone(),
             auth,
+            bastion,
             connect_timeout,
             keepalive,
             known_hosts_path,
             accepted_fingerprint,
-            None,
         )
         .await
-        .map_err(handshake_to_sftp_err)?;
+        .map_err(|error| match error {
+            ChainHandshakeError::Target(error) => handshake_to_sftp_err(error),
+            ChainHandshakeError::Bastion(error) => SftpError::Bastion(Box::new(handshake_to_sftp_err(error))),
+        })?;
+        let session = chain.target;
 
         // Open SFTP subsystem.
         let channel = session
@@ -121,6 +127,7 @@ impl SftpSession {
         Ok(Arc::new(Self {
             sftp: AsyncMutex::new(sftp),
             ssh: AsyncMutex::new(session),
+            bastion: chain.bastion.map(AsyncMutex::new),
         }))
     }
 
@@ -457,6 +464,10 @@ impl SftpSession {
         drop(sftp);
         let ssh = self.ssh.lock().await;
         let _ = ssh.disconnect(Disconnect::ByApplication, "", "").await;
+        if let Some(bastion) = &self.bastion {
+            let bastion = bastion.lock().await;
+            let _ = bastion.disconnect(Disconnect::ByApplication, "", "").await;
+        }
         Ok(())
     }
 }
