@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
-import { LocalBrowser, type DragPayload } from './LocalBrowser';
+import { LocalBrowser } from './LocalBrowser';
 import { FileBrowser } from './FileBrowser';
 import { Splitter } from './Splitter';
 import { useSftpStore } from '../state/sftpStore';
 import { isSftpTransferCancelledError, sftpDownload, sftpUpload } from '../lib/ipc';
+import type { FileDragPayload } from '../types';
 
 interface Props {
   tabId: string;
@@ -32,28 +33,33 @@ export function SftpDualBrowser({ tabId, onClose }: Props) {
   // adding an explicit reload prop and coordinating across components.
   const refreshLocal = () => setBumpKey((k) => k + 1);
 
-  const handleRemoteToLocal = async (payload: DragPayload, targetCwd: string) => {
+  const handleRemoteToLocal = async (payload: FileDragPayload, targetCwd: string) => {
     if (payload.kind !== 'remote' || !payload.sftpId) return;
-    const localPath = joinPath(targetCwd, payload.name);
-    try {
-      await sftpDownload(payload.sftpId, payload.path, localPath);
-    } catch (err) {
-      if (!isSftpTransferCancelledError(err)) throw err;
-      return;
+    for (const item of payload.items) {
+      const localPath = joinPath(targetCwd, item.name);
+      try {
+        await sftpDownload(payload.sftpId, item.path, localPath);
+      } catch (err) {
+        if (!isSftpTransferCancelledError(err)) throw err;
+        break;
+      }
     }
     refreshLocal();
   };
 
   const handleLocalToRemote = async (
-    payload: { kind: 'local'; path: string; name: string },
+    payload: FileDragPayload,
     targetCwd: string,
     sftpId: string,
   ) => {
-    try {
-      await sftpUpload(sftpId, payload.path, joinPath(targetCwd, payload.name));
-    } catch (err) {
-      if (!isSftpTransferCancelledError(err)) throw err;
-      return;
+    if (payload.kind !== 'local') return;
+    for (const item of payload.items) {
+      try {
+        await sftpUpload(sftpId, item.path, joinPath(targetCwd, item.name));
+      } catch (err) {
+        if (!isSftpTransferCancelledError(err)) throw err;
+        break;
+      }
     }
     void reload(tabId);
   };

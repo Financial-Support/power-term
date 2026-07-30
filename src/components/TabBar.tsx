@@ -122,7 +122,7 @@ function SortableTab({
           onClick={(e) => { e.stopPropagation(); onReconnect?.(); }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <RefreshIcon size={12} />
+          <RefreshIcon size={14} />
         </button>
       )}
       <button
@@ -132,7 +132,7 @@ function SortableTab({
         onClick={(e) => { e.stopPropagation(); onClose(); }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <CloseIcon size={10} />
+        <CloseIcon size={14} />
       </button>
     </div>
   );

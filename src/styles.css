@@ -344,32 +344,34 @@ body::before {
   border: 0;
   color: var(--fg-muted);
   cursor: pointer;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex: 0 0 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  font-size: 10px;
   line-height: 1;
   opacity: 0;
   transition: var(--transition-smooth);
 }
 .tab:hover .tab-close,
-.tab.active .tab-close { opacity: 0.6; }
+.tab.active .tab-close { opacity: 0.82; }
 .tab-close:hover { opacity: 1 !important; background: rgba(255, 255, 255, 0.08); color: var(--danger); }
 .tab-reconnect {
   background: transparent;
   border: 0;
   color: var(--warning);
   cursor: pointer;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex: 0 0 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  font-size: 13px;
   line-height: 1;
   opacity: 0.85;
   transition: var(--transition-smooth);
@@ -378,6 +380,12 @@ body::before {
   opacity: 1;
   background: color-mix(in srgb, var(--warning) 18%, transparent);
   transform: rotate(90deg);
+}
+.tab-close:focus-visible,
+.tab-reconnect:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .tab-new {
   background: rgba(255, 255, 255, 0.02);
@@ -2687,6 +2695,17 @@ body::before {
   background: var(--accent-bg);
   border-bottom: 1px solid var(--accent-ring);
 }
+.fb-selection-count {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border-radius: 999px;
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ─── Dual SFTP browser ─────────────────────────────────────────────────── */
 .sftp-dual {
@@ -2900,6 +2919,13 @@ body::before {
   align-items: center; padding: 0 12px; min-height: 32px; font-size: 12px;
 }
 .file-row:hover { background: rgba(255, 255, 255, 0.03); }
+.file-row.selected,
+.file-row.local-row.selected,
+.file-row.selected:hover,
+.file-row.local-row.selected:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
 .file-row.pseudo-up {
   background: transparent; border: 0; width: 100%; text-align: left;
   cursor: pointer; color: var(--fg);
@@ -2909,6 +2935,18 @@ body::before {
   background: transparent; border: 0; cursor: default; color: var(--fg);
   font: inherit; font-size: 13px; text-align: left; padding: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.file-select-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: 0 0 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.file-select-checkbox:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .file-row.is-dir .file-row-name { cursor: pointer; }
 .file-row .file-icon { width: 18px; }

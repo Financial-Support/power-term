@@ -1,15 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { ArrowLeftIcon, ArrowRightIcon, CopyIcon, DownloadIcon, FileIcon, FolderIcon, ParentDirectoryIcon, RefreshIcon, RevealIcon } from './AppIcons';
 import { localList, localHome, localReveal, type LocalEntry } from '../lib/ipc';
-
-export interface DragPayload {
-  kind: 'local' | 'remote';
-  path: string;
-  name: string;
-  /** Only present for remote-side drags. */
-  sftpId?: string;
-}
+import { nextFileSelection } from '../lib/fileSelection';
+import type { FileDragPayload } from '../types';
 
 const DRAG_MIME = 'application/x-power-term-file';
 
@@ -17,7 +11,7 @@ interface Props {
   /** Stable id used for HTML5 drag/drop conflict resolution. */
   id: string;
   /** Called when a remote drag is dropped onto this local pane. */
-  onRemoteDrop: (payload: DragPayload, targetCwd: string) => Promise<void> | void;
+  onRemoteDrop: (payload: FileDragPayload, targetCwd: string) => Promise<void> | void;
   showHidden: boolean;
   /** Bumping this triggers a re-list of the current cwd without resetting it. */
   reloadKey?: number;
@@ -40,6 +34,8 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
   const [dropOver, setDropOver] = useState(false);
   const [downloading, setDownloading] = useState<{ done: number; total: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: LocalEntry } | null>(null);
+  const [selectedNames, setSelectedNames] = useState<Set<string>>(() => new Set());
+  const selectionAnchor = useRef<string | null>(null);
 
   // Resolve home on first mount; bootstrap cwd there.
   useEffect(() => {
@@ -64,6 +60,10 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
   };
 
   useEffect(() => { if (cwd) void reload(cwd); }, [cwd]);
+  useEffect(() => {
+    setSelectedNames(new Set());
+    selectionAnchor.current = null;
+  }, [cwd]);
   // External reload trigger (e.g. after a download landed in cwd). Skip
   // the initial render so we don't double-fire alongside the cwd effect.
   useEffect(() => {
@@ -110,10 +110,19 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
       e.preventDefault();
       return;
     }
-    const payload: DragPayload = {
+    const entriesToDrag = selectedNames.has(entry.name)
+      ? sorted.filter((item) => selectedNames.has(item.name) && (item.kind === 'file' || item.kind === 'dir'))
+      : [entry];
+    if (!selectedNames.has(entry.name)) {
+      setSelectedNames(new Set([entry.name]));
+      selectionAnchor.current = entry.name;
+    }
+    const payload: FileDragPayload = {
       kind: 'local',
-      path: joinPath(cwd, entry.name),
-      name: entry.name,
+      items: entriesToDrag.map((item) => ({
+        path: joinPath(cwd, item.name),
+        name: item.name,
+      })),
     };
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload));
     e.dataTransfer.effectAllowed = 'copy';
@@ -134,17 +143,31 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
     const raw = e.dataTransfer.getData(DRAG_MIME);
     if (!raw || !cwd) return;
     try {
-      const payload = JSON.parse(raw) as DragPayload;
+      const payload = JSON.parse(raw) as FileDragPayload;
       if (payload.kind === 'local') return; // dropping local→local is a no-op for now
-      setDownloading({ done: 0, total: 1 });
+      if (!Array.isArray(payload.items) || payload.items.length === 0) return;
+      setDownloading({ done: 0, total: payload.items.length });
       await onRemoteDrop(payload, cwd);
-      setDownloading({ done: 1, total: 1 });
+      setDownloading({ done: payload.items.length, total: payload.items.length });
       await reload(cwd);
     } catch (err) {
       setError(`drop: ${String(err)}`);
     } finally {
       setDownloading(null);
     }
+  };
+
+  const selectEntry = (e: React.MouseEvent, entry: LocalEntry) => {
+    const clickedCheckbox = !!(e.target as HTMLElement).closest('.file-select-checkbox');
+    const result = nextFileSelection(
+      sorted.map((item) => item.name),
+      selectedNames,
+      selectionAnchor.current,
+      entry.name,
+      { toggle: clickedCheckbox || e.metaKey || e.ctrlKey, range: e.shiftKey },
+    );
+    selectionAnchor.current = result.anchor;
+    setSelectedNames(result.selected);
   };
 
   return (
@@ -170,6 +193,9 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
             placeholder="/Users/you"
           />
           <span className="fb-pane-label">Local</span>
+          {selectedNames.size > 0 && (
+            <span className="fb-selection-count" aria-live="polite">{selectedNames.size} selected</span>
+          )}
         </div>
         <div className="fb-toolbar-actions">
           <button type="button" aria-label="reload" title="Reload" disabled={loading || !cwd} onClick={() => cwd && void reload(cwd)}><RefreshIcon size={14} /></button>
@@ -193,7 +219,18 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
         <span className="fb-col fb-col-size">Size</span>
         <span className="fb-col fb-col-mod">Modified</span>
       </div>
-      <div className="fb-list">
+      <div
+        className="fb-list"
+        role="listbox"
+        aria-label="Local files"
+        aria-multiselectable="true"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setSelectedNames(new Set());
+            selectionAnchor.current = null;
+          }
+        }}
+      >
         {cwd && cwd !== '/' && (
           <button type="button" className="file-row pseudo-up" onClick={cdParent}>
             <span className="file-row-name"><span className="file-icon"><ParentDirectoryIcon size={14} /></span><span className="file-name">..</span></span>
@@ -204,13 +241,23 @@ export function LocalBrowser({ id, onRemoteDrop, showHidden, reloadKey, onCopyTo
         {sorted.map((entry) => (
           <div
             key={entry.name}
-            className={`file-row local-row${entry.kind === 'dir' ? ' is-dir' : ''}`}
+            className={`file-row local-row${entry.kind === 'dir' ? ' is-dir' : ''}${selectedNames.has(entry.name) ? ' selected' : ''}`}
+            role="option"
+            aria-selected={selectedNames.has(entry.name)}
             draggable={entry.kind === 'file' || entry.kind === 'dir'}
             onDragStart={(e) => onDragStart(e, entry)}
+            onClick={(e) => selectEntry(e, entry)}
             onDoubleClick={() => entry.kind === 'dir' && cdInto(entry.name)}
             onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, entry }); }}
           >
             <span className="file-row-name">
+              <input
+                type="checkbox"
+                className="file-select-checkbox"
+                checked={selectedNames.has(entry.name)}
+                readOnly
+                aria-label={`Select ${entry.name}`}
+              />
               <span className="file-icon">{entry.kind === 'dir' ? <FolderIcon size={14} /> : <FileIcon size={14} />}</span>
               <span className="file-name">{entry.name}</span>
             </span>

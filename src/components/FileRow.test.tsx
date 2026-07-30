@@ -13,16 +13,18 @@ describe('FileRow', () => {
   it('renders name + size + modified', () => {
     render(
       <FileRow entry={e({ name: 'data.csv', size: 2048 })}
+        selected={false} onSelect={vi.fn()}
         onCd={vi.fn()} onDownload={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} />,
     );
     expect(screen.getByText('data.csv')).toBeInTheDocument();
     expect(screen.getByText(/2\.0 KB|2 KB/)).toBeInTheDocument();
   });
 
-  it('clicking a directory row calls onCd with name', async () => {
+  it('clicking a directory name calls onCd with name', async () => {
     const onCd = vi.fn();
     render(
       <FileRow entry={e({ name: 'projects', kind: 'dir' })}
+        selected={false} onSelect={vi.fn()}
         onCd={onCd} onDownload={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} />,
     );
     await userEvent.click(screen.getByText('projects'));
@@ -33,6 +35,7 @@ describe('FileRow', () => {
     const onCd = vi.fn();
     render(
       <FileRow entry={e({ name: 'data.csv', kind: 'file' })}
+        selected={false} onSelect={vi.fn()}
         onCd={onCd} onDownload={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} />,
     );
     await userEvent.click(screen.getByText('data.csv'));
@@ -45,6 +48,7 @@ describe('FileRow', () => {
     const onDelete = vi.fn();
     render(
       <FileRow entry={e({ name: 'data.csv' })}
+        selected={false} onSelect={vi.fn()}
         onCd={vi.fn()} onDownload={onDownload} onRename={onRename} onDelete={onDelete} />,
     );
     await userEvent.click(screen.getByLabelText('download data.csv'));
@@ -58,10 +62,21 @@ describe('FileRow', () => {
   it('directory row hides download but shows rename + delete', () => {
     render(
       <FileRow entry={e({ name: 'projects', kind: 'dir' })}
+        selected={false} onSelect={vi.fn()}
         onCd={vi.fn()} onDownload={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} />,
     );
     expect(screen.queryByLabelText('download projects')).not.toBeInTheDocument();
     expect(screen.getByLabelText('rename projects')).toBeInTheDocument();
     expect(screen.getByLabelText('delete projects')).toBeInTheDocument();
+  });
+
+  it('renders a checked selection checkbox', () => {
+    render(
+      <FileRow entry={e({ name: 'selected.txt' })}
+        selected onSelect={vi.fn()}
+        onCd={vi.fn()} onDownload={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(screen.getByLabelText('Select selected.txt')).toBeChecked();
+    expect(screen.getByRole('option')).toHaveAttribute('aria-selected', 'true');
   });
 });

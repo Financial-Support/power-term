@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../lib/ipc', () => ({
@@ -16,6 +16,7 @@ vi.mock('../lib/ipc', () => ({
 
 vi.mock('../lib/dialog', () => ({
   pickLocalFile: vi.fn(),
+  pickLocalFiles: vi.fn(),
   pickLocalSavePath: vi.fn(),
 }));
 
@@ -26,7 +27,7 @@ vi.mock('@tauri-apps/api/webview', () => ({
 }));
 
 import { sftpDownload, sftpList, sftpMkdir, sftpRename, sftpUpload } from '../lib/ipc';
-import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
+import { pickLocalFiles, pickLocalSavePath } from '../lib/dialog';
 import { FileBrowser } from './FileBrowser';
 import { useSftpStore } from '../state/sftpStore';
 import type { SftpEntry } from '../types';
@@ -61,7 +62,7 @@ describe('FileBrowser', () => {
     expect(screen.getByText('sub')).toBeInTheDocument();
   });
 
-  it('clicking a directory row navigates into it', async () => {
+  it('clicking a directory name navigates into it', async () => {
     (sftpList as any).mockResolvedValue([e({ name: 'inside.txt' })]);
     render(<FileBrowser tabId="t" onClose={vi.fn()} />);
     await userEvent.click(screen.getByText('sub'));
@@ -143,7 +144,7 @@ describe('FileBrowser', () => {
   });
 
   it('confirms overwrite before uploading over an existing file', async () => {
-    (pickLocalFile as any).mockResolvedValue('/tmp/a.txt');
+    (pickLocalFiles as any).mockResolvedValue(['/tmp/a.txt']);
     (sftpUpload as any).mockResolvedValue(undefined);
     (sftpList as any).mockResolvedValue([]);
     render(<FileBrowser tabId="t" onClose={vi.fn()} />);
@@ -153,5 +154,39 @@ describe('FileBrowser', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Overwrite' }));
 
     expect(sftpUpload).toHaveBeenCalledWith('s', '/tmp/a.txt', '/home/alice/a.txt');
+  });
+
+  it('uploads multiple files selected from the native picker', async () => {
+    (pickLocalFiles as any).mockResolvedValue(['/tmp/b.txt', '/tmp/c.txt']);
+    (sftpUpload as any).mockResolvedValue(undefined);
+    (sftpList as any).mockResolvedValue([]);
+    render(<FileBrowser tabId="t" onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByLabelText('upload'));
+
+    expect(sftpUpload).toHaveBeenNthCalledWith(1, 's', '/tmp/b.txt', '/home/alice/b.txt');
+    expect(sftpUpload).toHaveBeenNthCalledWith(2, 's', '/tmp/c.txt', '/home/alice/c.txt');
+  });
+
+  it('drags every selected remote entry as one payload', () => {
+    const onRowDragStart = vi.fn();
+    render(<FileBrowser tabId="t" onClose={vi.fn()} onRowDragStart={onRowDragStart} />);
+
+    fireEvent.click(screen.getByLabelText('Select a.txt'));
+    fireEvent.click(screen.getByLabelText('Select sub'));
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+
+    const row = screen.getByLabelText('Select a.txt').closest('[role="option"]');
+    expect(row).not.toBeNull();
+    fireEvent.dragStart(row!);
+
+    expect(onRowDragStart).toHaveBeenCalledWith(expect.anything(), {
+      kind: 'remote',
+      sftpId: 's',
+      items: [
+        { name: 'sub', path: '/home/alice/sub' },
+        { name: 'a.txt', path: '/home/alice/a.txt' },
+      ],
+    });
   });
 });

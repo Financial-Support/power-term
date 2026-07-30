@@ -114,6 +114,18 @@ export interface SftpEntry {
   symlink_target: string | null;
 }
 
+export interface FileDragItem {
+  path: string;
+  name: string;
+}
+
+export interface FileDragPayload {
+  kind: 'local' | 'remote';
+  items: FileDragItem[];
+  /** Only present for remote-side drags. */
+  sftpId?: string;
+}
+
 export interface SftpTransferProgress {
   transfer_id: string;
   direction: 'upload' | 'download';

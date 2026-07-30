@@ -1,20 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileRow } from './FileRow';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { ConfirmModal } from './ConfirmModal';
 import { ArrowLeftIcon, CloseIcon, CopyIcon, DownloadIcon, FolderIcon, FolderPlusIcon, ParentDirectoryIcon, PencilIcon, TrashIcon, UploadIcon, RefreshIcon } from './AppIcons';
 import { useSftpStore } from '../state/sftpStore';
 import { isSftpTransferCancelledError, sftpDownload, sftpMkdir, sftpRemoveDir, sftpRemoveFile, sftpRename, sftpUpload } from '../lib/ipc';
-import { pickLocalFile, pickLocalSavePath } from '../lib/dialog';
-import type { SftpEntry } from '../types';
+import { pickLocalFiles, pickLocalSavePath } from '../lib/dialog';
+import { nextFileSelection } from '../lib/fileSelection';
+import type { FileDragPayload, SftpEntry } from '../types';
 
 interface Props {
   tabId: string;
   onClose: () => void;
   /** When set, this pane participates in dual-pane drag/drop. The host
    *  component handles cross-pane copies; we only fire callbacks. */
-  onRowDragStart?: (e: React.DragEvent, payload: { kind: 'remote'; sftpId: string; path: string; name: string }) => void;
-  onLocalDrop?: (payload: { kind: 'local'; path: string; name: string }, targetCwd: string, sftpId: string) => Promise<void> | void;
+  onRowDragStart?: (e: React.DragEvent, payload: FileDragPayload) => void;
+  onLocalDrop?: (payload: FileDragPayload, targetCwd: string, sftpId: string) => Promise<void> | void;
   /** When dual-pane mode is on, "Copy to local" appears in the row context
    *  menu and calls this with the entry's full remote path. */
   onCopyToLocal?: (remotePath: string, name: string) => Promise<void> | void;
@@ -40,7 +41,14 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
   const [renameEntry, setRenameEntry] = useState<SftpEntry | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
-  const [uploadOverwrite, setUploadOverwrite] = useState<{ local: string; base: string } | null>(null);
+  const [selectedNames, setSelectedNames] = useState<Set<string>>(() => new Set());
+  const selectionAnchor = useRef<string | null>(null);
+  const [uploadOverwrite, setUploadOverwrite] = useState<{
+    current: { local: string; base: string };
+    remaining: Array<{ local: string; base: string }>;
+    done: number;
+    total: number;
+  } | null>(null);
 
   // Sync local breadcrumb input when cwd changes externally (after navigate).
   useEffect(() => {
@@ -51,6 +59,11 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab?.cwd]);
+
+  useEffect(() => {
+    setSelectedNames(new Set());
+    selectionAnchor.current = null;
   }, [tab?.cwd]);
 
   const sorted = useMemo(() => {
@@ -167,34 +180,49 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
     }
   };
 
-  const onUpload = async () => {
-    const local = await pickLocalFile();
-    if (!local) return;
-    const base = local.split('/').pop() ?? 'upload';
-    // Spec §9: confirm before overwriting an existing remote file. The current
-    // listing is the source of truth; if the entry is stale, the SFTP server's
-    // overwrite is still TRUNCATE — we accept that race for MVP.
-    const clash = tab.entries.find((e) => e.name === base);
-    if (clash) {
-      setUploadOverwrite({ local, base });
-      return;
+  const performUploadBatch = async (
+    files: Array<{ local: string; base: string }>,
+    initialDone = 0,
+    total = files.length,
+    overwriteFirst = false,
+  ) => {
+    setError(tabId, null);
+    let done = initialDone;
+    setUploadProgress({ done, total });
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      const clash = tab.entries.some((entry) => entry.name === file.base);
+      if (clash && !(overwriteFirst && index === 0)) {
+        setUploadOverwrite({ current: file, remaining: files.slice(index + 1), done, total });
+        return;
+      }
+      try {
+        await sftpUpload(tab.sftpId, file.local, joinPath(tab.cwd, file.base));
+      } catch (err) {
+        if (isSftpTransferCancelledError(err)) {
+          setUploadProgress(null);
+          void reload(tabId);
+          return;
+        }
+        reportOpError(`upload "${file.base}"`, err);
+      }
+      done++;
+      setUploadProgress({ done, total });
     }
-    await performUpload(local, base);
+    setUploadProgress(null);
+    void reload(tabId);
   };
 
-  const performUpload = async (local: string, base: string) => {
-    setError(tabId, null);
-    try {
-      await sftpUpload(tab.sftpId, local, joinPath(tab.cwd, base));
-    } catch (err) {
-      reportOpError('upload', err);
-    }
-    void reload(tabId);
+  const onUpload = async () => {
+    const paths = await pickLocalFiles();
+    if (!paths.length) return;
+    const files = paths.map((local) => ({ local, base: local.split('/').pop() ?? 'upload' }));
+    await performUploadBatch(files);
   };
 
   // HTML5 drag-drop. Two source kinds reach this handler:
   //   1. The local pane (intra-webview) sets DUAL_DRAG_MIME with a JSON
-  //      payload pointing at an absolute local file path.
+  //      payload containing one or more absolute local file paths.
   //   2. Finder drags expose file paths via text/uri-list as file:// URLs.
   //
   // Don't gate dragover on dataTransfer.types — WebKit hides custom MIME
@@ -215,8 +243,13 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
       if (raw) {
         try {
           const payload = JSON.parse(raw);
-          if (payload.kind === 'local') {
-            await onLocalDrop(payload, tab.cwd, tab.sftpId);
+          if (payload.kind === 'local' && Array.isArray(payload.items) && payload.items.length > 0) {
+            setUploadProgress({ done: 0, total: payload.items.length });
+            try {
+              await onLocalDrop(payload, tab.cwd, tab.sftpId);
+            } finally {
+              setUploadProgress(null);
+            }
             void reload(tabId);
           }
         } catch (err) { reportOpError('drop', err); }
@@ -266,12 +299,34 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
 
   const onRowDragStartLocal = (e: React.DragEvent, entry: SftpEntry) => {
     if (!onRowDragStart) return;
+    const entries = selectedNames.has(entry.name)
+      ? sorted.filter((item) => selectedNames.has(item.name) && item.kind !== 'symlink')
+      : [entry];
+    if (!selectedNames.has(entry.name)) {
+      setSelectedNames(new Set([entry.name]));
+      selectionAnchor.current = entry.name;
+    }
     onRowDragStart(e, {
       kind: 'remote',
       sftpId: tab.sftpId,
-      path: joinPath(tab.cwd, entry.name),
-      name: entry.name,
+      items: entries.map((item) => ({
+        path: joinPath(tab.cwd, item.name),
+        name: item.name,
+      })),
     });
+  };
+
+  const selectEntry = (e: React.MouseEvent, entry: SftpEntry) => {
+    const clickedCheckbox = !!(e.target as HTMLElement).closest('.file-select-checkbox');
+    const result = nextFileSelection(
+      sorted.map((item) => item.name),
+      selectedNames,
+      selectionAnchor.current,
+      entry.name,
+      { toggle: clickedCheckbox || e.metaKey || e.ctrlKey, range: e.shiftKey },
+    );
+    selectionAnchor.current = result.anchor;
+    setSelectedNames(result.selected);
   };
 
   const buildCtxItems = (entry: SftpEntry): MenuEntry[] => {
@@ -319,6 +374,9 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
             onKeyDown={onPathKey}
           />
           <span className="fb-pane-label">Remote</span>
+          {selectedNames.size > 0 && (
+            <span className="fb-selection-count" aria-live="polite">{selectedNames.size} selected</span>
+          )}
         </div>
         <div className="fb-toolbar-actions">
           <button type="button" aria-label="reload" title="Reload" disabled={tab.loading} onClick={() => void reload(tabId)}><RefreshIcon size={14} /></button>
@@ -364,7 +422,18 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
           </div>
         </div>
       )}
-      <div className="fb-list">
+      <div
+        className="fb-list"
+        role="listbox"
+        aria-label="Remote files"
+        aria-multiselectable="true"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setSelectedNames(new Set());
+            selectionAnchor.current = null;
+          }
+        }}
+      >
         {tab.cwd !== '/' && (
           <button type="button" className="file-row pseudo-up" onClick={cdParent}>
             <span className="file-row-name"><span className="file-icon"><ParentDirectoryIcon size={14} /></span><span className="file-name">..</span></span>
@@ -376,6 +445,8 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
           <FileRow
             key={entry.name}
             entry={entry}
+            selected={selectedNames.has(entry.name)}
+            onSelect={selectEntry}
             onCd={(name) => cdInto(name)}
             onDownload={(e) => void onDownload(e)}
             onRename={(e) => void onRename(e)}
@@ -457,15 +528,23 @@ export function FileBrowser({ tabId, onRowDragStart, onLocalDrop, onCopyToLocal 
       {uploadOverwrite && (
         <ConfirmModal
           title="Overwrite file"
-          message={`Replace "${uploadOverwrite.base}" in ${tab.cwd}?`}
+          message={`Replace "${uploadOverwrite.current.base}" in ${tab.cwd}?`}
           confirmLabel="Overwrite"
           destructive
           onConfirm={() => {
             const next = uploadOverwrite;
             setUploadOverwrite(null);
-            void performUpload(next.local, next.base);
+            void performUploadBatch(
+              [next.current, ...next.remaining],
+              next.done,
+              next.total,
+              true,
+            );
           }}
-          onCancel={() => setUploadOverwrite(null)}
+          onCancel={() => {
+            setUploadOverwrite(null);
+            setUploadProgress(null);
+          }}
         />
       )}
     </div>
