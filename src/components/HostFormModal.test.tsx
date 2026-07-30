@@ -88,6 +88,7 @@ describe('HostFormModal', () => {
     await userEvent.type(screen.getByLabelText(/^hostname$/i), 'db.internal');
     await userEvent.type(screen.getByLabelText(/^username$/i), 'dba');
     await userEvent.selectOptions(screen.getByLabelText(/bastion host/i), 'jump-1');
+    expect(screen.getByText('Via alice@jump.example.com')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /save/i }));
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({

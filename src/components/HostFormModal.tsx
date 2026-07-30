@@ -49,8 +49,14 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
   const initialBastion = host ? resolveBastion(host, hosts) : null;
   const [selectedBastionRef, setSelectedBastionRef] = useState(initialBastion?.id ?? initialBastionRef ?? '');
   const bastionOptions = useMemo(() => eligibleBastions(hosts, host?.id), [hosts, host?.id]);
+  const selectedBastion = bastionOptions.find((candidate) => candidate.id === selectedBastionRef);
   const unresolvedBastion =
     selectedBastionRef !== '' && !bastionOptions.some((candidate) => candidate.id === selectedBastionRef);
+  const bastionHint = selectedBastion
+    ? `Via ${selectedBastion.username}@${selectedBastion.hostname}`
+    : unresolvedBastion
+      ? 'Saved bastion is unavailable'
+      : 'No jump host';
 
   // Lazy-load saved keys the first time the form opens; the store caches
   // the result so reopening the form is instant.
@@ -192,6 +198,7 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
               id="hfm-bastion"
               value={selectedBastionRef}
               onChange={(e) => setSelectedBastionRef(e.target.value)}
+              aria-describedby="hfm-bastion-hint"
             >
               <option value="">None — connect directly</option>
               {unresolvedBastion && (
@@ -203,8 +210,8 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
                 </option>
               ))}
             </select>
-            <span className="form-hint">
-              Connects with that host's access settings, then forwards SSH and SFTP traffic.
+            <span id="hfm-bastion-hint" className="form-hint" title={bastionHint}>
+              {bastionHint}
             </span>
           </div>
         </div>

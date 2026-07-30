@@ -2158,16 +2158,26 @@ body::before {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .modal .form-control-stack > select {
   width: 100%;
+  min-height: 32px;
   min-width: 0;
   box-sizing: border-box;
 }
 .modal .form-control-stack .form-hint {
   margin: 0;
-  line-height: 1.35;
+  color: var(--fg-dim);
+  font-size: 10.5px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modal .form-grid > label[for="hfm-bastion"] {
+  align-self: start;
+  padding-top: 8px;
 }
 
 .theme-picker {
