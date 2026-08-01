@@ -123,6 +123,13 @@ impl SyncManager {
             // the row without deleted_at.
             flush_queue(&client, &queue).await;
             pull::pull_all(&client, db, &queue, sync_key.as_ref()).await.map_err(|e| e.to_string())?;
+            if !user_id.is_empty() {
+              if let Some(key) = sync_key.as_ref() {
+                push::push_all_local_credentials(&client, db, &user_id, key)
+                    .await
+                    .map_err(|e| e.to_string())?;
+              }
+            }
             if is_first_sync && !user_id.is_empty() {
                 if let Err(e) = push::push_all_local(&client, db, &user_id).await {
                     tracing::warn!(error = %e, "push_all_local failed");

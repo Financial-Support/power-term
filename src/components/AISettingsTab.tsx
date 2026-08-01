@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { secretGet, secretSet, secretDelete } from '../lib/ipc';
 import { KeyIcon, SparklesIcon } from './AppIcons';
+import { SecretInput } from './SecretInput';
 
 const SECRET_KEY = '__ai_anthropic';
 
-/** Settings panel for the AI command bar. The Anthropic API key is held in
- *  the OS keychain via the existing secret_set/get plumbing (keyed under the
- *  reserved id `__ai_anthropic`). It deliberately does not flow through the
- *  sync pipeline — secrets stay local. */
+/** Settings panel for the AI command bar. The raw key remains available in
+ *  the local credential cache; sync only ever receives its encrypted form. */
 export function AISettingsTab() {
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
@@ -22,6 +21,7 @@ export function AISettingsTab() {
         const existing = await secretGet(SECRET_KEY);
         if (cancelled) return;
         setHasKey(!!existing);
+        setKey(existing ?? '');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -35,7 +35,6 @@ export function AISettingsTab() {
     try {
       await secretSet(SECRET_KEY, key);
       setHasKey(true);
-      setKey('');
       setStatus('Saved.');
     } catch (e) {
       setStatus(`Save failed: ${String(e)}`);
@@ -48,6 +47,7 @@ export function AISettingsTab() {
     try {
       await secretDelete(SECRET_KEY);
       setHasKey(false);
+      setKey('');
       setStatus('Cleared.');
     } catch (e) {
       setStatus(`Clear failed: ${String(e)}`);
@@ -67,10 +67,9 @@ export function AISettingsTab() {
         </div>
         <div className="form-grid">
           <label htmlFor="ai-key">Anthropic API key</label>
-          <input
+          <SecretInput
             id="ai-key"
-            type="password"
-            autoComplete="off"
+            autoComplete="current-password"
             placeholder={hasKey ? '•••••••• stored' : 'sk-ant-…'}
             value={key}
             onChange={(e) => setKey(e.target.value)}

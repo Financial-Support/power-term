@@ -406,6 +406,7 @@ pub async fn hosts_update(
 pub async fn hosts_delete(
     store: tauri::State<'_, HostStore>,
     sync: tauri::State<'_, SyncManager>,
+    db: tauri::State<'_, std::sync::Arc<store::Db>>,
     id: String,
 ) -> Result<(), String> {
     // Idempotent: a sync pull can race ahead and remove a row whose
@@ -419,12 +420,17 @@ pub async fn hosts_delete(
     if let Err(e) = store::secrets::delete(&id) {
         tracing::warn!(host_id = %id, error = ?e, "failed to delete secret on host delete");
     }
+    let _ = store::local_secrets::delete(&db, &id);
     let updated_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
     let op = PendingOp::DeleteHost { id: id.clone(), updated_at };
     push_or_queue(sync.queue(), op).await;
+    push_or_queue(
+        sync.queue(),
+        PendingOp::DeleteCredential { id, updated_at },
+    ).await;
     Ok(())
 }
 
@@ -476,18 +482,88 @@ pub fn hosts_touch(
 }
 
 #[tauri::command]
-pub fn secret_set(host_id: String, secret: String) -> Result<(), String> {
-    store::secrets::set(&host_id, &secret).map_err(|e| format!("{e:?}"))
+pub async fn secret_set(
+    db: State<'_, std::sync::Arc<store::Db>>,
+    sync: State<'_, SyncManager>,
+    host_id: String,
+    secret: String,
+) -> Result<(), String> {
+    let updated_at = store::local_secrets::set(&db, &host_id, &secret)
+        .map_err(|e| e.to_string())?;
+    // Keep the existing encrypted local backend populated for connection
+    // paths that still read it directly. The plaintext SQLite copy is the
+    // source of truth and must remain usable even if Keychain is unavailable.
+    if let Err(e) = store::secrets::set(&host_id, &secret) {
+        tracing::warn!(id = %host_id, error = ?e, "encrypted secret mirror write failed");
+    }
+
+    let syncable = store::local_secrets::is_host_id(&db, &host_id)
+        .map_err(|e| e.to_string())?;
+    if syncable {
+      if let (Some(user_id), Some(key)) = (
+        current_user_id().await,
+        crate::sync::auth::load_sync_key_bytes().ok().flatten(),
+      ) {
+        let row = crate::sync::push::credential_to_row(
+            &host_id,
+            &user_id,
+            &secret,
+            &key,
+            updated_at,
+        ).map_err(|e| e.to_string())?;
+        push_or_queue(sync.queue(), PendingOp::UpsertCredential(row)).await;
+      }
+    }
+    Ok(())
 }
 
 #[tauri::command]
-pub fn secret_get(host_id: String) -> Result<Option<String>, String> {
-    store::secrets::get(&host_id).map_err(|e| format!("{e:?}"))
+pub fn secret_get(
+    db: State<'_, std::sync::Arc<store::Db>>,
+    host_id: String,
+) -> Result<Option<String>, String> {
+    if let Some(local) = store::local_secrets::get(&db, &host_id)
+        .map_err(|e| e.to_string())?
+    {
+        return Ok(Some(local.secret));
+    }
+    // One-time compatibility migration from installations that only had
+    // the encrypted secrets file / legacy per-item Keychain entries.
+    let legacy = store::secrets::get(&host_id).map_err(|e| format!("{e:?}"))?;
+    if let Some(secret) = legacy.as_deref() {
+        store::local_secrets::set(&db, &host_id, secret).map_err(|e| e.to_string())?;
+    }
+    Ok(legacy)
+}
+
+fn local_or_mirrored_secret(db: &std::sync::Arc<store::Db>, id: &str) -> Option<String> {
+    store::local_secrets::get(db, id)
+        .ok()
+        .flatten()
+        .map(|local| local.secret)
+        .or_else(|| store::secrets::get(id).ok().flatten())
 }
 
 #[tauri::command]
-pub fn secret_delete(host_id: String) -> Result<(), String> {
-    store::secrets::delete(&host_id).map_err(|e| format!("{e:?}"))
+pub async fn secret_delete(
+    db: State<'_, std::sync::Arc<store::Db>>,
+    sync: State<'_, SyncManager>,
+    host_id: String,
+) -> Result<(), String> {
+    let syncable = store::local_secrets::is_host_id(&db, &host_id)
+        .map_err(|e| e.to_string())?;
+    let updated_at = store::local_secrets::delete(&db, &host_id)
+        .map_err(|e| e.to_string())?;
+    if let Err(e) = store::secrets::delete(&host_id) {
+        tracing::warn!(id = %host_id, error = ?e, "encrypted secret mirror delete failed");
+    }
+    if syncable && current_user_id().await.is_some() {
+        push_or_queue(
+            sync.queue(),
+            PendingOp::DeleteCredential { id: host_id, updated_at },
+        ).await;
+    }
+    Ok(())
 }
 
 use crate::sftp::session::{SftpEntry, SftpTarget};
@@ -945,6 +1021,7 @@ pub async fn forward_start(
     host_store: tauri::State<'_, HostStore>,
     ssh_key_store: tauri::State<'_, SshKeyStore>,
     settings: tauri::State<'_, crate::settings::SettingsStore>,
+    db: tauri::State<'_, std::sync::Arc<store::Db>>,
     id: String,
 ) -> Result<ForwardStatus, String> {
     let forward = forward_store.get(&id).map_err(|e| e.to_string())?;
@@ -957,12 +1034,12 @@ pub async fn forward_start(
             let path = host.key_path
                 .filter(|p| !p.trim().is_empty())
                 .ok_or_else(|| "key auth requires a key_path".to_string())?;
-            let passphrase = crate::store::secrets::get(&host.id).ok().flatten();
+            let passphrase = local_or_mirrored_secret(&db, &host.id);
             resolve_key_auth(&ssh_key_store, &path, passphrase)
         }
         _ => {
-            let password = crate::store::secrets::get(&host.id).ok().flatten()
-                .ok_or_else(|| "password auth requires a saved password in the keychain (forward MVP)".to_string())?;
+            let password = local_or_mirrored_secret(&db, &host.id)
+                .ok_or_else(|| "password auth requires a saved credential".to_string())?;
             crate::ssh::auth::Auth::Password { password }
         }
     };
@@ -1332,7 +1409,7 @@ pub fn db_connections_delete(
 /// key passphrase. When the frontend catches a "key encrypted" failure it
 /// can re-call this command with the passphrase the user just typed,
 /// instead of forcing them to detour through the host editor to save it
-/// to the keychain. Falls back to the keychain entry when None.
+/// to local credentials. Falls back to the saved local entry when None.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn db_session_open(
@@ -1341,6 +1418,7 @@ pub async fn db_session_open(
     host_store: tauri::State<'_, HostStore>,
     ssh_key_store: tauri::State<'_, SshKeyStore>,
     settings: tauri::State<'_, SettingsStore>,
+    db: tauri::State<'_, std::sync::Arc<store::Db>>,
     connection_id: String,
     db_password: String,
     ssh_passphrase: Option<String>,
@@ -1357,7 +1435,7 @@ pub async fn db_session_open(
             .map_err(|e| e.to_string())?;
 
         // Resolve SSH auth from the host's saved auth method, pulling the
-        // passphrase / password from the OS keyring when needed. Mirrors the
+        // passphrase / password from local credentials when needed. Mirrors the
         // forward_start command's resolution path so behaviour stays consistent
         // — if SSH auth fails here it fails there too.
         let target = SshTarget {
@@ -1373,21 +1451,17 @@ pub async fn db_session_open(
                     .filter(|p| !p.trim().is_empty())
                     .ok_or_else(|| "key auth requires a key_path".to_string())?;
                 // Inline override wins when present (non-empty); otherwise fall
-                // back to whatever the keychain has (which may be None — the
+                // back to whatever local storage has (which may be None — the
                 // load step then surfaces a "key is encrypted" error that the
                 // renderer handles with a re-prompt).
                 let passphrase = ssh_passphrase
                     .filter(|s| !s.is_empty())
-                    .or_else(|| crate::store::secrets::get(&host.id).ok().flatten());
+                    .or_else(|| local_or_mirrored_secret(&db, &host.id));
                 resolve_key_auth(&ssh_key_store, &path, passphrase)
             }
             _ => {
-                let password = crate::store::secrets::get(&host.id)
-                    .ok()
-                    .flatten()
-                    .ok_or_else(|| {
-                        "password auth requires a saved password in the keychain (db MVP)".to_string()
-                    })?;
+                let password = local_or_mirrored_secret(&db, &host.id)
+                    .ok_or_else(|| "password auth requires a saved credential".to_string())?;
                 Auth::Password { password }
             }
         };

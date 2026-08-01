@@ -577,7 +577,7 @@ export function App() {
       const targetId = form.kind === 'edit' ? form.host.id : null;
       const saved = targetId ? await updateHost(targetId, args.input) : await createHost(args.input);
       if (!saved) return;
-      if (args.saveSecret && args.secret) {
+      if (args.secret !== null) {
         try { await secretSet(saved.id, args.secret); }
         catch (e) { console.warn('secret_set failed', e); }
       } else if (args.forgetSecret) {
@@ -615,7 +615,7 @@ export function App() {
     const created = await createHost(input);
     if (!created) return;
     // Best-effort: if the source host had a passphrase / password in the
-    // keychain, mirror it onto the new id so the duplicate connects out
+    // local credential store, mirror it onto the new id so the duplicate connects out
     // of the box without re-typing credentials.
     try {
       const existing = await secretGet(host.id);
@@ -714,7 +714,7 @@ export function App() {
         try {
           if (intent.kind === 'set') await secretSet(dbSecretKey(saved.id), intent.password);
           else if (intent.kind === 'forget') await secretDelete(dbSecretKey(saved.id));
-        } catch (e) { console.warn('db keychain write failed', e); }
+        } catch (e) { console.warn('db credential write failed', e); }
       }
       setDbForm({ kind: 'closed' });
     } finally {
@@ -726,7 +726,7 @@ export function App() {
     if (syncBusy) return;
     setSyncBusy(true);
     try {
-      // Best-effort: also drop the saved password so the keychain doesn't
+      // Best-effort: also drop the saved password so local storage doesn't
       // accumulate dangling entries for deleted rows.
       try { await secretDelete(dbSecretKey(c.id)); } catch { /* ignore */ }
       await deleteDbConnection(c.id);
@@ -775,7 +775,7 @@ export function App() {
     // re-entering the DB password.
     await openDbConnection(pending.connection, pending.dbPassword, passphrase);
     if (save) {
-      // Best-effort: persist on the host's keychain entry (same key used
+      // Best-effort: persist on the host's local credential entry (same key used
       // by SSH terminal + SFTP + forwards) so future opens are silent.
       try { await secretSet(pending.connection.host_id, passphrase); }
       catch (e) { console.warn('save ssh passphrase failed', e); }
@@ -787,7 +787,7 @@ export function App() {
       await openDbConnection(connection, '');
       return;
     }
-    // Try keychain first — if a password is saved, skip the prompt and go
+    // Try local credentials first — if a password is saved, skip the prompt and go
     // straight to opening. Surfaces a prompt only when there's nothing to
     // remember or the saved one fails (handled inside openDbConnection).
     try {
@@ -796,7 +796,7 @@ export function App() {
         await openDbConnection(connection, stored);
         return;
       }
-    } catch (e) { console.warn('keychain read failed', e); }
+    } catch (e) { console.warn('credential read failed', e); }
     if (connection.engine === 'redis') {
       await openDbConnection(connection, '');
       return;
@@ -1278,7 +1278,7 @@ export function App() {
       {confirmDelete && (
         <ConfirmModal
           title="Delete host?"
-          message={`Remove "${confirmDelete.name}" from saved hosts? Any saved password / passphrase will also be removed from the Keychain.`}
+          message={`Remove "${confirmDelete.name}" from saved hosts? Any saved password / passphrase will also be removed from local storage.`}
           confirmLabel="Delete"
           loadingLabel="Deleting"
           loading={syncBusy}

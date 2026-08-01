@@ -2,6 +2,7 @@ pub mod db;
 pub mod db_connections;
 pub mod forwards;
 pub mod host;
+pub mod local_secrets;
 pub mod schema;
 pub mod secrets;
 pub mod snippets;

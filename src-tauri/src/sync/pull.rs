@@ -187,6 +187,8 @@ async fn pull_hosts(
     for row in rows {
         if row.deleted_at.is_some() {
             conn.execute("DELETE FROM hosts WHERE id=?1", params![row.id])?;
+            conn.execute("DELETE FROM local_secrets WHERE id=?1", params![row.id])?;
+            let _ = crate::store::secrets::delete(&row.id);
             continue;
         }
         if pending_deletes.contains(&row.id) {
@@ -194,6 +196,8 @@ async fn pull_hosts(
             // and clean up any row a previous pull (before this guard
             // existed) put back into the table.
             conn.execute("DELETE FROM hosts WHERE id=?1", params![row.id])?;
+            conn.execute("DELETE FROM local_secrets WHERE id=?1", params![row.id])?;
+            let _ = crate::store::secrets::delete(&row.id);
             continue;
         }
         let local_updated: Option<i64> = conn
@@ -340,7 +344,6 @@ async fn pull_credentials(
     queue: &Arc<PushQueue>,
     sync_key: Option<&[u8; 32]>,
 ) -> Result<(), PullError> {
-    let _ = db; // credentials stored in keychain, not SQLite
     let Some(key) = sync_key else { return Ok(()); };
     let creds: Vec<RemoteCredential> = client.select("credentials", "select=*").await?;
     let pending_deletes = queue.pending_delete_ids("DeleteCredential");
@@ -349,6 +352,7 @@ async fn pull_credentials(
     let pending_host_deletes = queue.pending_delete_ids("DeleteHost");
     for cred in creds {
         if cred.deleted_at.is_some() {
+            let _ = crate::store::local_secrets::delete(db, &cred.id);
             let _ = crate::store::secrets::backend_delete(
                 "com.power-term.app",
                 &format!("host:{}", cred.id),
@@ -356,6 +360,7 @@ async fn pull_credentials(
             continue;
         }
         if pending_deletes.contains(&cred.id) || pending_host_deletes.contains(&cred.id) {
+            let _ = crate::store::local_secrets::delete(db, &cred.id);
             let _ = crate::store::secrets::backend_delete(
                 "com.power-term.app",
                 &format!("host:{}", cred.id),
@@ -365,11 +370,25 @@ async fn pull_credentials(
         if cred.ciphertext.starts_with("ENCRYPTED:NO_KEY") { continue; }
         match decrypt(&cred.ciphertext, key, cred.id.as_bytes()) {
             Ok(plaintext) => {
-                let _ = crate::store::secrets::backend_set(
-                    "com.power-term.app",
-                    &format!("host:{}", cred.id),
+                if !crate::store::local_secrets::is_host_id(db, &cred.id).unwrap_or(false) {
+                    continue;
+                }
+                match crate::store::local_secrets::set_if_newer(
+                    db,
+                    &cred.id,
                     &plaintext,
-                );
+                    cred.updated_at,
+                ) {
+                    Ok(true) => {
+                        let _ = crate::store::secrets::backend_set(
+                            "com.power-term.app",
+                            &format!("host:{}", cred.id),
+                            &plaintext,
+                        );
+                    }
+                    Ok(false) => {}
+                    Err(e) => tracing::warn!(id = %cred.id, error = %e, "could not persist pulled credential locally"),
+                }
             }
             Err(_) => {
                 tracing::warn!(host_id = %cred.id, "credential decrypt failed — wrong key?");

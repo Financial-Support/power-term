@@ -570,21 +570,56 @@ pub async fn push_credential(
     sync_key: Option<&[u8; 32]>,
     updated_at: i64,
 ) -> Result<(), ClientError> {
-    let ciphertext = match sync_key {
-        // Bind host_id as AAD so the server cannot move ciphertext between
-        // hosts and have us decrypt the wrong password into the wrong slot.
-        Some(key) => encrypt(plaintext, key, host_id.as_bytes())
-            .map_err(|e| ClientError::Json(e.to_string()))?,
-        None => "ENCRYPTED:NO_KEY".to_string(),
+    let Some(key) = sync_key else {
+        return Err(ClientError::Json("sync key required for credential upload".into()));
     };
-    let row = RemoteCredentialRow {
-        id: host_id.to_string(),
+    let row = credential_to_row(host_id, user_id, plaintext, key, updated_at)?;
+    client.upsert("credentials", &row).await
+}
+
+/// Build a remote credential row only after encryption succeeds. Keeping
+/// plaintext out of `PendingOp` ensures the durable queue can never become
+/// an accidental raw-secret store.
+pub fn credential_to_row(
+    id: &str,
+    user_id: &str,
+    plaintext: &str,
+    sync_key: &[u8; 32],
+    updated_at: i64,
+) -> Result<RemoteCredentialRow, ClientError> {
+    let ciphertext = encrypt(plaintext, sync_key, id.as_bytes())
+        .map_err(|e| ClientError::Json(e.to_string()))?;
+    Ok(RemoteCredentialRow {
+        id: id.to_string(),
         user_id: user_id.to_string(),
         ciphertext,
         updated_at,
         deleted_at: None,
-    };
-    client.upsert("credentials", &row).await
+    })
+}
+
+/// Upload every local plaintext secret after encrypting it with the current
+/// sync key. This is also run on normal syncs so secrets saved before a key
+/// was configured become syncable later without touching the local copy.
+pub async fn push_all_local_credentials(
+    client: &SupabaseClient,
+    db: &Arc<Db>,
+    user_id: &str,
+    sync_key: &[u8; 32],
+) -> Result<(), ClientError> {
+    let secrets = crate::store::local_secrets::list_for_hosts(db)
+        .map_err(|e| ClientError::Json(e.to_string()))?;
+    for (id, local) in secrets {
+        let row = credential_to_row(&id, user_id, &local.secret, sync_key, local.updated_at)?;
+        if let Err(e) = client.upsert("credentials", &row).await {
+            if e.is_table_missing() {
+                tracing::warn!("credentials table missing on Supabase — skipping credential sync");
+                return Ok(());
+            }
+            return Err(e);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -691,5 +726,14 @@ mod tests {
         let row = snippet_to_row(&s, "u", Some(&key)).unwrap();
         assert!(is_encrypted(&row.content), "snippet body must be enveloped, not plaintext");
         assert!(!row.content.contains("secret-token-XYZ"));
+    }
+
+    #[test]
+    fn credential_rows_are_always_encrypted() {
+        use crate::sync::encrypt::{generate_key, is_encrypted};
+        let key = generate_key();
+        let row = credential_to_row("host-1", "user-1", "raw-password", &key, 123).unwrap();
+        assert!(is_encrypted(&row.ciphertext));
+        assert!(!row.ciphertext.contains("raw-password"));
     }
 }

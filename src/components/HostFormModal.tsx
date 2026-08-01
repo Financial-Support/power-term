@@ -7,11 +7,12 @@ import type { AuthMethodKind, Host, HostInput } from '../types';
 import { TagsMultiPicker } from './TagsMultiPicker';
 import { CloseIcon, ServerIcon } from './AppIcons';
 import { bastionRef, eligibleBastions, resolveBastion, withBastionRef } from '../lib/bastion';
+import { secretGet } from '../lib/ipc';
+import { SecretInput } from './SecretInput';
 
 export interface HostFormSaveArgs {
   input: HostInput;
   secret: string | null;
-  saveSecret: boolean;
   forgetSecret: boolean;
 }
 
@@ -42,8 +43,6 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
   const [keyPath, setKeyPath] = useState(host?.key_path ?? '');
   const [secret, setSecret] = useState('');
   const [secretDirty, setSecretDirty] = useState(false);
-  const [saveSecret, setSaveSecret] = useState(true);
-  const [saveSecretDirty, setSaveSecretDirty] = useState(false);
   const [notes, setNotes] = useState(host?.notes ?? '');
   const initialBastionRef = host ? bastionRef(host.tags) : null;
   const initialBastion = host ? resolveBastion(host, hosts) : null;
@@ -73,10 +72,19 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
   }, [hosts]);
 
   useEffect(() => {
-    setSecret('');
-    setSecretDirty(false);
-    setSaveSecretDirty(false);
-  }, [authMethod]);
+    let cancelled = false;
+    if (mode !== 'edit' || !host) return;
+    void (async () => {
+      try {
+        const existing = await secretGet(host.id);
+        if (!cancelled && existing !== null) {
+          setSecret(existing);
+          setSecretDirty(false);
+        }
+      } catch { /* local credential may not exist yet */ }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, host]);
 
   // Esc closes the modal.
   useEffect(() => {
@@ -136,17 +144,11 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
       key_path: authMethod === 'key' ? keyPath.trim() : null,
       notes: notes.trim() === '' ? null : notes.trim(),
     };
-    const wantsSecret =
-      (authMethod === 'password' && secret !== '') ||
-      (authMethod === 'key' && secret !== '');
-    // forgetSecret fires when the user explicitly turned off "Save to Keychain"
-    // (saveSecretDirty) and isn't writing a new secret. The Keychain wrapper's
-    // delete is idempotent, so this safely no-ops if no secret was stored.
+    const usesSecret = authMethod === 'password' || authMethod === 'key';
     onSave({
       input,
-      secret: wantsSecret ? secret : null,
-      saveSecret: wantsSecret && saveSecret,
-      forgetSecret: !saveSecret && !wantsSecret && (saveSecretDirty || secretDirty),
+      secret: usesSecret && secretDirty && secret !== '' ? secret : null,
+      forgetSecret: usesSecret && secretDirty && secret === '',
     });
   };
 
@@ -254,22 +256,14 @@ export function HostFormModal({ mode, host, onSave, onCancel, saving }: Props) {
             </div>
 
             <label htmlFor="hfm-passphrase">Passphrase (optional)</label>
-            <input id="hfm-passphrase" type="password" value={secret} onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
-
-            <label className="checkbox">
-              <input type="checkbox" checked={saveSecret} onChange={(e) => { setSaveSecret(e.target.checked); setSaveSecretDirty(true); }} /> Save passphrase
-            </label>
+            <SecretInput id="hfm-passphrase" value={secret} autoComplete="current-password" onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
           </div>
         )}
 
         {authMethod === 'password' && (
           <div className="auth-fields">
             <label htmlFor="hfm-password">Password</label>
-            <input id="hfm-password" type="password" value={secret} onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
-
-            <label className="checkbox">
-              <input type="checkbox" checked={saveSecret} onChange={(e) => { setSaveSecret(e.target.checked); setSaveSecretDirty(true); }} /> Save password
-            </label>
+            <SecretInput id="hfm-password" value={secret} autoComplete="current-password" onChange={(e) => { setSecret(e.target.value); setSecretDirty(true); }} />
           </div>
         )}
 

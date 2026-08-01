@@ -211,6 +211,16 @@ export function RevealIcon(props: IconProps) {
   );
 }
 
+export function ConcealIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M3.2 3.2 12.8 12.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M6.3 3.5A6.6 6.6 0 0 1 8 3.2c3.2 0 5.4 3 6 4.8a9.2 9.2 0 0 1-1.7 2.7M9.8 12.5A6.5 6.5 0 0 1 8 12.8c-3.2 0-5.4-3-6-4.8a9.2 9.2 0 0 1 1.8-2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M6.7 6.7A1.8 1.8 0 0 0 9.3 9.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </IconBase>
+  );
+}
+
 export function PlayIcon(props: IconProps) {
   return (
     <IconBase {...props}>

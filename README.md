@@ -123,7 +123,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed fork setup instructions.
 
 ## AI features
 
-The built-in AI command bar calls the Anthropic API (`claude-sonnet-4-6`) directly from your browser. You supply your own API key, stored in the OS keychain. No key is ever bundled with the app.
+The built-in AI command bar calls the Anthropic API (`claude-sonnet-4-6`) directly from your browser. You supply your own API key, stored in the app's local credential database. No key is ever bundled with the app.
 
 ## Releasing
 

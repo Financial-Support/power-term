@@ -2580,6 +2580,7 @@ body::before {
 @keyframes cursor-preview-blink { to { opacity: 0; } }
 .modal .form-grid > input,
 .modal-form .auth-fields input,
+.secret-input-wrap input,
 .modal-form > textarea,
 .modal-form .snippet-content,
 .modal-form select {
@@ -2594,6 +2595,7 @@ body::before {
 }
 .modal .form-grid > input:focus,
 .modal-form .auth-fields input:focus,
+.secret-input-wrap input:focus,
 .modal-form > textarea:focus,
 .modal-form .snippet-content:focus {
   border-color: var(--accent-ring);
@@ -2625,6 +2627,38 @@ body::before {
 }
 .modal-form .auth-fields { display: flex; flex-direction: column; gap: 8px; margin: 0 0 14px 0; }
 .modal-form .auth-fields > label { display: block; font-size: 12px; color: var(--fg-muted); margin: 0 0 4px 0; }
+.secret-input-wrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  width: 100%;
+}
+.secret-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-right: 38px !important;
+}
+.secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.secret-toggle:hover { background: var(--bg-hover); color: var(--fg); }
+.secret-toggle:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+.secret-toggle:disabled { opacity: 0.45; cursor: default; }
 .modal-form .key-path-row { display: flex; gap: 6px; align-items: center; }
 .modal-form .key-path-row input { flex: 1; }
 .modal-form .key-path-browse {

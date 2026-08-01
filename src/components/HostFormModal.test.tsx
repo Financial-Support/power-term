@@ -1,9 +1,12 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HostFormModal } from './HostFormModal';
 import type { Host } from '../types';
 import { useHostStore } from '../state/hostStore';
+import { secretGet } from '../lib/ipc';
+
+vi.mock('../lib/ipc', () => ({ secretGet: vi.fn() }));
 
 const sampleHost = (): Host => ({
   id: 'h1', name: 'mac', hostname: 'example.com', port: 22, username: 'alice',
@@ -13,6 +16,7 @@ const sampleHost = (): Host => ({
 
 beforeEach(() => {
   useHostStore.setState({ hosts: [], loading: false, error: null });
+  vi.mocked(secretGet).mockResolvedValue(null);
 });
 
 describe('HostFormModal', () => {
@@ -26,6 +30,25 @@ describe('HostFormModal', () => {
     expect(screen.getByText(/edit host/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('mac')).toBeInTheDocument();
     expect(screen.getByDisplayValue('example.com')).toBeInTheDocument();
+  });
+
+  it('loads the local raw password for editing and can reveal it', async () => {
+    vi.mocked(secretGet).mockResolvedValue('mật-khẩu-raw');
+    render(
+      <HostFormModal
+        mode="edit"
+        host={{ ...sampleHost(), auth_method: 'password' }}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const input = document.getElementById('hfm-password') as HTMLInputElement;
+    await waitFor(() => expect(input).toHaveValue('mật-khẩu-raw'));
+    expect(input.type).toBe('password');
+    await userEvent.click(screen.getByRole('button', { name: /show secret/i }));
+    expect(input.type).toBe('text');
+    expect(screen.getByRole('button', { name: /hide secret/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('Cancel calls onCancel', async () => {

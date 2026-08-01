@@ -4,14 +4,15 @@ import { pickLocalFile } from '../lib/dialog';
 import { secretGet } from '../lib/ipc';
 import type { DbConnection, DbConnectionInput, DbEngine } from '../types';
 import { CloseIcon, DatabaseIcon } from './AppIcons';
+import { SecretInput } from './SecretInput';
 
 interface Props {
   mode: 'create' | 'edit';
   connection?: DbConnection;
   /** Receives the validated input plus a side-channel password command:
-   *  the form decided whether to write to / clear from the keychain, but
+   *  the form decided whether to write to / clear from local credentials, but
    *  it doesn't know the new connection's id on create, so the caller must
-   *  apply the keychain mutation after the create returns. */
+   *  apply the credential mutation after the create returns. */
   onSave: (input: DbConnectionInput, password: PasswordIntent) => void;
   onCancel: () => void;
   saving?: boolean;
@@ -53,21 +54,21 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
   const [portTouched, setPortTouched] = useState(mode === 'edit');
   const [password, setPassword] = useState('');
   const [passwordDirty, setPasswordDirty] = useState(false);
-  const [savePassword, setSavePassword] = useState(true);
-  const [savePasswordDirty, setSavePasswordDirty] = useState(false);
   const [hasStored, setHasStored] = useState(false);
 
-  // On edit, prefill the "saved" indicator if the keychain already has a
-  // password for this connection. We never read the password back into the
-  // form — only check existence — so the field stays empty until the user
-  // chooses to overwrite it.
+  // The local plaintext copy is intentionally loaded for editing. It remains
+  // masked until the user activates the explicit show control.
   useEffect(() => {
     if (mode !== 'edit' || !connection) return;
     void (async () => {
       try {
         const existing = await secretGet(dbSecretKey(connection.id));
-        setHasStored(existing !== null);
-      } catch { /* ignore — keychain may be unavailable */ }
+        if (existing !== null) {
+          setPassword(existing);
+          setPasswordDirty(false);
+          setHasStored(true);
+        }
+      } catch { /* ignore — local credential may not exist */ }
     })();
   }, [mode, connection]);
 
@@ -107,12 +108,8 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
 
   const submit = () => {
     if (!valid) return;
-    const wantsSet = passwordDirty && password !== '' && savePassword;
-    const wantsForget =
-      // User unchecked the save-to-keychain box AND there's something to forget,
-      // OR they typed a new password without saving it (cleans up stale state).
-      (savePasswordDirty && !savePassword && (hasStored || passwordDirty)) ||
-      (passwordDirty && password === '' && hasStored);
+    const wantsSet = passwordDirty && password !== '';
+    const wantsForget = passwordDirty && password === '' && hasStored;
     let intent: PasswordIntent = { kind: 'noop' };
     if (wantsSet) intent = { kind: 'set', password };
     else if (wantsForget) intent = { kind: 'forget' };
@@ -229,26 +226,16 @@ export function DbConnectionFormModal({ mode, connection, onSave, onCancel, savi
           {usesPassword && (
             <>
               <label htmlFor="dbf-pass">Password</label>
-              <input
+              <SecretInput
                 id="dbf-pass"
-                type="password"
                 value={password}
                 placeholder={hasStored && !passwordDirty ? '••• saved' : isRedis ? 'optional' : ''}
+                autoComplete="current-password"
                 onChange={(e) => { setPassword(e.target.value); setPasswordDirty(true); }}
               />
             </>
           )}
         </div>
-
-        {usesPassword && (
-          <label className="checkbox checkbox-compact">
-            <input
-              type="checkbox"
-              checked={savePassword}
-              onChange={(e) => { setSavePassword(e.target.checked); setSavePasswordDirty(true); }}
-            /> Save password
-          </label>
-        )}
 
         <p className="form-hint">
           {isSqlite

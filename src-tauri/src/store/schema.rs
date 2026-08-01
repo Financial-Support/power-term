@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-pub const CURRENT_VERSION: u32 = 10;
+pub const CURRENT_VERSION: u32 = 11;
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     let mut version: u32 = conn
@@ -26,6 +26,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             7 => migration_v8(conn)?,
             8 => migration_v9(conn)?,
             9 => migration_v10(conn)?,
+            10 => migration_v11(conn)?,
             other => {
                 return Err(rusqlite::Error::SqliteFailure(
                     rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
@@ -159,8 +160,8 @@ fn migration_v8(conn: &Connection) -> Result<()> {
 fn migration_v6(conn: &Connection) -> Result<()> {
     // Database connections — references a saved Host (whose SSH config we
     // reuse to tunnel) plus engine-specific endpoint and credential
-    // metadata. Passwords live in the OS keyring, keyed by the row id
-    // (see secrets module), so they never touch this table.
+    // metadata. Passwords live in the separate local_secrets table, keyed
+    // by the row id, so they never become database-connection metadata.
     conn.execute_batch(
         r#"
         CREATE TABLE db_connections (
@@ -227,6 +228,22 @@ fn migration_v10(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn migration_v11(conn: &Connection) -> Result<()> {
+    // Deliberately local-only plaintext credential cache. This table is
+    // never included in host/settings row sync; the sync layer reads it
+    // explicitly and encrypts each value before constructing a remote row.
+    conn.execute_batch(
+        r#"
+        CREATE TABLE local_secrets (
+            id         TEXT PRIMARY KEY NOT NULL,
+            secret     TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        "#,
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +278,12 @@ mod tests {
             ).unwrap();
         assert_eq!(hosts_count, 1);
         assert_eq!(snippets_count, 1);
+        let secrets_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='local_secrets'",
+                [], |r| r.get(0),
+            ).unwrap();
+        assert_eq!(secrets_count, 1);
     }
 
     #[test]

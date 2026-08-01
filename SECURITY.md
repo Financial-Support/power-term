@@ -1,10 +1,16 @@
 # Security Policy
 
 power-term handles sensitive data:
-- SSH private keys stored in the OS keychain
+- SSH private keys and their passphrases
 - Database connection credentials
-- AI API keys (Anthropic) stored in the OS keychain
+- AI API keys (Anthropic)
 - Cloud-sync credentials (Supabase)
+
+Saved passwords, passphrases, and API keys have a plaintext copy in the local
+SQLite credential table so they remain editable without a sync key. Credential
+sync is limited to saved-host passwords/passphrases and encrypts every value
+with the user's sync key before it leaves the device; raw credential text is
+never placed in the outbound sync queue.
 
 ## Reporting a vulnerability
 
