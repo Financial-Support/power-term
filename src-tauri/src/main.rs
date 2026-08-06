@@ -14,6 +14,13 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
 use power_term::open_url;
 
+fn handle_deep_link_urls(app: &tauri::AppHandle, urls: impl IntoIterator<Item = String>) {
+    let sync_state = app.state::<SyncManager>();
+    for url in urls {
+        power_term::sync::handle_auth_callback(&url, app, &sync_state);
+    }
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -129,33 +136,50 @@ fn main() {
             });
 
             let handle = app.handle().clone();
+            let event_handle = handle.clone();
             app.listen("deep-link://new-url", move |event| {
-                let sync_state = handle.state::<SyncManager>();
                 let payload = event.payload();
-                let _ = handle.emit(
+                let _ = event_handle.emit(
                     "sync:auth-debug",
                     format!("deep-link event ({} bytes)", payload.len()),
                 );
                 if let Ok(urls) = serde_json::from_str::<Vec<String>>(payload) {
-                    let _ = handle.emit(
+                    let _ = event_handle.emit(
                         "sync:auth-debug",
                         format!("parsed {} URL(s) from event", urls.len()),
                     );
-                    for url in urls {
-                        power_term::sync::handle_auth_callback(&url, &handle, &sync_state);
-                    }
+                    handle_deep_link_urls(&event_handle, urls);
                 } else {
                     let url = payload.trim_matches('"');
                     if url.starts_with("power-term://") {
-                        power_term::sync::handle_auth_callback(url, &handle, &sync_state);
+                        handle_deep_link_urls(&event_handle, [url.to_string()]);
                     } else {
-                        let _ = handle.emit(
+                        let _ = event_handle.emit(
                             "sync:auth-error",
                             format!("deep-link payload not parseable: {} bytes", payload.len()),
                         );
                     }
                 }
             });
+
+            // On Windows/Linux, the deep-link plugin receives the callback as
+            // a command-line argument and emits its event during plugin setup,
+            // before this app-level listener exists. Read the retained URL so
+            // an OAuth callback that launched this process is not lost.
+            match app
+                .state::<tauri_plugin_deep_link::DeepLink<tauri::Wry>>()
+                .get_current()
+            {
+                Ok(Some(urls)) => {
+                    let _ = handle.emit(
+                        "sync:auth-debug",
+                        format!("processing {} startup deep-link URL(s)", urls.len()),
+                    );
+                    handle_deep_link_urls(&handle, urls.into_iter().map(|url| url.to_string()));
+                }
+                Ok(None) => {}
+                Err(e) => tracing::warn!(error = %e, "could not read startup deep-link URL"),
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

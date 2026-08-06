@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.7 (2026-08-06)
+
+- Fix local PowerShell startup on Windows by omitting the Unix-only `-l` flag.
+- Preserve GitHub OAuth callbacks received through a Windows startup deep link so sync login persists across app windows.
+
 ## 0.3.0 (2026-07-20)
 
 - Add toggle to show/hide the main sidebar panel

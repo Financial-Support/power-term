@@ -82,6 +82,19 @@ fn shell_with_fallback(opt: Option<String>) -> String {
     }
 }
 
+fn shell_args() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        // `-l` is a POSIX login-shell flag. PowerShell treats it as input and
+        // prints "The term '-l' is not recognized" on startup.
+        Vec::new()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec!["-l".into()]
+    }
+}
+
 #[tauri::command]
 pub fn pty_spawn(
     app: AppHandle,
@@ -95,7 +108,7 @@ pub fn pty_spawn(
     let cfg_shell = shell_with_fallback(shell.or_else(|| settings.get().shell));
     let cfg = SpawnConfig {
         shell: cfg_shell,
-        args: vec!["-l".into()],
+        args: shell_args(),
         cwd: cwd.map(PathBuf::from),
         cols,
         rows,
@@ -1705,5 +1718,19 @@ mod ssh_config_tests {
         let arg: BastionArg = serde_json::from_value(value).expect("deserialize bastion");
         assert_eq!(arg.target.host, "jump.example.com");
         assert_eq!(arg.accept_fingerprint.as_deref(), Some("SHA256:test"));
+    }
+}
+
+#[cfg(test)]
+mod pty_spawn_tests {
+    use super::shell_args;
+
+    #[test]
+    fn uses_platform_specific_login_arguments() {
+        #[cfg(target_os = "windows")]
+        assert!(shell_args().is_empty());
+
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(shell_args(), vec!["-l"]);
     }
 }
