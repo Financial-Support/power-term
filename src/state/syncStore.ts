@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { SyncState } from '../types';
+import { debugLog } from '../lib/ipc';
 
 interface SyncStoreState {
   syncState: SyncState | null;
@@ -31,6 +32,7 @@ export const useSyncStore = create<SyncStoreState>((set) => ({
   },
 
   signIn: async () => {
+    void debugLog('sync sign-in requested').catch(() => {});
     try {
       await invoke('sync_sign_in');
     } catch (e) {

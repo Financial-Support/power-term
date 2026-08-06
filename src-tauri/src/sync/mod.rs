@@ -178,8 +178,13 @@ impl SyncManager {
 #[tauri::command]
 pub async fn sync_sign_in() -> Result<(), String> {
     let url = client::SUPABASE_URL.ok_or("Supabase not configured")?;
-    let oauth_url = auth::oauth_url(url).map_err(|e| e.to_string())?;
+    tracing::info!("starting GitHub OAuth sign-in");
+    let oauth_url = auth::oauth_url(url).map_err(|error| {
+        tracing::warn!(error = %error, "could not create GitHub OAuth URL");
+        error.to_string()
+    })?;
     crate::open_url(&oauth_url);
+    tracing::info!("GitHub OAuth URL handed to the default browser");
     Ok(())
 }
 
@@ -237,6 +242,7 @@ pub async fn sync_set_key(key_b58: String) -> Result<(), String> {
 /// are never logged, even on the failure path, because OAuth callback URLs
 /// carry long-lived `refresh_token`s in the fragment.
 pub fn handle_auth_callback(url: &str, app: &AppHandle, sync: &SyncManager) {
+    tracing::info!(url_length = url.len(), "auth callback received");
     let emit_err = |reason: &str| {
         tracing::warn!(reason, "auth callback rejected");
         let _ = app.emit("sync:auth-error", reason.to_string());
@@ -283,6 +289,7 @@ pub fn handle_auth_callback(url: &str, app: &AppHandle, sync: &SyncManager) {
         "sync:auth-debug",
         format!("parsed callback keys: {}", keys_seen.join(",")),
     );
+    tracing::info!(keys = %keys_seen.join(","), "auth callback parsed");
 
     let expected_state = match auth::take_oauth_state() {
         Ok(Some(s)) => s,
@@ -322,6 +329,7 @@ pub fn handle_auth_callback(url: &str, app: &AppHandle, sync: &SyncManager) {
     let user = auth::user_from_jwt(&access);
     sync.set_user(user, app);
     let _ = app.emit("sync:auth-debug", "auth callback succeeded".to_string());
+    tracing::info!("auth callback succeeded");
 }
 
 #[cfg(test)]

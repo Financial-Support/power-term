@@ -1,9 +1,57 @@
 import { useEffect, useState } from 'react';
 import { useSyncStore } from '../state/syncStore';
+import { debugLogPath } from '../lib/ipc';
 import { KeyIcon, RefreshIcon } from './AppIcons';
 
 function isNotConfigured(msg: string | null): boolean {
   return msg != null && msg.toLowerCase().includes('not configured');
+}
+
+function DiagnosticsCard() {
+  const [logPath, setLogPath] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void debugLogPath()
+      .then((path) => { if (mounted) setLogPath(path); })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
+  const copyLogPath = async () => {
+    if (!logPath) return;
+    try {
+      await navigator.clipboard.writeText(logPath);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // The path remains visible so it can still be copied manually.
+    }
+  };
+
+  return (
+    <div className="settings-section-card sync-debug-section">
+      <div className="settings-section-head">
+        <div>
+          <div className="settings-section-title-row">
+            <span className="settings-section-icon" aria-hidden><KeyIcon size={13} /></span>
+            <h3>Diagnostics</h3>
+          </div>
+          <p className="sync-debug-description">
+            If Windows sign-in or tab closing fails, send this log file to support.
+            OAuth tokens are not written to it.
+          </p>
+        </div>
+      </div>
+      {logPath && <code className="sync-debug-path">{logPath}</code>}
+      <div className="sync-debug-actions">
+        <button type="button" onClick={() => void copyLogPath()} disabled={!logPath}>
+          {copied ? 'Copied' : 'Copy log path'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function SyncTab() {
@@ -40,6 +88,7 @@ export function SyncTab() {
             </div>
           </div>
         </div>
+        <DiagnosticsCard />
       </div>
     );
   }
@@ -66,6 +115,7 @@ export function SyncTab() {
             </button>
           </div>
         </div>
+        <DiagnosticsCard />
       </div>
     );
   }
@@ -180,6 +230,8 @@ export function SyncTab() {
         </div>
         {keyError && <p className="form-error">{keyError}</p>}
       </div>
+
+      <DiagnosticsCard />
     </div>
   );
 }

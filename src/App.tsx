@@ -58,7 +58,7 @@ import { useZoom } from './hooks/useZoom';
 import { useTheme } from './hooks/useTheme';
 import { useSyncStore } from './state/syncStore';
 import {
-  ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
+  debugLog, ptyKill, ptySpawn, ptyWrite, secretDelete, secretGet, secretSet,
   sftpClose, sftpOpen, sshConnect, sshKill, sshWrite, snippetsTouch,
 } from './lib/ipc';
 import type { AuthRequest, ConnectionStage, DbConnection, DbConnectionInput, Forward, ForwardInput, Host, HostInput, LayoutKind, Snippet, SnippetInput, SshKey, SshKeyInput, SshTarget } from './types';
@@ -311,9 +311,11 @@ export function App() {
     listen('menu:zoom-reset', () => { zoomReset(); }).then(fn => { u4 = fn; });
     listen<string>('sync:auth-debug', (e) => {
       console.log('[auth-debug]', e.payload);
+      void debugLog(`auth-debug: ${e.payload}`).catch(() => {});
     }).then(fn => { u5 = fn; });
     listen<string>('sync:auth-error', (e) => {
       console.error('[auth-error]', e.payload);
+      void debugLog(`auth-error: ${e.payload}`).catch(() => {});
       alert(`Sign-in failed: ${e.payload}`);
     }).then(fn => { u6 = fn; });
     return () => { u1?.(); u2?.(); u3?.(); u4?.(); u5?.(); u6?.(); u7?.(); };
@@ -359,6 +361,7 @@ export function App() {
     } catch (e) { console.error('pty_spawn failed', e); }
   }, [addTab, settings?.shell]);
 
+  const closingTabIds = useRef(new Set<string>());
   const fillNullSlots = useCallback(async (kind: LayoutKind) => {
     setLayout(kind);
     // After setLayout the store has new slots; read them to find nulls
@@ -373,17 +376,12 @@ export function App() {
 
   const handleClose = useCallback(async (id: string) => {
     const tab = useSessionStore.getState().tabs.find((t) => t.id === id);
-    if (!tab) return;
-    try {
-      if (tab.kind === 'sftp') await sftpClose(tab.ptyId);
-      else if (tab.kind === 'ssh') await sshKill(tab.ptyId);
-      else if (tab.kind === 'db') {
-        // The ptyId for db tabs is the backend session id; closing it
-        // tears down the SSH tunnel and the driver client together.
-        await dbSessionClose(tab.ptyId);
-      }
-      else await ptyKill(tab.ptyId);
-    } catch (e) { console.warn('kill failed', e); }
+    if (!tab || closingTabIds.current.has(id)) return;
+    closingTabIds.current.add(id);
+
+    // Remove the tab from React state before waiting for native cleanup. A
+    // ConPTY reader can take a while to exit on Windows; the tab must vanish
+    // immediately even if the process teardown is still in progress.
     if (tab.kind === 'sftp') closeSftpTabState(tab.id);
     if (tab.kind === 'db') {
       setDbSessions((m) => {
@@ -393,6 +391,33 @@ export function App() {
       });
     }
     closeTab(id);
+
+    void debugLog(`tab close requested: kind=${tab.kind}`).catch(() => {});
+    const cleanup = (async () => {
+      if (tab.kind === 'sftp') await sftpClose(tab.ptyId);
+      else if (tab.kind === 'ssh') await sshKill(tab.ptyId);
+      else if (tab.kind === 'db') {
+        // The ptyId for db tabs is the backend session id; closing it
+        // tears down the SSH tunnel and the driver client together.
+        await dbSessionClose(tab.ptyId);
+      }
+      else await ptyKill(tab.ptyId);
+    })().catch((e) => {
+      console.warn('kill failed', e);
+      void debugLog(`tab cleanup failed: kind=${tab.kind}`).catch(() => {});
+    });
+
+    try {
+      // Keep reconnect flows bounded even if a remote session's shutdown is
+      // slow. The cleanup promise is already caught above, so a late native
+      // error cannot become an unhandled rejection after this timeout wins.
+      await Promise.race([
+        cleanup,
+        new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+      ]);
+    } finally {
+      closingTabIds.current.delete(id);
+    }
     // Last tab closed → fall through to the WelcomePane (no auto-quit).
     // Use ⌘Q or the window close button to actually exit.
   }, [closeTab, closeSftpTabState]);

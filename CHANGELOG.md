@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.9 (2026-08-06)
+
+- Fix Windows tab closing freezes by moving PTY cleanup off the UI path.
+- Fix Windows GitHub OAuth callbacks by forwarding deep links to the running app instance.
+- Add persistent diagnostics logging with a copyable path in Settings → Sync.
+
 ## 0.3.8 (2026-08-06)
 
 - Add an in-app Updates tab with signed update checks, release notes, download progress, install and relaunch actions.

@@ -42,6 +42,14 @@ export async function openExternalUrl(url: string): Promise<void> {
   await invoke('open_external_url', { url });
 }
 
+export async function debugLog(message: string): Promise<void> {
+  await invoke('debug_log', { message });
+}
+
+export async function debugLogPath(): Promise<string> {
+  return invoke<string>('debug_log_path');
+}
+
 export async function onPtyOutput(
   ptyId: string,
   cb: (bytes: Uint8Array) => void,

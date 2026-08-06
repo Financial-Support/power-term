@@ -14,16 +14,49 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
 use power_term::open_url;
 
+fn normalized_power_term_url(value: &str) -> Option<String> {
+    let value = value.trim_matches('"');
+    let parsed = url::Url::parse(value).ok()?;
+    if parsed.scheme().eq_ignore_ascii_case("power-term") {
+        Some(value.to_string())
+    } else {
+        None
+    }
+}
+
+fn deep_link_summary(value: &str) -> String {
+    let Ok(parsed) = url::Url::parse(value) else {
+        return "invalid callback URL".to_string();
+    };
+    let query_keys = parsed
+        .query_pairs()
+        .map(|(key, _)| key.into_owned())
+        .collect::<Vec<_>>();
+    let fragment_keys = parsed
+        .fragment()
+        .unwrap_or_default()
+        .split('&')
+        .filter_map(|pair| pair.split_once('=').map(|(key, _)| key.to_string()))
+        .collect::<Vec<_>>();
+    format!(
+        "scheme={} host={} path={} query_keys=[{}] fragment_keys=[{}]",
+        parsed.scheme(),
+        parsed.host_str().unwrap_or_default(),
+        parsed.path(),
+        query_keys.join(","),
+        fragment_keys.join(","),
+    )
+}
+
 fn handle_deep_link_urls(app: &tauri::AppHandle, urls: impl IntoIterator<Item = String>) {
     let sync_state = app.state::<SyncManager>();
     for url in urls {
+        tracing::info!(summary = %deep_link_summary(&url), "processing deep-link callback");
         power_term::sync::handle_auth_callback(&url, app, &sync_state);
     }
 }
 
 fn main() {
-    tracing_subscriber::fmt::init();
-
     let settings = SettingsStore::load_default_path()
         .expect("failed to initialize settings store");
     let db: Arc<Db> = Db::open_default_path()
@@ -37,6 +70,38 @@ fn main() {
     let sync_manager = SyncManager::new(db.clone());
 
     tauri::Builder::default()
+        // This must be registered before the deep-link plugin. On Windows a
+        // protocol callback is delivered by starting the executable again;
+        // this plugin forwards those arguments to the already-running app.
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            let arg_count = args.len();
+            let urls = args
+                .into_iter()
+                .filter_map(|arg| normalized_power_term_url(&arg))
+                .collect::<Vec<_>>();
+            tracing::info!(
+                arg_count,
+                callback_count = urls.len(),
+                cwd = %cwd,
+                "single-instance launch received"
+            );
+            let _ = app.emit(
+                "sync:auth-debug",
+                format!(
+                    "single-instance callback received ({} argument(s), {} power-term URL(s))",
+                    arg_count,
+                    urls.len()
+                ),
+            );
+            if !urls.is_empty() {
+                handle_deep_link_urls(app, urls);
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
@@ -56,6 +121,12 @@ fn main() {
         .manage(db)
         .manage(sync_manager)
         .setup(|app| {
+            match power_term::logging::init(app.handle()) {
+                Ok(path) => tracing::info!(log_path = %path.display(), "native logging initialized"),
+                Err(error) => eprintln!("Power Term logging unavailable: {error}"),
+            }
+            tracing::info!(version = env!("CARGO_PKG_VERSION"), "Power Term started");
+
             // macOS menu bar: App menu with Settings…
             let settings_item = MenuItemBuilder::with_id("open_settings", "Settings…")
                 .accelerator("CmdOrCtrl+,")
@@ -146,6 +217,7 @@ fn main() {
             let event_handle = handle.clone();
             app.listen("deep-link://new-url", move |event| {
                 let payload = event.payload();
+                tracing::info!(payload_bytes = payload.len(), "deep-link event received");
                 let _ = event_handle.emit(
                     "sync:auth-debug",
                     format!("deep-link event ({} bytes)", payload.len()),
@@ -157,9 +229,8 @@ fn main() {
                     );
                     handle_deep_link_urls(&event_handle, urls);
                 } else {
-                    let url = payload.trim_matches('"');
-                    if url.starts_with("power-term://") {
-                        handle_deep_link_urls(&event_handle, [url.to_string()]);
+                    if let Some(url) = normalized_power_term_url(payload) {
+                        handle_deep_link_urls(&event_handle, [url]);
                     } else {
                         let _ = event_handle.emit(
                             "sync:auth-error",
@@ -178,6 +249,7 @@ fn main() {
                 .get_current()
             {
                 Ok(Some(urls)) => {
+                    tracing::info!(url_count = urls.len(), "processing startup deep-link URLs");
                     let _ = handle.emit(
                         "sync:auth-debug",
                         format!("processing {} startup deep-link URL(s)", urls.len()),
@@ -198,6 +270,8 @@ fn main() {
             power_term::commands::settings_update,
             power_term::commands::system_accent_color,
             power_term::commands::open_external_url,
+            power_term::commands::debug_log,
+            power_term::commands::debug_log_path,
             power_term::commands::ssh_connect,
             power_term::commands::ssh_write,
             power_term::commands::ssh_resize,

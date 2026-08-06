@@ -4626,6 +4626,19 @@ body::before {
 .sync-key-input-row { display: flex; gap: 6px; }
 .sync-key-input-row input { flex: 1; min-width: 0; }
 
+.sync-debug-section { display: flex; flex-direction: column; gap: 10px; }
+.sync-debug-description {
+  color: var(--fg-muted); font-size: 11px; line-height: 1.5;
+  margin: 5px 0 0; max-width: 560px;
+}
+.sync-debug-path {
+  display: block; padding: 8px 10px; border-radius: 7px;
+  border: 1px solid var(--border-med); background: var(--bg-soft);
+  color: var(--fg-muted); font: 11px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.sync-debug-actions { display: flex; justify-content: flex-end; }
+
 /* Unify all buttons inside the Sync tab with the modal-actions look used
    on the Appearance / Terminal tabs so the dialog feels coherent. */
 .sync-tab button,

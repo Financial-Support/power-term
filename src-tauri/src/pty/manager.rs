@@ -67,8 +67,26 @@ impl PtyManager {
             let mut sessions = self.sessions.lock();
             sessions.remove(id).ok_or_else(|| PtyError::Unknown(id.clone()))?
         };
-        tracing::info!(pty_id = %id, "pty killed");
-        s.kill()
+        let pty_id = id.clone();
+        tracing::info!(pty_id = %pty_id, "pty kill scheduled");
+
+        // portable-pty waits for its reader thread during session cleanup.
+        // ConPTY can occasionally keep that reader blocked for a while after
+        // TerminateProcess, so doing this inline makes the close-tab command
+        // look like the entire Windows app has frozen. Remove the session from
+        // the manager synchronously, then finish the native cleanup off the
+        // command/UI path.
+        std::thread::Builder::new()
+            .name(format!("pty-kill-{}", &pty_id[..pty_id.len().min(8)]))
+            .spawn(move || {
+                if let Err(error) = s.kill() {
+                    tracing::warn!(pty_id = %pty_id, error = %error, "pty cleanup failed");
+                } else {
+                    tracing::info!(pty_id = %pty_id, "pty cleanup finished");
+                }
+            })
+            .map_err(|error| PtyError::Any(format!("start pty cleanup: {error}")))?;
+        Ok(())
     }
 
     fn get(&self, id: &PtyId) -> Result<Arc<PtySession>, PtyError> {

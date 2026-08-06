@@ -63,6 +63,24 @@ pub fn open_external_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Append a short, user-interface diagnostic message to the native log file.
+/// Callers should never pass credentials, tokens, or terminal contents here.
+#[tauri::command]
+pub fn debug_log(message: String) -> Result<(), String> {
+    let message = message
+        .chars()
+        .map(|ch| if ch == '\r' || ch == '\n' { ' ' } else { ch })
+        .take(2000)
+        .collect::<String>();
+    tracing::info!(target: "frontend", message = %message, "frontend debug");
+    Ok(())
+}
+
+#[tauri::command]
+pub fn debug_log_path(app: AppHandle) -> Result<String, String> {
+    crate::logging::path(&app).map(|path| path.to_string_lossy().into_owned())
+}
+
 fn shell_with_fallback(opt: Option<String>) -> String {
     if let Some(s) = opt.filter(|s| !s.is_empty()) { return s; }
     if let Ok(env) = std::env::var("SHELL") { if !env.is_empty() { return env; } }
