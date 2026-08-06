@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.8 (2026-08-06)
+
+- Add an in-app Updates tab with signed update checks, release notes, download progress, install and relaunch actions.
+- Add a Power Term app-menu shortcut for Check for Updates… and publish updater metadata from release CI.
+
 ## 0.3.7 (2026-08-06)
 
 - Fix local PowerShell startup on Windows by omitting the Unix-only `-l` flag.

@@ -39,6 +39,8 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(PtyManager::new())
         .manage(SshManager::new())
         .manage(SftpManager::new())
@@ -58,9 +60,13 @@ fn main() {
             let settings_item = MenuItemBuilder::with_id("open_settings", "Settings…")
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?;
+            let check_for_updates_item =
+                MenuItemBuilder::with_id("check_for_updates", "Check for Updates…")
+                    .build(app)?;
             let mut app_submenu = SubmenuBuilder::new(app, "Power Term")
                 .about(None)
                 .separator()
+                .item(&check_for_updates_item)
                 .item(&settings_item)
                 .separator();
             #[cfg(target_os = "macos")]
@@ -125,6 +131,7 @@ fn main() {
             app.on_menu_event(|app_handle, event| {
                 match event.id().as_ref() {
                     "open_settings" => { let _ = app_handle.emit("menu:open-settings", ()); }
+                    "check_for_updates" => { let _ = app_handle.emit("menu:check-for-updates", ()); }
                     "zoom_in"       => { let _ = app_handle.emit("menu:zoom-in", ()); }
                     "zoom_out"      => { let _ = app_handle.emit("menu:zoom-out", ()); }
                     "zoom_reset"    => { let _ = app_handle.emit("menu:zoom-reset", ()); }

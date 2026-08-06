@@ -20,6 +20,8 @@
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
-    "deep-link:default"
+    "deep-link:default",
+    "process:default",
+    "updater:default"
   ]
 }

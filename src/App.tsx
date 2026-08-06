@@ -275,7 +275,7 @@ export function App() {
   const accentDockOpen = settings?.accent_dock_open ?? true;
   const [sshImportOpen, setSshImportOpen] = useState(false);
   const [aiBarOpen, setAiBarOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'appearance' | 'terminal' | 'sync'>('appearance');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'appearance' | 'terminal' | 'sync' | 'updates'>('appearance');
   const flowToken = useRef(0);
   const { zoomIn, zoomOut, zoomReset } = useZoom();
 
@@ -300,7 +300,12 @@ export function App() {
     let u4: (() => void) | undefined;
     let u5: (() => void) | undefined;
     let u6: (() => void) | undefined;
+    let u7: (() => void) | undefined;
     listen('menu:open-settings', () => { setSettingsOpen(true); }).then(fn => { u1 = fn; });
+    listen('menu:check-for-updates', () => {
+      setSettingsInitialTab('updates');
+      setSettingsOpen(true);
+    }).then(fn => { u7 = fn; });
     listen('menu:zoom-in', () => { zoomIn(); }).then(fn => { u2 = fn; });
     listen('menu:zoom-out', () => { zoomOut(); }).then(fn => { u3 = fn; });
     listen('menu:zoom-reset', () => { zoomReset(); }).then(fn => { u4 = fn; });
@@ -311,7 +316,7 @@ export function App() {
       console.error('[auth-error]', e.payload);
       alert(`Sign-in failed: ${e.payload}`);
     }).then(fn => { u6 = fn; });
-    return () => { u1?.(); u2?.(); u3?.(); u4?.(); u5?.(); u6?.(); };
+    return () => { u1?.(); u2?.(); u3?.(); u4?.(); u5?.(); u6?.(); u7?.(); };
   }, [zoomIn, zoomOut, zoomReset]);
 
   const loadTags = useTagStore((s) => s.load);

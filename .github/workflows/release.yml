@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.platform.name }}
@@ -62,10 +65,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           POWER_TERM_SUPABASE_URL: ${{ secrets.POWER_TERM_SUPABASE_URL }}
           POWER_TERM_SUPABASE_ANON_KEY: ${{ secrets.POWER_TERM_SUPABASE_ANON_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target ${{ matrix.platform.target }}
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          updaterJsonPreferNsis: true
 
   cask:
     name: Update Homebrew cask

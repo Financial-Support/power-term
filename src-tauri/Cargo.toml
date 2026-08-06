@@ -1,6 +1,6 @@
 [package]
 name = "power-term"
-version = "0.3.7"
+version = "0.3.8"
 description = "A modern terminal app"
 authors = ["Power Term Contributors"]
 repository = "https://github.com/Financial-Support/power-term"
@@ -42,6 +42,8 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 russh-sftp = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 aes-gcm = "0.10"
 bs58 = "0.5"

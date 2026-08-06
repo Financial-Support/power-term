@@ -76,6 +76,10 @@ sudo dpkg -i power-term-*_amd64.deb
 
 Download the latest `.exe` from [Releases](https://github.com/Financial-Support/power-term/releases/latest) and run the installer. It replaces the currently installed version.
 
+### In-app updater
+
+Open **Settings → Updates** or choose **Check for Updates…** from the Power Term app menu. The app checks the signed GitHub Release metadata, shows release notes and download progress, then installs the update and relaunches automatically.
+
 ## Build from source
 
 Requires Node 18+, Rust stable, and Tauri prerequisites for your platform.
@@ -127,7 +131,7 @@ The built-in AI command bar calls the Anthropic API (`claude-sonnet-4-6`) direct
 
 ## Releasing
 
-Releases are built by the CI workflow (`.github/workflows/release.yml`) on tag push — produces DMG (macOS), NSIS `.exe` (Windows), and `.deb` (Linux).
+Releases are built by the CI workflow (`.github/workflows/release.yml`) on tag push — produces signed updater artifacts alongside the DMG (macOS), NSIS `.exe` (Windows), and `.deb` (Linux). Before pushing a release tag, maintainers must configure the repository Actions secrets `TAURI_SIGNING_PRIVATE_KEY` and, when applicable, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The private key must match the public key in `src-tauri/tauri.conf.json` and must never be committed.
 
 A convenience script is also available for macOS-only development releases:
 

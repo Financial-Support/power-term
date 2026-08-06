@@ -5,6 +5,7 @@ import { defaultColor, useTagStore } from '../state/tagStore';
 import { THEME_NAMES, THEME_KEY_FOR_NAME, THEME_DISPLAY_NAME } from '../themes';
 import { SyncTab } from './SyncTab';
 import { AISettingsTab } from './AISettingsTab';
+import { UpdateTab } from './UpdateTab';
 import { TagChip } from './TagChip';
 import { ConfirmModal } from './ConfirmModal';
 import type { CursorStyle, SettingsPatch, Theme } from '../types';
@@ -15,7 +16,7 @@ interface Props {
   initialTab?: Tab;
 }
 
-type Tab = 'appearance' | 'terminal' | 'tags' | 'sync' | 'ai';
+type Tab = 'appearance' | 'terminal' | 'tags' | 'sync' | 'ai' | 'updates';
 
 export function SettingsModal({ onClose, initialTab }: Props) {
   const settings = useSettingsStore((s) => s.settings);
@@ -93,6 +94,7 @@ export function SettingsModal({ onClose, initialTab }: Props) {
           <button role="tab" aria-selected={activeTab === 'tags'} onClick={() => setActiveTab('tags')}>Tags</button>
           <button role="tab" aria-selected={activeTab === 'sync'} onClick={() => setActiveTab('sync')}>Sync</button>
           <button role="tab" aria-selected={activeTab === 'ai'} onClick={() => setActiveTab('ai')}>AI</button>
+          <button role="tab" aria-selected={activeTab === 'updates'} onClick={() => setActiveTab('updates')}>Updates</button>
         </div>
 
         {activeTab === 'appearance' && (
@@ -196,9 +198,11 @@ export function SettingsModal({ onClose, initialTab }: Props) {
 
         {activeTab === 'ai' && <AISettingsTab />}
 
+        {activeTab === 'updates' && <UpdateTab />}
+
         {localError && <p className="form-error">{localError}</p>}
 
-        {activeTab !== 'sync' && activeTab !== 'ai' && activeTab !== 'tags' && (
+        {activeTab !== 'sync' && activeTab !== 'ai' && activeTab !== 'tags' && activeTab !== 'updates' && (
           <div className="modal-actions">
             <button type="button" onClick={onClose}>Cancel</button>
             <button
