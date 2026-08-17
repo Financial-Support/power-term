@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.10 (2026-08-17)
+
+- Fix Windows Ctrl+C so selected terminal text is copied instead of interrupting the running command.
+
 ## 0.3.9 (2026-08-06)
 
 - Fix Windows tab closing freezes by moving PTY cleanup off the UI path.

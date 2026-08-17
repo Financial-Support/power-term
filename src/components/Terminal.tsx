@@ -62,15 +62,15 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
     // fail to paint IME-composed grapheme clusters (such as Vietnamese Telex),
     // making otherwise-correct input look like it disappeared.
 
-    // Cmd+C: if there is a selection, copy to clipboard and swallow.
+    // Cmd/Ctrl+C: if there is a selection, copy to clipboard and swallow.
     // If no selection, fall through (xterm sends ETX / SIGINT).
     // Cmd+V is intentionally NOT handled here — xterm registers its own
     // `paste` listener on the textarea (Terminal.ts: addDisposableDomListener
     // (this.textarea, 'paste', …)). Catching the keydown and calling
     // term.paste() in addition pasted the clipboard twice on every Cmd+V.
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type !== 'keydown' || !e.metaKey) return true;
-      if (e.key === 'c') {
+      if (e.type !== 'keydown') return true;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
         const sel = term.getSelection();
         if (sel.length > 0) {
           void navigator.clipboard.writeText(sel);
@@ -78,6 +78,7 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
         }
         return true;
       }
+      if (!e.metaKey) return true;
       if (e.key === 'f') {
         // Open in-terminal search overlay. Focus is moved to the input by
         // the autoFocus prop on render, so the keystroke is consumed here.
