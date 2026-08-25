@@ -2,6 +2,10 @@
 
 A modern terminal built with Tauri + React + xterm.js.
 
+## Preview
+
+![Power Term screenshot with fictional demo hosts and terminal commands](assets/power-term-demo.png)
+
 ## Install
 
 ### macOS (Homebrew Cask)
