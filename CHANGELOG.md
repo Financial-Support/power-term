@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.11 (2026-08-28)
+
+- Add an AI chat right sidebar with an icon toggle and per-conversation history/context management.
+- Support custom AI endpoints, models, and API keys through the native Rust proxy, including automatic context compaction after 20 messages.
+- Add optional terminal context and local warnings/confirmation for potentially dangerous generated commands.
+
 ## 0.3.10 (2026-08-17)
 
 - Fix Windows Ctrl+C so selected terminal text is copied instead of interrupting the running command.

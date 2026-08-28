@@ -173,6 +173,29 @@ export async function secretDelete(hostId: string): Promise<void> {
   await invoke('secret_delete', { hostId });
 }
 
+export type AiProxyMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
+export async function aiRequest(args: {
+  endpoint: string;
+  model: string;
+  system: string;
+  messages: AiProxyMessage[];
+  maxTokens: number;
+}): Promise<unknown> {
+  return invoke<unknown>('ai_request', {
+    request: {
+      endpoint: args.endpoint,
+      model: args.model,
+      system: args.system,
+      messages: args.messages,
+      maxTokens: args.maxTokens,
+    },
+  });
+}
+
 export async function sftpOpen(args: {
   host: string; port: number; user: string;
   auth: AuthRequest;

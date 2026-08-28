@@ -4,13 +4,15 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSessionStore } from '../state/sessionStore';
 import { SyncStatus } from './SyncStatus';
 import { SftpTransferStatus } from './SftpTransferStatus';
-import { BrandIcon, BroadcastIcon, LayoutIcon } from './AppIcons';
+import { BrandIcon, BroadcastIcon, LayoutIcon, SparklesIcon } from './AppIcons';
 import type { LayoutKind } from '../types';
 
 interface Props {
   children: ReactNode;
   onLayoutChange?: (kind: LayoutKind) => void;
   onOpenSyncSettings?: () => void;
+  aiChatOpen: boolean;
+  onAiChat: () => void;
 }
 
 const LAYOUT_ICONS: { kind: LayoutKind; label: string }[] = [
@@ -21,7 +23,7 @@ const LAYOUT_ICONS: { kind: LayoutKind; label: string }[] = [
   { kind: '2x2',   label: '2×2 grid' },
 ];
 
-export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props) {
+export function TitleBar({ children, onLayoutChange, onOpenSyncSettings, aiChatOpen, onAiChat }: Props) {
   const layoutKind = useSessionStore((s) => s.layoutKind);
   const broadcast = useSessionStore((s) => s.broadcast);
   const setBroadcast = useSessionStore((s) => s.setBroadcast);
@@ -125,6 +127,17 @@ export function TitleBar({ children, onLayoutChange, onOpenSyncSettings }: Props
       <div className="titlebar-drag-right" />
       <SftpTransferStatus />
       <SyncStatus onErrorClick={onOpenSyncSettings} onClick={onOpenSyncSettings} />
+      <button
+        type="button"
+        className={`ai-toggle-btn${aiChatOpen ? ' active' : ''}`}
+        data-no-drag
+        aria-label={aiChatOpen ? 'Close AI chat' : 'Open AI chat'}
+        aria-pressed={aiChatOpen}
+        title={aiChatOpen ? 'Close AI chat (⌘L)' : 'Open AI chat (⌘L)'}
+        onClick={onAiChat}
+      >
+        <SparklesIcon size={17} />
+      </button>
       <button
         type="button"
         className={`broadcast-btn${broadcast ? ' active' : ''}`}

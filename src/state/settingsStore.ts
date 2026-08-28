@@ -24,6 +24,7 @@ export const useSettingsStore = create<State>((set) => ({
     }
   },
   update: async (patch) => {
+    set({ error: null });
     try {
       const s = await settingsUpdate(patch);
       set({ settings: s });

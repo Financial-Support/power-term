@@ -25,6 +25,14 @@ pub struct Settings {
     pub quick_theme_panel_open: bool,
     /// Whether the accent colour dock is visible.
     pub accent_dock_open: bool,
+    /// Endpoint used by the AI assistant. Anthropic Messages endpoints and
+    /// OpenAI-compatible chat-completions endpoints are supported by the UI.
+    pub ai_endpoint: String,
+    /// Model identifier sent to the configured AI endpoint.
+    pub ai_model: String,
+    /// Whether the latest output from the active terminal may be sent with an
+    /// AI request.
+    pub ai_include_terminal_context: bool,
     pub updated_at: u64,
 }
 
@@ -44,6 +52,9 @@ impl Default for Settings {
             accent_color: "system".to_string(),
             quick_theme_panel_open: false,
             accent_dock_open: true,
+            ai_endpoint: "https://api.anthropic.com/v1/messages".to_string(),
+            ai_model: "claude-sonnet-4-6".to_string(),
+            ai_include_terminal_context: false,
             updated_at: 0,
         }
     }
@@ -65,6 +76,9 @@ pub struct SettingsPatch {
     pub accent_color: Option<String>,
     pub quick_theme_panel_open: Option<bool>,
     pub accent_dock_open: Option<bool>,
+    pub ai_endpoint: Option<String>,
+    pub ai_model: Option<String>,
+    pub ai_include_terminal_context: Option<bool>,
 }
 
 #[derive(Debug, Error)]
@@ -117,6 +131,15 @@ impl SettingsStore {
         if let Some(v) = patch.terminal_theme { s.terminal_theme = v; }
         if let Some(v) = patch.quick_theme_panel_open { s.quick_theme_panel_open = v; }
         if let Some(v) = patch.accent_dock_open { s.accent_dock_open = v; }
+        if let Some(v) = patch.ai_endpoint {
+            let value = v.trim().to_string();
+            if valid_ai_endpoint(&value) { s.ai_endpoint = value; }
+        }
+        if let Some(v) = patch.ai_model {
+            let value = v.trim().to_string();
+            if !value.is_empty() && value.len() <= 200 { s.ai_model = value; }
+        }
+        if let Some(v) = patch.ai_include_terminal_context { s.ai_include_terminal_context = v; }
         if let Some(v) = patch.accent_color {
             // Either "system" (= follow macOS) or a 7-char hex literal.
             // Anything else is silently ignored so a typo can't poison config.
@@ -134,6 +157,11 @@ impl SettingsStore {
         atomic_write(&self.path, &s)?;
         Ok(s.clone())
     }
+}
+
+fn valid_ai_endpoint(value: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(value) else { return false; };
+    matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
 }
 
 /// Loads settings from `path`, falling back to defaults if missing or corrupt.
@@ -244,6 +272,27 @@ mod tests {
         store.apply(SettingsPatch { font_size: Some(16), ..Default::default() }).unwrap();
         assert_eq!(store.get().terminal_theme, "nord");
         assert_eq!(store.get().font_size, 16);
+    }
+
+    #[test]
+    fn ai_settings_round_trip_and_reject_invalid_endpoint() {
+        let dir = tmp();
+        let path = dir.path().join("config.toml");
+        let store = SettingsStore::load_from(path.clone()).unwrap();
+        store.apply(SettingsPatch {
+            ai_endpoint: Some("http://127.0.0.1:11434/v1/chat/completions".to_string()),
+            ai_model: Some("local-model".to_string()),
+            ai_include_terminal_context: Some(true),
+            ..Default::default()
+        }).unwrap();
+        let store2 = SettingsStore::load_from(path).unwrap();
+        let settings = store2.get();
+        assert_eq!(settings.ai_endpoint, "http://127.0.0.1:11434/v1/chat/completions");
+        assert_eq!(settings.ai_model, "local-model");
+        assert!(settings.ai_include_terminal_context);
+
+        store2.apply(SettingsPatch { ai_endpoint: Some("file:///tmp/secret".to_string()), ..Default::default() }).unwrap();
+        assert_eq!(store2.get().ai_endpoint, "http://127.0.0.1:11434/v1/chat/completions");
     }
 
     #[test]

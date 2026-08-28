@@ -1,6 +1,9 @@
 export type Theme = 'light' | 'dark' | 'auto';
 export type CursorStyle = 'block' | 'underline' | 'bar';
 
+export const DEFAULT_AI_ENDPOINT = 'https://api.anthropic.com/v1/messages';
+export const DEFAULT_AI_MODEL = 'claude-sonnet-4-6';
+
 export interface Settings {
   shell: string | null;
   font_family: string;
@@ -16,6 +19,9 @@ export interface Settings {
   accent_color: string;
   quick_theme_panel_open: boolean;
   accent_dock_open: boolean;
+  ai_endpoint: string;
+  ai_model: string;
+  ai_include_terminal_context: boolean;
   updated_at: number;
 }
 

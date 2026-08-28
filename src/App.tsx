@@ -865,12 +865,12 @@ export function App() {
       if (e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l') {
         if (settingsOpen || paletteOpen) return;
         e.preventDefault();
-        setAiBarOpen(true);
+        setAiBarOpen((open) => !open);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [flow.phase, form.kind, confirmDelete, snippetForm.kind, confirmDeleteSnippet, forwardForm.kind, confirmDeleteForward, settingsOpen]);
+  }, [flow.phase, form.kind, confirmDelete, snippetForm.kind, confirmDeleteSnippet, forwardForm.kind, confirmDeleteForward, settingsOpen, paletteOpen]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -962,13 +962,18 @@ export function App() {
 
   return (
     <div className="app">
-      <TitleBar onLayoutChange={(kind) => void fillNullSlots(kind)} onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}>
+      <TitleBar
+        onLayoutChange={(kind) => void fillNullSlots(kind)}
+        onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setSettingsOpen(true); }}
+        aiChatOpen={aiBarOpen}
+        onAiChat={() => setAiBarOpen((open) => !open)}
+      >
         {/* Tabs now live inside each pane; this keeps the title bar's
             draggable area filling the space the strip used to occupy. */}
         <div className="titlebar-spacer" />
       </TitleBar>
       <div
-        className={`body${sidebarSection === 'databases' && dbListCollapsed ? ' db-list-collapsed' : ''}`}
+        className={`body${sidebarSection === 'databases' && dbListCollapsed ? ' db-list-collapsed' : ''}${aiBarOpen ? ' ai-chat-open' : ''}${accentDockOpen ? ' appearance-dock-open' : ''}`}
         style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` }}
       >
         <IconRail
@@ -1227,6 +1232,7 @@ export function App() {
             </>
           )}
         </main>
+        <AICommandBar open={aiBarOpen} onClose={() => setAiBarOpen(false)} />
       </div>
       <CommandPalette
         open={paletteOpen}
@@ -1426,7 +1432,6 @@ export function App() {
       />
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} initialTab={settingsInitialTab} />}
       {sshImportOpen && <SshConfigImportModal onClose={() => setSshImportOpen(false)} />}
-      <AICommandBar open={aiBarOpen} onClose={() => setAiBarOpen(false)} />
     </div>
   );
 }

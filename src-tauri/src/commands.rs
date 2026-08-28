@@ -197,8 +197,10 @@ use crate::ssh::auth::Auth;
 use crate::ssh::known_hosts::{fingerprint_sha256, KnownHosts};
 use crate::ssh::session::SshTarget;
 use crate::ssh::{SshError, SshManager};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 pub struct SshTargetArg {
@@ -565,6 +567,117 @@ pub fn secret_get(
         store::local_secrets::set(&db, &host_id, secret).map_err(|e| e.to_string())?;
     }
     Ok(legacy)
+}
+
+const AI_SECRET_ID: &str = "__ai_anthropic";
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AiMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiRequest {
+    pub endpoint: String,
+    pub model: String,
+    pub system: String,
+    pub messages: Vec<AiMessage>,
+    pub max_tokens: u32,
+}
+
+/// Send an AI request from the native side so providers that do not expose
+/// browser CORS headers (such as Alibaba Model Studio) still work in the
+/// Tauri WebView. The API key never travels through a frontend fetch.
+#[tauri::command]
+pub async fn ai_request(
+    db: State<'_, std::sync::Arc<store::Db>>,
+    request: AiRequest,
+) -> Result<serde_json::Value, String> {
+    let AiRequest { endpoint, model, system, messages, max_tokens } = request;
+    let model = model.trim().to_string();
+    if model.is_empty() {
+        return Err("AI model is required.".to_string());
+    }
+    if max_tokens == 0 {
+        return Err("AI max tokens must be greater than zero.".to_string());
+    }
+
+    let (target, anthropic) = resolve_ai_request_target(&endpoint)?;
+    let api_key = local_or_mirrored_secret(db.inner(), AI_SECRET_ID).unwrap_or_default();
+    let body = if anthropic {
+        if api_key.trim().is_empty() {
+            return Err("Add an API key in Settings > AI.".to_string());
+        }
+        serde_json::json!({
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+        })
+    } else {
+        let mut openai_messages = Vec::with_capacity(messages.len() + 1);
+        openai_messages.push(AiMessage { role: "system".to_string(), content: system });
+        openai_messages.extend(messages);
+        serde_json::json!({
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": openai_messages,
+        })
+    };
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(90))
+        .build()
+        .map_err(|error| format!("AI client setup failed: {error}"))?;
+    let mut outbound = client
+        .post(target)
+        .header("content-type", "application/json");
+    if anthropic {
+        outbound = outbound
+            .header("x-api-key", api_key.trim())
+            .header("anthropic-version", "2023-06-01");
+    } else if !api_key.trim().is_empty() {
+        outbound = outbound.header("Authorization", format!("Bearer {}", api_key.trim()));
+    }
+
+    let response = outbound
+        .json(&body)
+        .send()
+        .await
+        .map_err(|error| format!("AI request failed: {error}"))?;
+    let status = response.status();
+    let response_text = response
+        .text()
+        .await
+        .map_err(|error| format!("AI response read failed: {error}"))?;
+    if !status.is_success() {
+        let detail = response_text.chars().take(240).collect::<String>();
+        return Err(format!("AI API {}: {detail}", status.as_u16()));
+    }
+
+    serde_json::from_str(&response_text)
+        .map_err(|error| format!("AI response was not valid JSON: {error}"))
+}
+
+fn resolve_ai_request_target(endpoint: &str) -> Result<(Url, bool), String> {
+    let mut target = Url::parse(endpoint.trim()).map_err(|error| format!("invalid AI endpoint: {error}"))?;
+    if !matches!(target.scheme(), "http" | "https") || target.host_str().is_none() {
+        return Err("AI endpoint must be an HTTP(S) URL.".to_string());
+    }
+
+    let path = target.path().trim_end_matches('/');
+    let path_lower = path.to_ascii_lowercase();
+    let anthropic = target
+        .host_str()
+        .map(|host| host.eq_ignore_ascii_case("api.anthropic.com"))
+        .unwrap_or(false)
+        || path_lower.ends_with("/messages");
+    if !anthropic && path_lower.ends_with("/v1") {
+        target.set_path(&format!("{path}/chat/completions"));
+    }
+    Ok((target, anthropic))
 }
 
 fn local_or_mirrored_secret(db: &std::sync::Arc<store::Db>, id: &str) -> Option<String> {
@@ -1750,5 +1863,34 @@ mod pty_spawn_tests {
 
         #[cfg(not(target_os = "windows"))]
         assert_eq!(shell_args(), vec!["-l"]);
+    }
+}
+
+#[cfg(test)]
+mod ai_proxy_tests {
+    use super::resolve_ai_request_target;
+
+    #[test]
+    fn appends_chat_completions_to_openai_v1_base() {
+        let (target, anthropic) = resolve_ai_request_target(
+            "https://ws-ztwe7qrrcbcod0ru.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+        ).unwrap();
+        assert_eq!(target.as_str(), "https://ws-ztwe7qrrcbcod0ru.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions");
+        assert!(!anthropic);
+    }
+
+    #[test]
+    fn preserves_full_openai_endpoint_and_detects_anthropic_messages() {
+        let (openai, openai_is_anthropic) = resolve_ai_request_target(
+            "http://localhost:11434/v1/chat/completions",
+        ).unwrap();
+        assert_eq!(openai.as_str(), "http://localhost:11434/v1/chat/completions");
+        assert!(!openai_is_anthropic);
+
+        let (anthropic, anthropic_is_anthropic) = resolve_ai_request_target(
+            "https://api.anthropic.com/v1/messages",
+        ).unwrap();
+        assert_eq!(anthropic.as_str(), "https://api.anthropic.com/v1/messages");
+        assert!(anthropic_is_anthropic);
     }
 }

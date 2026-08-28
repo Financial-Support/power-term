@@ -2,6 +2,8 @@
 
 A modern terminal built with Tauri + React + xterm.js.
 
+**Website:** [power-term.fstudio.space](https://power-term.fstudio.space)
+
 ## Preview
 
 ![Power Term screenshot with fictional demo hosts and terminal commands](assets/power-term-demo.png)
@@ -131,7 +133,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed fork setup instructions.
 
 ## AI features
 
-The built-in AI command bar calls the Anthropic API (`claude-sonnet-4-6`) directly from your browser. You supply your own API key, stored in the app's local credential database. No key is ever bundled with the app.
+The built-in AI chat opens as a right sidebar and calls the configured endpoint directly from the app. The default is Anthropic (`claude-sonnet-4-6`), but Settings → AI also accepts a custom HTTP(S) endpoint, model, and API key. Anthropic Messages and OpenAI-compatible chat-completions endpoints are supported. Conversations and their chat history are kept locally and sent as context per conversation; after 20 messages, older turns are auto-compacted into a bounded summary while the full visible history remains available locally. Generated commands are checked locally for common dangerous patterns, shown with a warning and reason, and high-risk commands require confirmation before `Insert & run`. Terminal context is opt-in per chat, and live terminal output is not persisted. No key is bundled with the app.
 
 ## Releasing
 

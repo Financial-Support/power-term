@@ -12,6 +12,7 @@ import { useSettingsStore } from '../state/settingsStore';
 import { useTheme } from '../hooks/useTheme';
 import { PRESET_THEMES } from '../themes';
 import { ChevronDownIcon, ChevronUpIcon, CloseIcon, SearchIcon } from './AppIcons';
+import { registerTerminalContext } from '../lib/terminalContext';
 
 interface Props { tab: Tab; visible: boolean; active?: boolean; onAutoClose?: (id: string) => void }
 
@@ -97,6 +98,17 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
 
     xtermRef.current = term;
     fitRef.current = fit;
+    const unregisterTerminalContext = registerTerminalContext(tab.ptyId, () => {
+      const buffer = term.buffer.active;
+      const start = Math.max(0, buffer.length - 160);
+      const lines: string[] = [];
+      for (let i = start; i < buffer.length; i++) {
+        lines.push(buffer.getLine(i)?.translateToString(true) ?? '');
+      }
+      // ponytail: cap context to recent terminal output; add smarter semantic
+      // selection only if users need more than the latest 160 lines.
+      return lines.join('\n').slice(-12_000).trim();
+    });
 
     // The WebView frequently reports the container as 0×0 on the first
     // useEffect after a freshly-added tab — calling fit() at 0×0 locks
@@ -276,6 +288,7 @@ export function Terminal({ tab, visible, active, onAutoClose }: Props) {
 
     return () => {
       cancelAnimationFrame(initialFitFrame);
+      unregisterTerminalContext();
       containerRef.current?.removeEventListener('keydown', onTerminalKeyDown, true);
       term.textarea?.removeEventListener('compositionstart', onCompositionStart);
       term.textarea?.removeEventListener('compositionupdate', onCompositionUpdate);
