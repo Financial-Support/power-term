@@ -152,3 +152,6 @@ Bumps the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/taur
 ## License
 
 MIT
+
+
+<!-- Security scan triggered at 2026-09-05 07:57:18 -->
